@@ -7,7 +7,7 @@ import path from 'node:path';
 import { start } from './harness.mjs';
 
 const TRUSTED = !!process.env.KITSUNE_E2E_TRUSTED;
-const BASE = 'http://127.0.0.1:8765';
+const BASE = `http://127.0.0.1:${process.env.KITSUNE_P1}`;
 const results = [];
 let h, tabId;
 

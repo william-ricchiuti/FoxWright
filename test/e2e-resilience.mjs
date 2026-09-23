@@ -11,7 +11,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { start } from './harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BASE = 'http://127.0.0.1:8765';
+const BASE = `http://127.0.0.1:${process.env.KITSUNE_P1}`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
 async function test(name, fn) {

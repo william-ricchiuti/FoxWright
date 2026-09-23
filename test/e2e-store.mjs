@@ -5,7 +5,7 @@ let ok = true;
 const check = (name, cond, detail) => { console.log(`  ${cond ? '✓' : '✗'} ${name}${cond ? '' : '\n      ' + detail}`); ok &&= cond; };
 const ctx = await h.call('tabs_context_mcp', { createIfEmpty: true });
 const tabId = parseInt(/tabId (\d+)/.exec(ctx.text)[1], 10);
-await h.call('navigate', { tabId, url: 'http://127.0.0.1:8765/react.html' });
+await h.call('navigate', { tabId, url: `http://127.0.0.1:${process.env.KITSUNE_P1}/react.html` });
 const f = await h.call('find', { tabId, query: 'Your name' });
 const ref = /\[ref=(e\d+)\]/.exec(f.text)[1];
 await h.call('computer', { tabId, action: 'left_click', ref });

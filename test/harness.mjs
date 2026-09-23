@@ -16,6 +16,25 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Two free local ports for the fixture servers (set before the tests read them).
+async function freePort(preferred) {
+  const tryPort = (port) => new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', () => resolve(null));
+    srv.listen(port, '127.0.0.1', () => {
+      const p = srv.address().port;
+      srv.close(() => resolve(p));
+    });
+  });
+  return (await tryPort(preferred)) || tryPort(0);
+}
+if (!process.env.KITSUNE_P1) {
+  process.env.KITSUNE_P1 = String(await freePort(8765));
+  process.env.KITSUNE_P2 = String(await freePort(process.env.KITSUNE_P1 === '8765' ? 8766 : 0));
+}
+export const P1 = Number(process.env.KITSUNE_P1);
+export const P2 = Number(process.env.KITSUNE_P2);
 const fixtures = path.join(root, 'test', 'fixtures');
 
 function serve(port) {
@@ -28,6 +47,8 @@ function serve(port) {
       return res.end('not found');
     }
     res.writeHead(200, { 'content-type': types[path.extname(p).slice(1)] || 'application/octet-stream' });
+    if (p.endsWith('.html')) // fixtures refer to each other by port
+      return res.end(fs.readFileSync(p, 'utf8').replaceAll(':8765', `:${P1}`).replaceAll(':8766', `:${P2}`));
     fs.createReadStream(p).pipe(res);
   });
   return new Promise(r => server.listen(port, '127.0.0.1', () => r(server)));
@@ -90,8 +111,8 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
       'security.OCSP.enabled': 0, 'network.captive-portal-service.enabled': false, 'network.connectivity-service.enabled': false,
     });
   }
-  const s1 = await serve(8765);
-  const s2 = await serve(8766);
+  const s1 = await serve(P1);
+  const s2 = await serve(P2);
   const sock = path.join(os.homedir(), '.kitsune', 'kitsune.sock');
   fs.rmSync(sock, { force: true });
 

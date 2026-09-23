@@ -30,26 +30,26 @@ async function test(name, fn) {
 }
 const expect = (c, m) => { if (!c) throw new Error(m); };
 
-const h = await start({ policy: { promptTimeoutSec: 5, allowed: ['http://localhost:8766'] } });
+const h = await start({ policy: { promptTimeoutSec: 5, allowed: [`http://localhost:${process.env.KITSUNE_P2}`] } });
 const ctx = await h.call('tabs_context_mcp', { createIfEmpty: true });
 const tabId = parseInt(/tabId (\d+)/.exec(ctx.text)[1], 10);
 
 await test('navigating to an unapproved site asks first (extension-owned window), then times out', async () => {
   const t0 = Date.now();
-  const a = h.call('navigate', { tabId, url: 'http://127.0.0.1:8765/basic.html' });
+  const a = h.call('navigate', { tabId, url: `http://127.0.0.1:${process.env.KITSUNE_P1}/basic.html` });
   await sleep(1500);
   snap('permission-window');
-  const b = await h.call('navigate', { tabId, url: 'http://127.0.0.1:8765/page2.html' }); // same origin: shares the prompt
+  const b = await h.call('navigate', { tabId, url: `http://127.0.0.1:${process.env.KITSUNE_P1}/page2.html` }); // same origin: shares the prompt
   const r = await a;
   expect(r.isError && /timed out/.test(r.text), r.text);
   expect(b.isError, 'concurrent call must not get through: ' + b.text);
   expect(Date.now() - t0 >= 4500, 'should have waited for the human');
   const t = await h.call('tabs_context_mcp', {});
-  expect(!t.text.includes('127.0.0.1:8765'), 'tab must not have navigated:\n' + t.text);
+  expect(!t.text.includes(`127.0.0.1:${process.env.KITSUNE_P1}`), 'tab must not have navigated:\n' + t.text);
 });
 
 await test('policy-approved site works without a prompt; activity glow shows', async () => {
-  const r = await h.call('navigate', { tabId, url: 'http://localhost:8766/frame.html' });
+  const r = await h.call('navigate', { tabId, url: `http://localhost:${process.env.KITSUNE_P2}/frame.html` });
   expect(!r.isError, r.text);
   const c = await h.call('computer', { tabId, action: 'left_click', coordinate: [40, 12] });
   expect(!c.isError, c.text);
@@ -60,7 +60,7 @@ await test('policy-approved site works without a prompt; activity glow shows', a
 });
 
 await test('embedded frame from an unapproved site is hidden from read_page', async () => {
-  await h.call('navigate', { tabId, url: 'http://localhost:8766/embed.html' });
+  await h.call('navigate', { tabId, url: `http://localhost:${process.env.KITSUNE_P2}/embed.html` });
   const p = await h.call('read_page', { tabId });
   expect(!p.text.includes('Frame button') && /hidden until the user approves/.test(p.text), p.text);
   const f = await h.call('find', { tabId, query: 'Frame button' });
