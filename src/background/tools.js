@@ -128,7 +128,8 @@ browser.webNavigation.onBeforeNavigate.addListener((d) => {
 async function afterAction(tab, before, r) {
   const extra = [];
   const t0 = before.t0 || Date.now() - 50;
-  for (let i = 0; i < 5 && !((navStarts.get(tab.id) || 0) >= t0); i++)
+  const waitRounds = r?.mayNavigate === false ? 1 : 5; // key presses and clicks on links/buttons may navigate
+  for (let i = 0; i < waitRounds && !((navStarts.get(tab.id) || 0) >= t0); i++)
     await sleep(60);
   if (r?.openUrl) {
     const nt = await createAgentTab(r.openUrl, false);
@@ -292,7 +293,7 @@ function runUserCode(code) {
   }
   if (!fn)
     return Promise.resolve({ ok: false, error: String(lastErr) + (/Content Security Policy|call to Function\(\)|eval/i.test(String(lastErr)) ? '\nThis page\'s Content-Security-Policy forbids evaluating code strings, so javascript_tool cannot run here. Use read_page / get_page_text / computer instead.' : '') });
-  return Promise.resolve().then(() => fn()).then(v => ({ ok: true, value: ser(v) }), e => ({ ok: false, error: e && e.stack ? String(e.stack).slice(0, 3000) : String(e) }));
+  return Promise.resolve().then(() => fn()).then(v => ({ ok: true, value: ser(v) }), e => ({ ok: false, error: e && typeof e === 'object' && 'message' in e ? `${e.name || 'Error'}: ${e.message}${e.stack ? '\n' + String(e.stack).split('\n').slice(0, 3).join('\n') : ''}`.slice(0, 3000) : String(e) }));
 }
 
 // ---------- tools ----------
@@ -439,8 +440,30 @@ export const tools = {
     }
     if (checkAccessible(tab) === 'blank')
       return text(`Tab ${tab.id} is blank.`);
-    const r = await sendContent(tab.id, 0, 'pageText', { maxChars: 100000 });
-    return text(`Title: ${r.title}\nURL: ${r.url}\nSource: ${r.source}${r.truncated ? ' (truncated to 100,000 chars)' : ''}\n\n${r.text}`);
+    const r = await sendContent(tab.id, 0, 'pageText', { maxChars: 1000000 });
+    const max = Math.max(1000, Math.min(100000, Number(args.max_chars) || 20000));
+    const head = `Title: ${r.title}\nURL: ${r.url}\nSource: ${r.source}`;
+    const full = r.text;
+    if (args.query) {
+      // Return only the passages that mention the query words (cheap way to answer a question about a long page).
+      const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
+      const paras = full.split(/\n+/).map(p => p.trim()).filter(Boolean);
+      const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
+      scored.sort((a, b) => b.s - a.s || a.i - b.i);
+      const picked = new Set();
+      for (const x of scored.slice(0, 12))
+        for (const j of [x.i - 1, x.i, x.i + 1])
+          if (j >= 0 && j < paras.length)
+            picked.add(j);
+      let out = [...picked].sort((a, b) => a - b).map(j => paras[j]).join('\n');
+      if (out.length > max)
+        out = out.slice(0, max) + '…';
+      return text(`${head}\nPassages matching "${args.query}" (${scored.length} matching paragraphs of ${paras.length}):\n\n${out || '(no matches; try other words or read the page without a query)'}`);
+    }
+    const offset = Math.max(0, Number(args.offset) || 0);
+    const chunk = full.slice(offset, offset + max);
+    const more = offset + max < full.length;
+    return text(`${head}\n${offset || more ? `Showing characters ${offset}–${offset + chunk.length} of ${full.length}.${more ? ` Call again with offset: ${offset + chunk.length} for more, or pass query to get just the relevant passages.` : ''}\n` : ''}\n${chunk}`);
   },
 
   async computer(args) {

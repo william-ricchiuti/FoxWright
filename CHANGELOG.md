@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0 (2026-09-23)
+
+Tuned with a real agent: Claude Code completed 16/16 everyday browser tasks with Kitsune in both input modes (docs/agent-eval-*.md). The first run scored 14/16 at $2.57; the same suite now costs about $1.57.
+
+- New `browser_batch` tool: several steps in one call.
+- `get_page_text` returns pages of 20k characters, and `query` returns only the relevant passages.
+- `form_input` works on custom comboboxes (MUI, react-select, Radix, Headless UI): it opens them, types, and clicks the matching option.
+- Double-click selects a word, and triple-click a paragraph.
+- After `navigate`, and after clicks that load a new page, the result lists what's clickable on screen, so the agent doesn't need an extra `read_page`.
+- More forgiving arguments:
+  - `tabId` is optional and defaults to the last tab.
+  - `find` also accepts `text` and `description` in place of `query`.
+  - `key` is accepted as an alias for `text`.
+  - Numbers sent as strings and arrays sent as JSON strings are accepted.
+  - Out-of-range numbers are clamped rather than rejected.
+- Clearer JavaScript error messages. The waiting-for-navigation check is skipped after clicks that can't start a page load.
+- New tools for testing and releasing: `test/agent-eval.mjs` (a real-agent evaluation), `scripts/mac-test.sh agent`, and a demo GIF.
+
 ## 0.1.0 (2026-09-23)
 
 First release.

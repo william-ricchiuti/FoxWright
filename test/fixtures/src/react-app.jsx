@@ -17,7 +17,7 @@ function App() {
       <label>Size <select id="rsize" value={size} onChange={e => setSize(e.target.value)}><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option></select></label>
       <button type="button" id="rcount" onClick={() => setCount(c => c + 1)}>Count: {count}</button>
       <label>Search <input id="rsearch" role="combobox" aria-autocomplete="list" value={q} onChange={e => setQ(e.target.value)} /></label>
-      <ul id="rsuggest">{suggestions.map(s => <li key={s} role="option">{s}</li>)}</ul>
+      <ul id="rsuggest" role="listbox">{suggestions.map(s => <li key={s} role="option" onClick={() => setQ(s)}>{s}</li>)}</ul>
       <button type="submit" id="rsubmit">Save</button>
       <p id="rresult">{submitted ? `SAVED ${JSON.stringify(submitted)}` : 'unsaved'}</p>
     </form>

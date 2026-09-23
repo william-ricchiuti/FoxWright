@@ -24,6 +24,30 @@ The 2 real-site failures in each mode come from the test sandbox's network, not 
 - **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Kitsune opened the search dialog and typed the query; the dialog showed "No results".
 - **DuckDuckGo**: it served a blank page to the sandbox's data-center IP in 3 of 4 runs. It passed in the one run where the page loaded.
 
+## Real-agent evaluation (Claude Code)
+
+`test/agent-eval.mjs` runs `claude -p` with only Kitsune's tools enabled. Everything else is blocked: WebFetch, Bash, file tools and Claude in Chrome. After each task, an independent verifier checks the result through Kitsune's own tools: the page state, the tabs that are open and the answer.
+
+| Run | Passed | Median time | Median tool calls | Cost (16 tasks) | What changed before the run |
+|---|---|---|---|---|---|
+| v1 | 14/16 | 20 s | 9 | $2.57 | none (first run) |
+| v2 | 14/16 | 15 s | 6 | $2.11 | default tab; `find` aliases; clamped numbers; `get_page_text` paging and `query`; `browser_batch`; on-screen summary after navigate |
+| v3 | 15/16 | 18 s | 7 | $2.25 | accepts stringified arguments; `browser_batch` allowed in the harness |
+| v4 | **16/16** | 20 s | 7 | $1.46 | `form_input` handles custom comboboxes; word selection on double-click; `key` alias |
+| final, synthetic | **16/16** | 17 s | 7 | $1.57 | summary after navigating clicks; no navigation wait after non-navigating clicks |
+| final, trusted | **16/16** | 15 s | 7 | $1.58 | same |
+
+What the transcripts showed, and what fixed each problem:
+
+- **Wrong argument names.** The agent sent `description` where `find` expects `query`, and `key` where `computer` expects `text`. It also passed numbers as strings, arrays as JSON strings, and `scroll_amount: 30`. All of these are now accepted.
+- **Missing `tabId`.** The agent sometimes left it out. It now defaults to the last tab used.
+- **Oversized page text.** `get_page_text` on Wikipedia returned more than Claude Code accepts inline, so Claude Code saved it to a file the agent couldn't open. Page text now comes 20k characters at a time, and `query` returns only the relevant passages.
+- **Custom dropdowns.** On the MUI autocomplete the agent flailed for 27–40 tool calls. `form_input` on a custom combobox now types and clicks the matching option: 9 calls.
+- **Word selection.** Selecting a word to make it bold failed, because synthetic double-clicks don't select text. Double-click now selects a word and triple-click a paragraph.
+- **Unhelpful JavaScript errors.** `javascript_tool` returned a stack trace without the actual message. It now includes the message.
+
+The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-trusted.md`.
+
 ## macOS run (your MacBook Pro)
 
 macOS 26.5.1 on Apple Silicon, Firefox 155.0.1 (a throwaway copy made by `scripts/mac-test.sh`), Node 22.22.3.

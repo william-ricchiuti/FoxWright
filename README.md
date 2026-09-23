@@ -2,6 +2,10 @@
 
 **Let Claude (or any MCP-capable AI agent) use your real Firefox**: your tabs, your logins, your extensions. It works the same way Claude in Chrome does in Chrome.
 
+![A Claude Code agent buying a backpack on saucedemo.com through Kitsune: log in, add to cart, fill checkout details, finish](docs/demo.gif)
+
+*A real Claude Code session with Kitsune, sped up 1.5×. The orange glow and "Kitsune is driving this tab" pill show which tab the agent is using. The striped address bar is from the test profile's remote-debugging mode.*
+
 Kitsune is a Firefox extension plus a small helper program. The helper gives your AI client the same tools Claude in Chrome has (`read_page`, `find`, `computer`, `form_input`, `navigate`, …), so the agent already knows how to use them.
 
 ```
@@ -35,6 +39,17 @@ How Kitsune fills the gaps:
   - Keys like Enter, Tab, Backspace and arrows get their *default actions* reproduced: form submission, focus moves, deletion, caret moves.
   - HTML5 drag-and-drop, file inputs, `<select>`, range and date inputs are handled specially.
 - **Real (trusted) input when available.** If Firefox is running with `--remote-debugging-port`, Kitsune detects it and sends clicks, keys, wheel and drags through WebDriver BiDi. Pages then see `isTrusted: true` events, including inside cross-origin iframes. If a step can't be done that way, it falls back to synthetic events, and never runs the same action twice.
+
+## Does it actually work?
+
+Claude Code was given 16 everyday browser tasks and allowed to use only Kitsune's tools. Each result was then checked in the browser by an independent verifier, not taken from the agent's word. The tasks were logins, a full shop checkout, React forms, custom dropdowns, drag-and-drop, a JavaScript confirm dialog, drawing on a canvas, a rich-text editor, file upload, research across two tabs, and looking facts up on Wikipedia, Hacker News and gov.uk.
+
+| Input mode | Tasks completed | Median time | Median tool calls | Cost for all 16 |
+|---|---|---|---|---|
+| Synthetic (default) | **16/16** | 17 s | 7 | $1.57 |
+| Trusted (remote debugging) | **16/16** | 15 s | 7 | $1.58 |
+
+The first version scored 14/16 at $2.57. The agent's own transcripts drove the fixes: multi-step batching, text search within a page, a `form_input` that handles custom dropdowns, word selection on double-click, and more forgiving arguments. Full reports: [synthetic](docs/agent-eval-synthetic.md), [trusted](docs/agent-eval-trusted.md). Run it yourself with `node test/agent-eval.mjs` (it needs the `claude` CLI).
 
 ## Install
 
@@ -107,8 +122,9 @@ The names and arguments match Claude in Chrome.
 | `read_page` | Accessibility outline with refs. Open popups and dialogs are listed first. Options: `filter: "interactive"`, `visible_only` (just what's on screen), `depth`, `ref_id` (a subtree, or the inside of an iframe), `max_chars`. |
 | `find` | Find elements by description ("search box", "add to cart button"). |
 | `computer` | `screenshot`, `zoom`, `left_click`, `right_click`, `double_click`, `triple_click`, `hover`, `type`, `key`, `scroll`, `scroll_to`, `left_click_drag`, `wait`. Coordinates, or refs for clicks. |
-| `form_input` | Set text fields, selects, checkboxes, radios, date/range inputs and rich-text editors by ref. |
-| `get_page_text` | Readable text of the main content. |
+| `form_input` | Set text fields, selects, checkboxes, radios, date/range inputs and rich-text editors by ref. On custom dropdowns and autocompletes (MUI, react-select, Radix…) it opens the list, types, and clicks the matching option. |
+| `get_page_text` | Readable text of the main content, 20k characters at a time (`offset` for more). With `query`, it returns only the passages about that topic. |
+| `browser_batch` | Several of the above in one call, e.g. fill three fields and click Submit. Stops at the first error. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
 | `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. Dialogs never block the page: by default alerts are dismissed and confirms/prompts are cancelled, and the tool result reports what the page asked. |
 | `read_console_messages` / `read_network_requests` | Console output and HTTP requests of an agent tab. |
@@ -152,6 +168,8 @@ node test/e2e-permissions.mjs               # approval windows, frame gating, up
 node test/e2e-store.mjs                     # AMO build smoke test
 node test/e2e-resilience.mjs                # concurrent clients, latency, helper crash, Firefox restart
 node test/realsites.mjs                     # 51 tasks on real websites (needs internet)
+node test/agent-eval.mjs [--trusted]        # a real Claude Code agent does 16 tasks (needs the claude CLI; about $1.50)
+bash scripts/mac-test.sh [quick|agent]      # all of the above on macOS, against a throwaway copy of your Firefox
 npx web-ext lint --source-dir dist/store
 ```
 

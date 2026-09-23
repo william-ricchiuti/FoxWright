@@ -4,6 +4,7 @@
 #   bash scripts/mac-test.sh            # everything (~10 min)
 #   bash scripts/mac-test.sh quick      # local suites only (~3 min)
 #   bash scripts/mac-test.sh only NAME  # just the real-site tasks matching NAME, both input modes
+#   bash scripts/mac-test.sh agent [trusted]  # real Claude Code agent completes 16 tasks (uses your Claude usage, ~$1.50)
 set -u
 cd "$(dirname "$0")/.."
 LOG="test/results/mac-run.log"
@@ -31,6 +32,11 @@ node scripts/build.mjs && node test/build-fixtures.mjs || exit 1
 node host/dist/kitsune.mjs setup | sed 's/\x1b\[[0-9;]*m//g'
 
 run() { echo; echo "== $*"; "$@" 2>&1 | grep -v -E '^(Running web|Setting custom|  "|}|Use --verbose|Installed /|Automatic extension)'; }
+if [ "${1:-}" = "agent" ]; then
+  command -v claude >/dev/null || { echo "The Claude Code CLI (claude) is required for the agent evaluation."; exit 1; }
+  if [ "${2:-}" = "trusted" ]; then run node test/agent-eval.mjs --trusted; else run node test/agent-eval.mjs; fi
+  rm -rf "$WORK"; echo; echo "== done. Report in test/results/agent-eval-*.md; log: $LOG"; exit 0
+fi
 if [ "${1:-}" = "only" ]; then
   run node test/realsites.mjs "${2:-.}"
   run env KITSUNE_E2E_TRUSTED=1 node test/realsites.mjs "${2:-.}"

@@ -1,7 +1,7 @@
 // get_page_text: readable text of the page, preferring the main article.
 
 export function pageText(args: { maxChars?: number } = {}) {
-  const max = args.maxChars ?? 100000;
+  const max = args.maxChars ?? 1000000;
   const body = document.body;
   if (!body)
     return { title: document.title, url: location.href, text: '', source: 'empty' };

@@ -199,6 +199,17 @@ async function main() {
     await pageHas('custom menu opened');
   });
 
+  await test('double_click selects a word, triple_click the paragraph', async () => {
+    await js('document.getElementById("result").textContent = "kitsune selects words"; window.scrollTo(0,0)');
+    const pos = JSON.parse(JSON.parse(await js('(() => { const p = document.getElementById("result"); const r = document.createRange(); r.selectNodeContents(p.firstChild); r.setStart(p.firstChild, 9); r.setEnd(p.firstChild, 16); const b = r.getBoundingClientRect(); return JSON.stringify([Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2)]); })()')));
+    await call('computer', { action: 'double_click', coordinate: pos });
+    const w = await js('window.getSelection().toString()');
+    expect(w.includes('selects') && !w.includes('kitsune'), 'word selection: ' + w);
+    await call('computer', { action: 'triple_click', coordinate: pos });
+    const p = await js('window.getSelection().toString()');
+    expect(p.includes('kitsune selects words'), 'paragraph selection: ' + p);
+  });
+
   await test('hover fires mouseenter', async () => {
     const r = await call('find', { query: 'Hover over me' });
     const coord = /at \((\d+), (\d+)\)/.exec(r.text);
@@ -342,6 +353,14 @@ async function main() {
     await pageHas('option "foxglove"');
   });
 
+  await test('form_input on a custom combobox types and picks the matching option', async () => {
+    const { ref } = await refFor('Search', 'combobox');
+    const r = await call('form_input', { ref, value: 'foxg' });
+    expect(/Chose "foxglove"/.test(r.text), r.text);
+    const v = await js('document.getElementById("rsearch").value');
+    expect(v.includes('foxglove'), v);
+  });
+
   await test('React: Enter submits with the final state', async () => {
     const { ref } = await refFor('Your name', 'textbox');
     await call('computer', { action: 'left_click', ref });
@@ -386,6 +405,37 @@ async function main() {
     const v = await js('window.trustedSummary()');
     expect(/"trusted": \d+/.test(v), v);
     console.log(`      events on trusted.html: ${v.replace(/\s+/g, ' ')}`);
+  });
+
+  await test('agent ergonomics: default tabId, find aliases, clamped numbers', async () => {
+    await nav('/basic.html');
+    const r = await h.call('find', { description: 'Create account button' }); // no tabId, alias for query
+    expect(!r.isError && r.text.includes('Create account'), r.text);
+    const s = await h.call('computer', { action: 'scroll', coordinate: [400, 300], scroll_direction: 'down', scroll_amount: 50 });
+    expect(!s.isError, s.text);
+  });
+
+  await test('get_page_text: query returns only relevant passages; offset pages', async () => {
+    await nav('/basic.html');
+    const q = await call('get_page_text', { query: 'favorite color' });
+    expect(/Passages matching/.test(q.text) && /Favorite color/i.test(q.text), q.text);
+    const p1 = await call('get_page_text', { max_chars: 1000 });
+    expect(p1.text.length < 1400, 'page size not respected');
+  });
+
+  await test('browser_batch runs several steps in one call', async () => {
+    await nav('/react.html');
+    const name = (await refFor('Your name', 'textbox')).ref;
+    const count = (await refFor('Count', 'button')).ref;
+    const r = await call('browser_batch', { actions: [
+      { tool: 'form_input', args: { ref: name, value: 'Batch' } },
+      { tool: 'computer', args: { action: 'left_click', ref: count } },
+      { tool: 'computer', args: { action: 'left_click', ref: count } },
+      { tool: 'computer', args: { action: 'screenshot' } },
+    ] });
+    expect(/4\. computer screenshot/.test(r.text) && r.images.length === 1, r.text);
+    await pageHas('Hello, Batch');
+    await pageHas('Count: 2');
   });
 
   await test('tab outside the Kitsune group is refused', async () => {

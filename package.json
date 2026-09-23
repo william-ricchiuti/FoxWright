@@ -1,7 +1,7 @@
 {
   "name": "kitsune-workspace",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Kitsune: let AI agents (Claude, via MCP) drive your real Firefox.",
   "license": "Apache-2.0",
   "type": "module",

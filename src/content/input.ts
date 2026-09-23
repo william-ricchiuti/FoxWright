@@ -211,6 +211,54 @@ export function pointForRef(ref: string): { el: Element; x: number; y: number; c
 
 // ---------- clicking ----------
 
+/** Double-click selects a word, triple-click a paragraph/field: the browser does this natively, synthetic clicks don't. */
+function selectAtPoint(target: Element, x: number, y: number, unit: 'word' | 'block') {
+  const cp = (document as any).caretPositionFromPoint?.(x, y);
+  if (isTextField(target)) {
+    const v = target.value;
+    if (unit === 'block') {
+      target.select();
+      return;
+    }
+    let pos = cp && cp.offsetNode === target ? cp.offset : v.length;
+    const w = /[\p{L}\p{N}_]/u;
+    let a = pos, b = pos;
+    while (a > 0 && w.test(v[a - 1])) a--;
+    while (b < v.length && w.test(v[b])) b++;
+    try { target.setSelectionRange(a, b); } catch { /* ignore */ }
+    return;
+  }
+  if (!cp || !cp.offsetNode)
+    return;
+  const sel = document.getSelection();
+  if (!sel)
+    return;
+  const range = document.createRange();
+  if (unit === 'block') {
+    const start = cp.offsetNode.nodeType === Node.ELEMENT_NODE ? cp.offsetNode as Element : cp.offsetNode.parentElement;
+    const block = start?.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote, pre, div') || start;
+    if (!block)
+      return;
+    range.selectNodeContents(block);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return;
+  }
+  range.setStart(cp.offsetNode, cp.offset);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  const s2 = sel as any;
+  if (typeof s2.modify === 'function') {
+    s2.modify('move', 'backward', 'word');
+    s2.modify('extend', 'forward', 'word');
+    // Firefox may include the following space in the word; trim it like a double-click does.
+    const t = sel.toString();
+    if (/\s$/.test(t) && sel.focusNode && sel.focusOffset > 0)
+      sel.extend(sel.focusNode, sel.focusOffset - (t.length - t.trimEnd().length));
+  }
+}
+
 /** Put the caret where a real click at (x, y) would, inside a contenteditable. */
 function placeCaretAt(editable: HTMLElement, x: number, y: number) {
   const sel = document.getSelection();
@@ -278,8 +326,8 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
         placeCaretAt(f, x, y);
       }
     }
-    if (mdOk && i === 3 && isTextField(target))
-      (target as HTMLInputElement).select();
+    if (mdOk && button === 0 && i >= 2)
+      selectAtPoint(target, x, y, i === 2 ? 'word' : 'block'); // default action of double/triple click
     fire(pointerTarget(target), new PointerEvent('pointerup', mouseInit(x, y, mods, button, 0, i) as any));
     fire(pointerTarget(target), new MouseEvent('mouseup', mouseInit(x, y, mods, button, 0, i)));
 
@@ -337,7 +385,10 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
   if (target instanceof HTMLInputElement && target.type === 'file')
     notes.push('This is a file input; use file_upload to attach files.');
 
-  return { target: describe(target), prevented, openUrl, notes };
+  // Only actions on links, buttons and form controls normally start a navigation; the
+  // background uses this to skip waiting for one after other clicks.
+  const mayNavigate = !!target.closest('a[href], area[href], button, input, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], form, [onclick]');
+  return { target: describe(target), prevented, openUrl, notes, mayNavigate };
 }
 
 export function click(args: { x?: number; y?: number; ref?: string; button?: 'left' | 'right' | 'middle'; clickCount?: number; modifiers?: string }): any {
@@ -868,7 +919,7 @@ export function scroll(args: { x?: number; y?: number; ref?: string; direction: 
     if (fwd)
       return fwd;
   }
-  const ticks = Math.max(1, Math.min(10, args.amount ?? 3));
+  const ticks = Math.max(1, Math.min(30, args.amount ?? 3));
   const px = ticks * 100;
   const dx = args.direction === 'left' ? -px : args.direction === 'right' ? px : 0;
   const dy = args.direction === 'up' ? -px : args.direction === 'down' ? px : 0;
@@ -975,10 +1026,73 @@ export async function drag(args: { startX: number; startY: number; x: number; y:
 
 // ---------- form_input ----------
 
-export function formInput(args: { ref: string; value: string | boolean | number }): any {
+function visibleOptions(): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="menuitemradio"]')).filter(o => {
+    const r = o.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(o).visibility !== 'hidden' && o.getAttribute('aria-disabled') !== 'true';
+  });
+}
+
+function optionText(o: HTMLElement) {
+  return (o.getAttribute('aria-label') || o.innerText || o.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+async function pickOption(value: string, timeoutMs = 2500): Promise<HTMLElement | null> {
+  const want = value.trim().toLowerCase();
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    const opts = visibleOptions();
+    const exact = opts.find(o => optionText(o).toLowerCase() === want);
+    const prefix = opts.find(o => optionText(o).toLowerCase().startsWith(want));
+    const contains = opts.find(o => optionText(o).toLowerCase().includes(want));
+    const hit = exact || prefix || contains;
+    if (hit)
+      return hit;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return null;
+}
+
+function clickCenter(el: Element) {
+  el.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior });
+  const r = el.getBoundingClientRect();
+  clickTarget(el, r.left + r.width / 2, r.top + r.height / 2);
+}
+
+/** Custom comboboxes (MUI, react-select, Radix, Headless UI...): open, type, and click the matching option. */
+async function setCombobox(el: HTMLElement, value: string): Promise<any> {
+  const notes: string[] = [];
+  clickCenter(el);
+  await tick();
+  if (isTextField(el)) {
+    el.focus();
+    try { el.select(); } catch { /* ignore */ }
+    document.execCommand('delete');
+    await typeText({ text: value });
+  }
+  const opt = await pickOption(value);
+  if (opt) {
+    const label = optionText(opt);
+    clickCenter(opt);
+    await tick();
+    notes.push(`Chose "${label}" from the list.`);
+  } else {
+    notes.push(`No list option matching "${value}" appeared${isTextField(el) ? '; the text was typed into the box' : ''}. Take a screenshot or read_page to see what the widget offers.`);
+  }
+  return { target: describe(el), value: isTextField(el) ? el.value : optionText(el) || undefined, notes };
+}
+
+export async function formInput(args: { ref: string; value: string | boolean | number }): Promise<any> {
   const el = resolveRef(args.ref) as HTMLElement;
   const v = args.value;
   el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
+
+  const roleAttr = el.getAttribute('role');
+  const isCustomCombo = roleAttr === 'combobox' && !(el instanceof HTMLSelectElement)
+    || (el instanceof HTMLInputElement && (el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox'))
+    || (el instanceof HTMLButtonElement && el.getAttribute('aria-haspopup') === 'listbox');
+  if (isCustomCombo && typeof v !== 'boolean')
+    return setCombobox(el, String(v));
 
   if (el instanceof HTMLSelectElement) {
     const wanted = Array.isArray(v) ? v.map(String) : [String(v)];
