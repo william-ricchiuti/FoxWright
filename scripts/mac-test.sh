@@ -3,6 +3,7 @@
 # so your real Firefox (and its profile) is never modified.
 #   bash scripts/mac-test.sh            # everything (~10 min)
 #   bash scripts/mac-test.sh quick      # local suites only (~3 min)
+#   bash scripts/mac-test.sh only NAME  # just the real-site tasks matching NAME, both input modes
 set -u
 cd "$(dirname "$0")/.."
 LOG="test/results/mac-run.log"
@@ -30,6 +31,11 @@ node scripts/build.mjs && node test/build-fixtures.mjs || exit 1
 node host/dist/kitsune.mjs setup | sed 's/\x1b\[[0-9;]*m//g'
 
 run() { echo; echo "== $*"; "$@" 2>&1 | grep -v -E '^(Running web|Setting custom|  "|}|Use --verbose|Installed /|Automatic extension)'; }
+if [ "${1:-}" = "only" ]; then
+  run node test/realsites.mjs "${2:-.}"
+  run env KITSUNE_E2E_TRUSTED=1 node test/realsites.mjs "${2:-.}"
+  rm -rf "$WORK"; echo; echo "== done. Full log: $LOG"; exit 0
+fi
 run node test/e2e.mjs
 run env KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
 run node test/e2e-permissions.mjs

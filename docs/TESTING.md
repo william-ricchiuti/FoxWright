@@ -24,6 +24,20 @@ The 2 real-site failures in each mode come from the test sandbox's network, not 
 - **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Kitsune opened the search dialog and typed the query; the dialog showed "No results".
 - **DuckDuckGo**: it served a blank page to the sandbox's data-center IP in 3 of 4 runs. It passed in the one run where the page loaded.
 
+## macOS run (your MacBook Pro)
+
+macOS 26.5.1 on Apple Silicon, Firefox 155.0.1 (a throwaway copy made by `scripts/mac-test.sh`), Node 22.22.3.
+
+| Suite | Synthetic | Trusted |
+|---|---|---|
+| `e2e.mjs` | 43/43 | 43/43 |
+| `realsites.mjs` | 50/51 | 50/51 |
+| permissions / store / resilience / idle | 5/5 · 2/2 · 5/5 · pass | n/a |
+
+- **DuckDuckGo** passed on the Mac, which confirms its sandbox failure was the network.
+- **Google showed its bot check only in trusted mode** on a home connection. The cause is that Firefox sets `navigator.webdriver = true` while remote debugging is on. The README now documents this trade-off.
+- **react.dev failed in both modes.** The test pressed Enter in the search popup instead of clicking a result, the way an agent reading the page would. The scenario has been rewritten to click the result; re-check it with `bash scripts/mac-test.sh only react.dev`.
+
 ## Real-site tasks (all passing)
 
 | Site | Tasks |

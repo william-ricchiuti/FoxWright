@@ -405,13 +405,26 @@ async function bigSites() {
     if (/unusual traffic|not a robot/i.test(t))
       notes.push('Google showed a bot check (expected for a data-center IP)');
   });
-  await scenario('react.dev', 'DocSearch dialog: ctrl+k, type, open result', async () => {
+  await scenario('react.dev', 'DocSearch dialog: search, pick a result', async (notes) => {
     await nav('https://react.dev/');
     await click(await pick('button', /Search/i));
     await sleep(600);
     await type('useState');
-    await sleep(1500);
-    await key('Enter');
+    // Like an agent would: look at the (hoisted) results popup and click the right entry.
+    let ref = null, last = '';
+    for (let i = 0; i < 12 && !ref; i++) {
+      await sleep(500);
+      last = await outline();
+      ref = /(?:option|link)[^\n]*useState[^\n]*\[ref=([^\]]+)\]/.exec(last)?.[1];
+    }
+    if (!ref) {
+      const shot = await call('computer', { action: 'screenshot' });
+      if (shot.images[0])
+        fs.writeFileSync('test/results/reactdev-search.jpg', Buffer.from(shot.images[0].data, 'base64'));
+      notes.push('saved test/results/reactdev-search.jpg');
+    }
+    expect(ref, 'no useState result in the search popup:\n' + last.slice(0, 1200));
+    await click(ref);
     await waitText(/useState is a React Hook/i);
   });
   await scenario('gov.uk', 'site search', async () => {

@@ -73,6 +73,7 @@ Kitsune picks it up automatically. `tabs_context_mcp` reports `Input mode: trust
 
 - Any program on your computer can then control Firefox through that port, with no password. Only use it on a machine you trust, and don't leave it on all the time.
 - Firefox shows a striped address bar and a robot icon while it's on.
+- Pages can tell the browser is being automated: Firefox sets `navigator.webdriver` to `true` whenever remote debugging is on. On your Mac, Google showed its "unusual traffic" check in this mode but not in the default mode. Kitsune deliberately doesn't hide this.
 - At startup, Firefox applies a few "automation" preferences, such as turning off update checks. Set `remote.prefs.recommended` to `false` in `about:config` to stop that.
 
 Without it, Kitsune works on most sites. The things that need real input are listed under [Limitations](#limitations).
