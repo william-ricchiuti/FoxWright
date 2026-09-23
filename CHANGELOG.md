@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (2026-09-23)
+
+- New `gif_creator` tool records an agent session as an animated GIF, with clicks marked. `export` saves it to Downloads, or to `KITSUNE_GIF_DIR`. Only a file name is accepted, never a path, so an agent can't overwrite other files.
+- GitHub Actions CI runs the build, lint and the end-to-end suites (both input modes) against the latest Firefox.
+- `docs/MANUAL-CHECKS.md` lists the checks automation can't do: Windows, logged-in sites and safety.
+- The repository moved to github.com/william-ricchiuti/Kitsune.
+
 ## 0.2.0 (2026-09-23)
 
 Tuned with a real agent: Claude Code completed 16/16 everyday browser tasks with Kitsune in both input modes (docs/agent-eval-*.md). The first run scored 14/16 at $2.57; the same suite now costs about $1.57.

@@ -1,6 +1,6 @@
 # kitsune-firefox
 
-This package is the helper and MCP server for **[Kitsune](https://github.com/william-ricchiuti/kitsune)**. Kitsune lets Claude, or any MCP client, operate your real Firefox through the Kitsune extension.
+This package is the helper and MCP server for **[Kitsune](https://github.com/william-ricchiuti/Kitsune)**. Kitsune lets Claude, or any MCP client, operate your real Firefox through the Kitsune extension.
 
 ```sh
 npx kitsune-firefox setup --claude-code --claude-desktop   # install + register

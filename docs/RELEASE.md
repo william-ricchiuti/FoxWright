@@ -4,10 +4,10 @@ Most of this is done already. What's left needs your accounts. In order:
 
 ## 1. GitHub (about 5 minutes)
 
-1. Create an empty public repo at <https://github.com/new> named `kitsune`, under `william-ricchiuti`. Don't add a README, license or .gitignore; the project already has them.
+1. Create an empty public repo at <https://github.com/new> named `Kitsune`, under `william-ricchiuti` (already created). Don't add a README, license or .gitignore; the project already has them.
 2. From `~/Desktop/Projects/kitsune`:
    ```sh
-   git remote add origin https://github.com/william-ricchiuti/kitsune.git
+   git remote add origin https://github.com/william-ricchiuti/Kitsune.git
    git push -u origin main
    ```
    If your branch is called `master`, first run `git branch -m main`.

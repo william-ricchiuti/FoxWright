@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix host
+      - name: Build extension and helper
+        run: |
+          npm run build
+          node test/build-fixtures.mjs
+          node host/dist/kitsune.mjs setup
+      - name: Lint extension builds
+        run: |
+          npx web-ext lint --source-dir dist/store
+          npx web-ext lint --source-dir dist/full
+      - name: End-to-end tests (synthetic input)
+        run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e.mjs
+      - name: End-to-end tests (trusted input via WebDriver BiDi)
+        run: FIREFOX="$(readlink -f "$(command -v firefox)")" KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
+      - name: Permission, store-build and resilience tests
+        run: |
+          export FIREFOX="$(readlink -f "$(command -v firefox)")"
+          node test/e2e-permissions.mjs
+          node test/e2e-store.mjs
+          node test/e2e-resilience.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test/results/

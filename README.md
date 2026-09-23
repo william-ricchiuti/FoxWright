@@ -1,5 +1,7 @@
 # Kitsune 狐
 
+[![CI](https://github.com/william-ricchiuti/Kitsune/actions/workflows/ci.yml/badge.svg)](https://github.com/william-ricchiuti/Kitsune/actions/workflows/ci.yml)
+
 **Let Claude (or any MCP-capable AI agent) use your real Firefox**: your tabs, your logins, your extensions. It works the same way Claude in Chrome does in Chrome.
 
 ![A Claude Code agent buying a backpack on saucedemo.com through Kitsune: log in, add to cart, fill checkout details, finish](docs/demo.gif)
@@ -124,6 +126,7 @@ The names and arguments match Claude in Chrome.
 | `computer` | `screenshot`, `zoom`, `left_click`, `right_click`, `double_click`, `triple_click`, `hover`, `type`, `key`, `scroll`, `scroll_to`, `left_click_drag`, `wait`. Coordinates, or refs for clicks. |
 | `form_input` | Set text fields, selects, checkboxes, radios, date/range inputs and rich-text editors by ref. On custom dropdowns and autocompletes (MUI, react-select, Radix…) it opens the list, types, and clicks the matching option. |
 | `get_page_text` | Readable text of the main content, 20k characters at a time (`offset` for more). With `query`, it returns only the passages about that topic. |
+| `gif_creator` | Record the session as an animated GIF with clicks marked (`start_recording` → act → `stop_recording` → `export`, which saves to Downloads). |
 | `browser_batch` | Several of the above in one call, e.g. fill three fields and click Submit. Stops at the first error. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
 | `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. Dialogs never block the page: by default alerts are dismissed and confirms/prompts are cancelled, and the tool result reports what the page asked. |
@@ -173,7 +176,7 @@ bash scripts/mac-test.sh [quick|agent]      # all of the above on macOS, against
 npx web-ext lint --source-dir dist/store
 ```
 
-Results are in [docs/TESTING.md](docs/TESTING.md). The tests use `web-ext run` with a temporary profile. They configure Kitsune through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
+Results are in [docs/TESTING.md](docs/TESTING.md). The checks automation can't do are listed in [docs/MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md). The tests use `web-ext run` with a temporary profile. They configure Kitsune through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
 
 Layout:
 

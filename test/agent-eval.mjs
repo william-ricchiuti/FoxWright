@@ -28,7 +28,7 @@ const outDir = path.join(root, 'test', 'results');
 const transcriptDir = path.join(outDir, 'agent');
 fs.mkdirSync(transcriptDir, { recursive: true });
 
-const KITSUNE_TOOLS = ['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'javascript_tool', 'handle_dialog', 'read_console_messages', 'read_network_requests', 'resize_window', 'file_upload', 'browser_batch'];
+const KITSUNE_TOOLS = ['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'javascript_tool', 'handle_dialog', 'read_console_messages', 'read_network_requests', 'resize_window', 'file_upload', 'browser_batch', 'gif_creator'];
 // Everything else is off, so the agent can't route around the browser (e.g. with WebFetch).
 const BLOCKED = ['Bash', 'WebFetch', 'WebSearch', 'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'Task', 'Agent', 'NotebookEdit'];
 

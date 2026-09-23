@@ -8,6 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { HelperClient } from './client.js';
 import { Bidi } from './bidi.js';
+import { startRecording, stopRecording, clearRecording, isRecording, addFrame, exportGif, frameCount } from './gif.js';
 
 const VERSION = typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0';
 
@@ -98,6 +99,18 @@ const jsonish = (schema) => z.preprocess((v) => {
   return v;
 }, schema);
 const numish = (schema) => z.preprocess((v) => (typeof v === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(v) ? Number(v) : v), schema);
+/** If a GIF recording is running for this tab, grab a frame after an action. */
+async function recordFrame(tab, click) {
+  if (typeof tab !== 'number' || !isRecording(tab))
+    return;
+  try {
+    const r = await helper.call('computer', { tabId: tab, action: 'screenshot' }, 20000);
+    const img = r?.content?.find(c => c.type === 'image');
+    if (img)
+      addFrame(tab, img.data, click);
+  } catch { /* recording is best-effort */ }
+}
+
 /** When an action navigated the page, append what's on the new page (saves a read_page call). */
 async function withNavSummary(r, tab) {
   const t = (r?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
@@ -265,8 +278,10 @@ export async function runMcp() {
     },
   }, async (a) => {
     const r = await call('navigate', a, 60000);
-    if (!r.isError && lastTab != null)
+    if (!r.isError && lastTab != null) {
       r.content.push({ type: 'text', text: await onScreenSummary(lastTab) });
+      await recordFrame(lastTab);
+    }
     return r;
   });
 
@@ -344,12 +359,16 @@ Actions:
       a.tabId = await defaultTab();
     try {
       const trusted = await trustedComputer(a);
-      if (trusted)
+      if (trusted) {
+        await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? a.coordinate : undefined);
         return withNavSummary(trusted, a.tabId);
+      }
     } catch (e) {
       return errorResult(e);
     }
     const r = await call('computer', a, a.action === 'wait' ? 20000 : 180000);
+    if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
+      await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? a.coordinate : undefined);
     return withNavSummary(r, a.tabId);
   });
 
@@ -438,6 +457,40 @@ Actions:
         files.push({ name: path.basename(abs), type: mimeFor(abs), base64: buf.toString('base64') });
       }
       return call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files, paths: shown }, 180000);
+    } catch (e) {
+      return errorResult(e);
+    }
+  });
+
+  server.registerTool('gif_creator', {
+    description: 'Record what you do in a tab as an animated GIF, e.g. to show the user how a task was done. start_recording, then act normally (a frame is captured after every navigate/computer action, with clicks marked), then stop_recording and export. export saves the GIF to the user\'s Downloads folder and returns the path.',
+    inputSchema: {
+      action: z.enum(['start_recording', 'stop_recording', 'export', 'clear']),
+      tabId,
+      filename: z.string().optional().describe('File name for export (saved in Downloads).'),
+    },
+  }, async (a) => {
+    const tab = typeof a.tabId === 'number' ? a.tabId : await defaultTab();
+    if (tab == null)
+      return errorResult('No tab to record.');
+    try {
+      if (a.action === 'start_recording') {
+        startRecording(tab);
+        await recordFrame(tab);
+        return { content: [{ type: 'text', text: `Recording tab ${tab}. A frame is captured after each action; call gif_creator stop_recording and then export when done.` }] };
+      }
+      if (a.action === 'stop_recording') {
+        await recordFrame(tab);
+        return { content: [{ type: 'text', text: `Stopped recording tab ${tab}: ${stopRecording(tab)} frames. Call export to save the GIF.` }] };
+      }
+      if (a.action === 'clear') {
+        clearRecording(tab);
+        return { content: [{ type: 'text', text: `Cleared the recording for tab ${tab}.` }] };
+      }
+      if (isRecording(tab))
+        stopRecording(tab);
+      const out = exportGif(tab, { filename: a.filename });
+      return { content: [{ type: 'text', text: `Saved ${out.frames}-frame GIF (${Math.round(out.bytes / 1024)} KB) to ${out.file}` }] };
     } catch (e) {
       return errorResult(e);
     }

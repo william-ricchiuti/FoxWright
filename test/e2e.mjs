@@ -438,6 +438,21 @@ async function main() {
     await pageHas('Count: 2');
   });
 
+  await test('gif_creator records actions and exports a GIF', async () => {
+    await call('gif_creator', { action: 'start_recording' });
+    await nav('/react.html');
+    const { ref } = await refFor('Count', 'button');
+    await call('computer', { action: 'left_click', ref });
+    await call('computer', { action: 'left_click', coordinate: [100, 100] });
+    await call('gif_creator', { action: 'stop_recording' });
+    const r = await call('gif_creator', { action: 'export', filename: 'e2e-test.gif' });
+    const file = /to (\S+\.gif)/.exec(r.text)?.[1];
+    expect(file && fs.existsSync(file), r.text);
+    const head = fs.readFileSync(file).subarray(0, 6).toString();
+    expect(head === 'GIF89a' && /[4-9]-frame|\d\d-frame/.test(r.text), r.text);
+    fs.rmSync(file, { force: true });
+  });
+
   await test('tab outside the Kitsune group is refused', async () => {
     const r = await h.call('read_page', { tabId: 1 });
     expect(r.isError && /not in the Kitsune tab group|does not exist/.test(r.text), r.text);
