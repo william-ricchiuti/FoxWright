@@ -32,7 +32,7 @@ const isMac = navigator.platform.toLowerCase().includes('mac');
 
 // ---------- helpers ----------
 
-export type Forward = { forward: { frameId: number; x?: number; y?: number } };
+export type Forward = { forward: { frameId: number; x?: number; y?: number; args?: any } };
 
 function frameIdOf(el: Element): number {
   try {
@@ -117,6 +117,30 @@ function focusableAncestor(el: Element | null): HTMLElement | null {
 }
 
 let lastHover: Element | null = null;
+
+// Pointer-capture emulation (see page-hooks.ts): while a synthetic gesture runs, pointer
+// events go to the element that "captured" the pointer, like the browser would do.
+let captureTarget: Element | null = null;
+document.addEventListener('kitsune:pointer-capture', (e) => {
+  captureTarget = (e.composedPath()[0] as Element) || null;
+  captureTarget?.dispatchEvent(new PointerEvent('gotpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
+}, true);
+document.addEventListener('kitsune:pointer-release', () => {
+  captureTarget = null;
+}, true);
+
+function gesture(on: boolean) {
+  document.dispatchEvent(new CustomEvent('kitsune:synthetic-pointer', { detail: on ? 'on' : 'off' }));
+  if (!on && captureTarget) {
+    captureTarget.dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
+    captureTarget = null;
+  }
+}
+
+/** Where a pointer event at this point goes: the capturing element if any, else `el`. */
+function pointerTarget(el: Element): Element {
+  return captureTarget && captureTarget.isConnected ? captureTarget : el;
+}
 let pointerDownAt: { x: number; y: number } | null = null;
 
 function mouseInit(x: number, y: number, mods: Mods, button: number, buttons: number, detail: number): MouseEventInit & PointerEventInit {
@@ -127,7 +151,7 @@ function mouseInit(x: number, y: number, mods: Mods, button: number, buttons: nu
     clientX: x, clientY: y, screenX: sx, screenY: sy,
     ctrlKey: mods.ctrl, shiftKey: mods.shift, altKey: mods.alt, metaKey: mods.meta,
     button, buttons, detail,
-    pointerId: 1, pointerType: 'mouse', isPrimary: true, width: 1, height: 1, pressure: buttons ? 0.5 : 0,
+    pointerId: 0, pointerType: 'mouse', isPrimary: true, width: 1, height: 1, pressure: buttons ? 0.5 : 0,
   };
 }
 
@@ -229,6 +253,8 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
   let prevented = false;
 
   hoverTo(target, x, y, mods);
+  gesture(true);
+  try {
   for (let i = 1; i <= count; i++) {
     const downOk = fire(target, new PointerEvent('pointerdown', mouseInit(x, y, mods, button, buttonsMask, i) as any));
     let mdOk = true;
@@ -254,8 +280,8 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
     }
     if (mdOk && i === 3 && isTextField(target))
       (target as HTMLInputElement).select();
-    fire(target, new PointerEvent('pointerup', mouseInit(x, y, mods, button, 0, i) as any));
-    fire(target, new MouseEvent('mouseup', mouseInit(x, y, mods, button, 0, i)));
+    fire(pointerTarget(target), new PointerEvent('pointerup', mouseInit(x, y, mods, button, 0, i) as any));
+    fire(pointerTarget(target), new MouseEvent('mouseup', mouseInit(x, y, mods, button, 0, i)));
 
     if (button === 0) {
       const intent = openInNewTabIntent(target, mods, button);
@@ -287,6 +313,20 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
       if (ok)
         notes.push('A synthetic right-click cannot open Firefox\'s native context menu; only the page\'s own custom menus respond.');
     }
+  }
+  } finally {
+    gesture(false);
+  }
+
+  if (button === 0 && target instanceof HTMLInputElement && target.type === 'range' && !target.disabled) {
+    // A real click on a slider track jumps the thumb to that position.
+    const r = target.getBoundingClientRect();
+    const min = parseFloat(target.min || '0'), max = parseFloat(target.max || '100');
+    const step = parseFloat(target.step) || 1;
+    const frac = Math.max(0, Math.min(1, (x - r.left) / Math.max(1, r.width)));
+    const v = Math.round((min + frac * (max - min)) / step) * step;
+    if (String(v) !== target.value)
+      setValueDirect(target, String(v));
   }
 
   if (target instanceof HTMLSelectElement || target.closest('select')) {
@@ -732,7 +772,12 @@ function focusedFrameForward(): Forward | null {
   return null;
 }
 
-export function pressKeys(args: { text: string; repeat?: number }): any {
+/** Let the page's microtasks/timers run between keystrokes. Editors like Lexical and
+ * ProseMirror update their model asynchronously; typing a whole string inside one task
+ * would feed them stale selections. */
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+export async function pressKeys(args: { text: string; repeat?: number }): Promise<any> {
   const fwd = focusedFrameForward();
   if (fwd)
     return fwd;
@@ -744,6 +789,7 @@ export function pressKeys(args: { text: string; repeat?: number }): any {
       const n = pressOne(c);
       if (n && !notes.includes(n))
         notes.push(n);
+      await tick();
     }
   }
   const a = deepActiveElement();
@@ -760,7 +806,7 @@ function valueOf(el: Element | null): string | undefined {
   return undefined;
 }
 
-export function typeText(args: { text: string }): any {
+export async function typeText(args: { text: string }): Promise<any> {
   const fwd = focusedFrameForward();
   if (fwd)
     return fwd;
@@ -779,13 +825,18 @@ export function typeText(args: { text: string }): any {
         const n = pressOne('Enter');
         if (n)
           notes.push(n);
+        await tick();
         continue;
       }
+      // The editor may have re-rendered; keep typing into whatever now has focus.
+      const t = (deepActiveElement() && isEditable(deepActiveElement())) ? deepActiveElement()! : target;
       const k = ch.length === 1 ? ch : ch[ch.length - 1];
-      const down = fire(target, keyEvent('keydown', k, NO_MODS));
-      if (down && fire(target, keyEvent('keypress', k, NO_MODS)))
-        insertText(target, ch);
-      fire(target, keyEvent('keyup', k, NO_MODS));
+      const down = fire(t, keyEvent('keydown', k, NO_MODS));
+      if (down && fire(t, keyEvent('keypress', k, NO_MODS)))
+        insertText(t, ch);
+      fire(t, keyEvent('keyup', k, NO_MODS));
+      if (perChar)
+        await tick();
     }
   } else {
     // Nothing editable focused: send key events only (games, shortcut-driven apps).
@@ -854,6 +905,12 @@ export function scrollTo(args: { ref: string }): any {
 export async function drag(args: { startX: number; startY: number; x: number; y: number }): Promise<any> {
   const { startX, startY, x, y } = args;
   const src = elementAt(startX, startY);
+  // A drag inside an iframe is performed by that frame's content script.
+  const fwd = iframeForward(src, startX, startY);
+  if (fwd) {
+    const dx = startX - fwd.forward.x!, dy = startY - fwd.forward.y!;
+    return { forward: { frameId: fwd.forward.frameId, args: { startX: startX - dx, startY: startY - dy, x: x - dx, y: y - dy } } };
+  }
   if (!src)
     throw new Error(`There is no element at the drag start (${startX}, ${startY}).`);
   const notes: string[] = [];
@@ -868,6 +925,9 @@ export async function drag(args: { startX: number; startY: number; x: number; y:
   }
 
   hoverTo(src, startX, startY, NO_MODS);
+  let end: Element = src;
+  gesture(true);
+  try {
   fire(src, new PointerEvent('pointerdown', mouseInit(startX, startY, NO_MODS, 0, 1, 1) as any));
   const mdOk = fire(src, new MouseEvent('mousedown', mouseInit(startX, startY, NO_MODS, 0, 1, 1)));
   const draggable = src.closest('[draggable="true"], a[href], img') as HTMLElement | null;
@@ -884,8 +944,8 @@ export async function drag(args: { startX: number; startY: number; x: number; y:
   for (let i = 1; i <= steps; i++) {
     const cx = startX + (x - startX) * i / steps, cy = startY + (y - startY) * i / steps;
     const el = elementAt(cx, cy) || document.body;
-    fire(el, new PointerEvent('pointermove', mouseInit(cx, cy, NO_MODS, 0, 1, 0) as any));
-    fire(el, new MouseEvent('mousemove', mouseInit(cx, cy, NO_MODS, 0, 1, 0)));
+    fire(pointerTarget(el), new PointerEvent('pointermove', mouseInit(cx, cy, NO_MODS, 0, 1, 0) as any));
+    fire(pointerTarget(el), new MouseEvent('mousemove', mouseInit(cx, cy, NO_MODS, 0, 1, 0)));
     if (dt) {
       if (el !== over) {
         fire(el, new DragEvent('dragenter', { ...mouseInit(cx, cy, NO_MODS, 0, 1, 0), dataTransfer: dt }));
@@ -898,14 +958,17 @@ export async function drag(args: { startX: number; startY: number; x: number; y:
     }
     await new Promise(r => setTimeout(r, 16));
   }
-  const end = elementAt(x, y) || document.body;
+  end = elementAt(x, y) || document.body;
   if (dt) {
     fire(end, new DragEvent('drop', { ...mouseInit(x, y, NO_MODS, 0, 0, 0), dataTransfer: dt }));
     fire(draggable!, new DragEvent('dragend', { ...mouseInit(x, y, NO_MODS, 0, 0, 0), dataTransfer: dt }));
     notes.push('Performed an HTML5 drag-and-drop sequence (dragstart/dragover/drop).');
   }
-  fire(end, new PointerEvent('pointerup', mouseInit(x, y, NO_MODS, 0, 0, 1) as any));
-  fire(end, new MouseEvent('mouseup', mouseInit(x, y, NO_MODS, 0, 0, 1)));
+  fire(pointerTarget(end), new PointerEvent('pointerup', mouseInit(x, y, NO_MODS, 0, 0, 1) as any));
+  fire(pointerTarget(end), new MouseEvent('mouseup', mouseInit(x, y, NO_MODS, 0, 0, 1)));
+  } finally {
+    gesture(false);
+  }
   pointerDownAt = null;
   return { from: describe(src), to: describe(end), notes };
 }

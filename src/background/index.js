@@ -2,12 +2,12 @@
 /* global browser */
 import { state, loadSettings, saveSettings, publicStatus, updateBadge } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
-import { tools, injectConsoleHook, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf } from './tabs.js';
+import { tools, adoptOpenedTab } from './tools.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks } from './tabs.js';
 import { handlePromptMessage } from './prompt.js';
 import { startNetLog } from './netlog.js';
 
-const PUBLIC_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'get_page_text', 'computer', 'javascript_tool', 'read_console_messages', 'read_network_requests', 'resize_window', 'file_upload']);
+const PUBLIC_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'get_page_text', 'computer', 'javascript_tool', 'read_console_messages', 'read_network_requests', 'handle_dialog', 'resize_window', 'file_upload']);
 
 // Everything waits for settings to load, so an early message can't act on (or save) defaults.
 let markReady;
@@ -101,7 +101,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
 browser.webNavigation.onCommitted.addListener((d) => {
   const o = originOf(d.url);
   if (state.groupTabIds.has(d.tabId) && o && isAllowed(o))
-    injectConsoleHook(d.tabId, d.frameId);
+    injectPageHooks(d.tabId, d.frameId);
 });
 
 // Keyboard shortcut (Alt+Shift+K by default): pause the agent. Extension-owned, so pages can't block it.

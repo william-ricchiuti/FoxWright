@@ -76,6 +76,8 @@ async function trustedComputerInner(a, st) {
     throw Object.assign(new Error('Page zoom shortcuts are not supported; use the zoom action to magnify a region instead.'), { fromHelper: true });
   const top = await bidi.contextFor(a.tabId, helper, 0);
   const send = (fn) => {
+    if (!st.dispatched)
+      st.t0 = Date.now();
     st.dispatched = true;
     return fn();
   };
@@ -153,7 +155,7 @@ async function trustedComputerInner(a, st) {
     default:
       return null;
   }
-  const after = await helper.call('_after', { tabId: a.tabId, beforeUrl }).catch(() => null);
+  const after = await helper.call('_after', { tabId: a.tabId, beforeUrl, t0: st.t0 }).catch(() => null);
   const notes = after?.data || [];
   return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }] };
 }
@@ -199,7 +201,8 @@ export async function runMcp() {
       tabId,
       filter: z.enum(['all', 'interactive']).optional().describe('"interactive" lists only elements with refs (buttons, links, inputs...). Default "all".'),
       depth: z.number().int().positive().optional().describe('Maximum tree depth (default 25). Lower it for huge pages.'),
-      ref_id: z.string().optional().describe('Only return the subtree under this ref.'),
+      ref_id: z.string().optional().describe('Only return the subtree under this ref (or, for an iframe ref, the frame\'s content).'),
+      visible_only: z.boolean().optional().describe('Only include what is currently on screen (much smaller on long pages; scroll to see more).'),
       max_chars: z.number().int().positive().optional().describe('Maximum characters to return (default 50000).'),
     },
   }, async (a) => call('read_page', a));
@@ -269,6 +272,15 @@ Actions:
       tabId,
     },
   }, async (a) => call('javascript_tool', a));
+
+  server.registerTool('handle_dialog', {
+    description: 'Kitsune never lets JavaScript alert/confirm/prompt dialogs block the page: by default alerts are dismissed, confirms answered Cancel and prompts cancelled, and the tool result tells you what the page asked. Call this BEFORE an action to answer the next dialog in that tab differently (e.g. accept a "Are you sure?" confirm, or type into a prompt).',
+    inputSchema: {
+      tabId,
+      accept: z.boolean().describe('true = OK, false = Cancel.'),
+      prompt_text: z.string().optional().describe('Text to enter if the next dialog is a prompt().'),
+    },
+  }, async (a) => call('handle_dialog', a));
 
   server.registerTool('read_console_messages', {
     description: 'Read console output (log/info/warn/error/debug) and uncaught exceptions from a Kitsune tab. Capture starts when the tab joins the Kitsune group; reload to capture a page\'s startup logs. Provide a pattern to keep the output small.',

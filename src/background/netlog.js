@@ -3,6 +3,7 @@
 import { state } from './state.js';
 
 export const netLog = new Map(); // tabId -> [{url, method, type, status, error, time}]
+export const docTypes = new Map(); // tabId -> content-type of the top-level document
 const MAX = 500;
 
 function record(d, extra) {
@@ -28,6 +29,15 @@ function record(d, extra) {
 export function startNetLog() {
   const filter = { urls: ['<all_urls>'] };
   browser.webRequest.onCompleted.addListener(d => record(d, { status: d.statusCode }), filter);
+  browser.webRequest.onHeadersReceived.addListener((d) => {
+    if (d.type !== 'main_frame' || !state.groupTabIds.has(d.tabId))
+      return;
+    const ct = (d.responseHeaders || []).find(x => x.name.toLowerCase() === 'content-type')?.value || '';
+    docTypes.set(d.tabId, { type: ct.toLowerCase(), method: d.method });
+  }, { urls: ['<all_urls>'], types: ['main_frame'] }, ['responseHeaders']);
   browser.webRequest.onErrorOccurred.addListener(d => record(d, { error: d.error }), filter);
-  browser.tabs.onRemoved.addListener(tabId => netLog.delete(tabId));
+  browser.tabs.onRemoved.addListener((tabId) => {
+    netLog.delete(tabId);
+    docTypes.delete(tabId);
+  });
 }

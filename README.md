@@ -103,12 +103,13 @@ The names and arguments match Claude in Chrome.
 | `tabs_context_mcp` | List the agent's tabs (and create one). Also reports the input mode. |
 | `tabs_create_mcp` / `tabs_close_mcp` | Open or close agent tabs. |
 | `navigate` | Go to a URL, or `back` / `forward`. |
-| `read_page` | Accessibility outline with refs. Options: `filter: "interactive"`, `depth`, `ref_id` (a subtree, or the inside of an iframe), `max_chars`. |
+| `read_page` | Accessibility outline with refs. Open popups and dialogs are listed first. Options: `filter: "interactive"`, `visible_only` (just what's on screen), `depth`, `ref_id` (a subtree, or the inside of an iframe), `max_chars`. |
 | `find` | Find elements by description ("search box", "add to cart button"). |
 | `computer` | `screenshot`, `zoom`, `left_click`, `right_click`, `double_click`, `triple_click`, `hover`, `type`, `key`, `scroll`, `scroll_to`, `left_click_drag`, `wait`. Coordinates, or refs for clicks. |
 | `form_input` | Set text fields, selects, checkboxes, radios, date/range inputs and rich-text editors by ref. |
 | `get_page_text` | Readable text of the main content. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
+| `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. Dialogs never block the page: by default alerts are dismissed and confirms/prompts are cancelled, and the tool result reports what the page asked. |
 | `read_console_messages` / `read_network_requests` | Console output and HTTP requests of an agent tab. |
 | `resize_window` | Resize the browser window. |
 | `javascript_tool` | Run JS in the page. **Full build only** (see below). |
@@ -131,6 +132,7 @@ Also:
 
 - **One Firefox profile.** Only one Firefox profile can be connected at a time.
 - **Pages extensions can't touch.** Firefox blocks all extensions on `about:` pages, `addons.mozilla.org` and a few Mozilla account pages.
+- **Firefox's JSON and PDF viewers.** Pages shown in these viewers can't be read or screenshotted by extensions. For JSON loaded with GET, `get_page_text` fetches it again; otherwise Kitsune explains the problem and suggests the `devtools.jsonview.enabled` pref.
 - **Snap and Flatpak Firefox.** On Linux, the sandboxed Snap/Flatpak builds may not be able to start the helper. The Mozilla `.deb` or tarball build works.
 - **`find`** uses word matching, not a language model, so describe elements by their visible text or role.
 
@@ -147,10 +149,12 @@ node test/e2e.mjs                           # 43 tests, synthetic input
 KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
 node test/e2e-permissions.mjs               # approval windows, frame gating, uploads
 node test/e2e-store.mjs                     # AMO build smoke test
+node test/e2e-resilience.mjs                # concurrent clients, latency, helper crash, Firefox restart
+node test/realsites.mjs                     # 51 tasks on real websites (needs internet)
 npx web-ext lint --source-dir dist/store
 ```
 
-The tests use `web-ext run` with a temporary profile. They configure Kitsune through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
+Results are in [docs/TESTING.md](docs/TESTING.md). The tests use `web-ext run` with a temporary profile. They configure Kitsune through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
 
 Layout:
 

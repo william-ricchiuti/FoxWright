@@ -77,7 +77,7 @@ async function buildTarget(key) {
     define: { __KITSUNE_FULL__: JSON.stringify(t.full), __KITSUNE_VERSION__: JSON.stringify(readVersion()) },
   };
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/content/index.ts')], format: 'iife', outfile: path.join(out, 'content/content.js') });
-  await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/content/console-main.ts')], format: 'iife', outfile: path.join(out, 'content/console-main.js') });
+  await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/content/page-hooks.ts')], format: 'iife', outfile: path.join(out, 'content/page-hooks.js') });
   await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/background/index.js')], format: 'iife', outfile: path.join(out, 'background.js') });
 
   const manifestPath = path.join(out, 'manifest.json');

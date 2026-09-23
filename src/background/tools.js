@@ -2,7 +2,7 @@
 // agents (and skills written for Chrome) work unchanged.
 /* global browser */
 import { state, publicStatus } from './state.js';
-import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, showActivity, checkAccessible, addToGroup } from './tabs.js';
+import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks } from './tabs.js';
 import { askUser } from './prompt.js';
 import { netLog } from './netlog.js';
 
@@ -109,14 +109,38 @@ async function waitForLoad(tabId, timeoutMs = 30000) {
   return browser.tabs.get(tabId);
 }
 
+async function dialogNotes(tabId) {
+  try {
+    const list = await sendContent(tabId, 0, 'dialogs', {}, 3000);
+    return list.map(d => `The page opened a JavaScript ${d.type}(${JSON.stringify(d.message)}); Kitsune answered: ${d.answer}.${d.type === 'confirm' && d.answer === 'Cancel' ? ' To answer OK instead, call handle_dialog {accept: true} and repeat the action.' : ''}`);
+  } catch {
+    return [];
+  }
+}
+
+// Navigations that an action starts (link clicks, form submits) begin asynchronously.
+const navStarts = new Map(); // tabId -> timestamp of last top-level navigation start
+browser.webNavigation.onBeforeNavigate.addListener((d) => {
+  if (d.frameId === 0)
+    navStarts.set(d.tabId, Date.now());
+});
+
 async function afterAction(tab, before, r) {
   const extra = [];
+  const t0 = before.t0 || Date.now() - 50;
+  for (let i = 0; i < 5 && !((navStarts.get(tab.id) || 0) >= t0); i++)
+    await sleep(60);
   if (r?.openUrl) {
     const nt = await createAgentTab(r.openUrl, false);
     extra.push(`The link opens in a new tab: created tab ${nt.id} (${r.openUrl}) in the Kitsune group.`);
   }
-  await sleep(120);
-  const now = await browser.tabs.get(tab.id);
+  let now = await browser.tabs.get(tab.id);
+  if ((navStarts.get(tab.id) || 0) >= t0 && now.url === before.url && now.status !== 'loading') {
+    await sleep(300); // navigation started but the tab hasn't switched to loading yet
+    now = await browser.tabs.get(tab.id);
+  }
+  if (now.url === before.url && now.status !== 'loading')
+    extra.push(...await dialogNotes(tab.id));
   if (now.url !== before.url || now.status === 'loading') {
     const done = await waitForLoad(tab.id, 15000);
     const o = originOf(done.url);
@@ -206,7 +230,7 @@ function truncateLines(s, max) {
     return s;
   const cut = s.lastIndexOf('\n', max);
   const kept = s.slice(0, cut > 0 ? cut : max);
-  return `${kept}\n… [truncated: output is ${s.length} chars, showing ${kept.length}. Use ref_id to read one part of the page, a smaller depth, filter: "interactive", or a larger max_chars.]`;
+  return `${kept}\n… [truncated: output is ${s.length} chars, showing ${kept.length}. Use visible_only: true for just what's on screen, ref_id for one part of the page, filter: "interactive", a smaller depth, or a larger max_chars.]`;
 }
 
 // ---------- JavaScript tool (full build only) ----------
@@ -320,6 +344,14 @@ export const tools = {
     const o = originOf(done.url);
     if (o && !isAllowed(o))
       return text(`${prefix}Tab ${tab.id} ended up on ${o} (redirect or history), which the user hasn't approved yet. The next tool call on this tab will ask them.${ctx}`);
+    // Firefox error pages ("Problem loading page", certificate warnings) keep the requested URL.
+    if (o) {
+      try {
+        await ensureContent(tab.id, 0);
+      } catch (e) {
+        throw new Error(`${prefix}Navigation to ${done.url} failed: ${String(e.message).replace(/^Tab \d+ is showing/, 'Firefox is showing')}`);
+      }
+    }
     showActivity(tab.id);
     return text(`${prefix}Navigated tab ${tab.id} to ${done.url}\nTitle: ${done.title || '(none)'}${done.status !== 'complete' ? '\n(The page is still loading.)' : ''}${ctx}`);
   },
@@ -331,7 +363,7 @@ export const tools = {
     const frameId = args.ref_id ? frameForRef(tab.id, args.ref_id) : 0;
     if (frameId !== 0)
       await ensureContent(tab.id, frameId);
-    let res = await sendContent(tab.id, frameId, 'snapshot', { filter: args.filter, depth: args.depth, ref_id: args.ref_id });
+    let res = await sendContent(tab.id, frameId, 'snapshot', { filter: args.filter, depth: args.depth, ref_id: args.ref_id, visible_only: args.visible_only });
     if (res && res.frameRedirect !== undefined) {
       // ref_id pointed at an <iframe>: show that frame's document (asking for its site if needed).
       if (res.frameRedirect < 0)
@@ -367,9 +399,13 @@ export const tools = {
           await ensureContent(tab.id, f.frameId);
           const r = await sendContent(tab.id, f.frameId, 'find', { query: args.query }, 5000);
           total += r.total;
-          for (const i of r.items)
-            if (lines.length < 20)
-              lines.push(i.line + ' (inside an iframe)');
+          const o = r.items.length ? await frameOrigin(tab.id, f.frameId).catch(() => null) : null;
+          for (const i of r.items) {
+            if (lines.length >= 20)
+              break;
+            const where = o && i.center ? ` at (${Math.round((i.center.x + o.x) * s)}, ${Math.round((i.center.y + o.y) * s)})${i.center.inView ? '' : ' (off-screen)'}` : '';
+            lines.push(i.line + where + ' (inside an iframe)');
+          }
         } catch { /* skip unreachable frames */ }
       }
     } catch { /* ignore */ }
@@ -382,11 +418,25 @@ export const tools = {
     const tab = await tabForPageTool(args);
     const frameId = frameForRef(tab.id, args.ref);
     const r = await sendContent(tab.id, frameId, 'formInput', { ref: args.ref, value: args.value });
-    return text(fmtResult('Set', r));
+    return text([fmtResult('Set', r), ...await dialogNotes(tab.id)].join('\n'));
   },
 
   async get_page_text(args) {
-    const tab = await tabForPageTool(args);
+    let tab;
+    try {
+      tab = await tabForPageTool(args);
+    } catch (e) {
+      if (!e.jsonViewer)
+        throw e;
+      // Firefox's JSON viewer hides the document from extensions; fetch the JSON again (GET).
+      const t = await browser.tabs.get(args.tabId);
+      const r = await fetch(t.url, { credentials: 'include' });
+      let body = await r.text();
+      try {
+        body = JSON.stringify(JSON.parse(body), null, 2);
+      } catch { /* not JSON after all */ }
+      return text(`URL: ${t.url}\n(Shown in Firefox's JSON viewer, which extensions can't read, so Kitsune fetched the URL again with a GET request; status ${r.status}.)\n\n${body.length > 100000 ? body.slice(0, 100000) + '\n… [truncated]' : body}`);
+    }
     if (checkAccessible(tab) === 'blank')
       return text(`Tab ${tab.id} is blank.`);
     const r = await sendContent(tab.id, 0, 'pageText', { maxChars: 100000 });
@@ -414,7 +464,7 @@ export const tools = {
     if (blank)
       throw new Error(`Tab ${tab.id} is blank; navigate to a page first.`);
 
-    const before = await browser.tabs.get(tab.id);
+    const before = { ...(await browser.tabs.get(tab.id)), t0: Date.now() };
     const refFrame = args.ref ? frameForRef(tab.id, args.ref) : 0;
     let pt = null;
     if (Array.isArray(args.coordinate))
@@ -527,6 +577,12 @@ export const tools = {
     return text(list.map(e => `[${new Date(e.time).toISOString().slice(11, 23)}] ${e.level.toUpperCase()}: ${e.text}`).join('\n') + note);
   },
 
+  async handle_dialog(args) {
+    const tab = await tabForPageTool(args);
+    await sendContent(tab.id, 0, 'dialogPolicy', { accept: !!args.accept, text: args.prompt_text });
+    return text(`The next JavaScript dialog in tab ${tab.id} will be answered ${args.accept ? `OK${args.prompt_text !== undefined ? ` with ${JSON.stringify(args.prompt_text)}` : ''}` : 'Cancel'}. Now perform the action that opens it.`);
+  },
+
   async read_network_requests(args) {
     const tab = await requireTab(args.tabId);
     await ensurePermission(tab);
@@ -627,7 +683,7 @@ export const tools = {
     // Called after a trusted action so the agent learns about navigation / new tabs.
     const tab = await requireTab(args.tabId);
     showActivity(tab.id);
-    const extra = await afterAction(tab, { url: args.beforeUrl }, {});
+    const extra = await afterAction(tab, { url: args.beforeUrl, t0: typeof args.t0 === 'number' ? args.t0 : undefined }, {});
     return { data: extra };
   },
 };
@@ -637,22 +693,13 @@ export async function adoptOpenedTab(tabId) {
   await addToGroup(tabId);
 }
 
-export async function injectConsoleHook(tabId, frameId = 0) {
-  try {
-    await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['content/console-main.js'], world: 'MAIN', injectImmediately: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function ensureConsoleHook(tabId) {
   try {
     const [r] = await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', func: () => !!window.__kitsuneConsoleHooked });
     if (r?.result)
       return 'existing';
   } catch { /* ignore */ }
-  await injectConsoleHook(tabId, 0);
+  await injectPageHooks(tabId, 0);
   return 'new';
 }
 

@@ -40,7 +40,7 @@ function frameIdOf(el: Element): number {
   }
 }
 
-type SnapshotArgs = { filter?: 'all' | 'interactive'; depth?: number; ref_id?: string };
+type SnapshotArgs = { filter?: 'all' | 'interactive'; depth?: number; ref_id?: string; visible_only?: boolean };
 
 const INTERACTIVE_ROLES = new Set(['button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio', 'slider', 'spinbutton', 'switch', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option', 'listbox', 'treeitem', 'gridcell', 'columnheader', 'rowheader', 'iframe', 'scrollbar', 'textarea']);
 
@@ -61,6 +61,15 @@ function enrichEditors(nodes: any[]) {
   for (const n of nodes) {
     if (typeof n === 'string')
       continue;
+    if (n.role === 'combobox' && n.ref && !n.text && !(n.children || []).some((c: any) => typeof c === 'string' || c.ref)) {
+      // e.g. a custom select whose aria-label is "Food" but which currently shows "Banana"
+      const el = refMap.get(n.ref)?.deref() as HTMLElement | undefined;
+      const shown = (el?.innerText || '').replace(/\s+/g, ' ').trim();
+      if (el && !(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement) && shown && shown !== n.name && shown.length < 120) {
+        n.text = shown;
+        delete n.children;
+      }
+    }
     if (n.role === 'textbox' && n.ref && !n.text && !(n.children || []).some((c: any) => typeof c !== 'string')) {
       const el = refMap.get(n.ref)?.deref() as HTMLElement | undefined;
       if (el?.isContentEditable) {
@@ -73,6 +82,62 @@ function enrichEditors(nodes: any[]) {
     if (n.children)
       enrichEditors(n.children);
   }
+}
+
+function inViewport(ref: string): boolean {
+  const el = refMap.get(ref)?.deref();
+  if (!el)
+    return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+}
+
+/** Keep only what's on screen (plus the ancestors that give it context). */
+function pruneToViewport(nodes: any[]): boolean {
+  let any = false;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    if (typeof n === 'string')
+      continue;
+    const kids = n.children ? pruneToViewport(n.children) : false;
+    const self = n.ref ? inViewport(n.ref) : false;
+    if (!kids && !self) {
+      nodes.splice(i, 1);
+      continue;
+    }
+    if (!self && n.children)
+      n.children = n.children.filter((c: any) => typeof c !== 'string'); // drop off-screen text of containers
+    any = true;
+  }
+  return any;
+}
+
+const OVERLAY_ROLES = new Set(['dialog', 'alertdialog', 'listbox', 'menu', 'tooltip']);
+
+/** Pull open popups out of the tree (leaving a pointer behind) so they can be rendered first. */
+function hoistOverlays(nodes: any[]): any[] {
+  const found: any[] = [];
+  const walk = (list: any[]) => {
+    for (let i = 0; i < list.length; i++) {
+      const n = list[i];
+      if (typeof n === 'string')
+        continue;
+      if (OVERLAY_ROLES.has(n.role) && n.children?.length) {
+        const el = n.ref ? refMap.get(n.ref)?.deref() : undefined;
+        const r = el?.getBoundingClientRect();
+        const onScreen = !el || (r!.width > 0 && r!.height > 0 && r!.bottom > 0 && r!.top < innerHeight);
+        if (onScreen) {
+          found.push(n);
+          list[i] = { role: n.role, name: n.name, ref: n.ref, text: '(open popup, shown at the top)' };
+          continue;
+        }
+      }
+      if (n.children)
+        walk(n.children);
+    }
+  };
+  walk(nodes);
+  return found;
 }
 
 export type SnapshotResult = {
@@ -93,6 +158,12 @@ export function takeSnapshot(args: SnapshotArgs): SnapshotResult | { frameRedire
   remember(snapshot);
   const { json } = renderAriaTreeAsJSON(snapshot, { mode: 'ai', refPrefix, depth });
   enrichEditors(json);
+  if (args.visible_only)
+    pruneToViewport(json);
+
+  // Popups (menus, listboxes, dialogs) are usually portals at the end of <body>, so on a
+  // long page they'd be cut off by max_chars exactly when they matter. Show them first.
+  const overlays = args.ref_id ? [] : hoistOverlays(json);
 
   let yaml: string;
   if (args.filter === 'interactive') {
@@ -114,6 +185,11 @@ export function takeSnapshot(args: SnapshotArgs): SnapshotResult | { frameRedire
     yaml = flat.length ? renderAriaSnapshotAsYaml(flat) : '(no interactive elements found)';
   } else {
     yaml = renderAriaSnapshotAsYaml(json);
+  }
+
+  if (overlays.length) {
+    const top = args.filter === 'interactive' ? overlays.map(o => ({ ...o, children: (o.children || []).filter((c: any) => typeof c !== 'string') })) : overlays;
+    yaml = `- note: open popups/dialogs are listed first; the rest of the page follows\n${renderAriaSnapshotAsYaml(top)}\n${yaml}`;
   }
 
   const iframes: { ref: string; frameId: number }[] = [];
@@ -160,6 +236,8 @@ const ROLE_SYNONYMS: Record<string, string[]> = {
   slider: ['slider', 'range'],
 };
 
+const CONTAINER_ROLES = new Set(['generic', 'group', 'form', 'region', 'list', 'listitem', 'main', 'navigation', 'table', 'grid', 'treegrid', 'rowgroup', 'row', 'article', 'section', 'banner', 'contentinfo', 'complementary', 'document', 'application', 'toolbar', 'menubar', 'tablist', 'tabpanel', 'dialog', 'figure', 'blockquote', 'paragraph', 'status', 'alert', 'log']);
+
 const STOP = new Set(['the', 'a', 'an', 'to', 'of', 'for', 'on', 'in', 'with', 'that', 'this', 'and', 'or', 'containing', 'called', 'named', 'labeled', 'labelled']);
 
 function tokens(s: string): string[] {
@@ -191,7 +269,7 @@ export function findElements(query: string) {
       if (typeof n === 'string')
         continue;
       const own = [n.name, n.text, n.placeholder, n.url].filter(Boolean).join(' ');
-      const isContainer = n.role === 'generic' || n.role === 'group' || n.role === 'form' || n.role === 'region' || n.role === 'list' || n.role === 'listitem' || n.role === 'main' || n.role === 'navigation';
+      const isContainer = CONTAINER_ROLES.has(n.role);
       if (n.ref && !(isContainer && !isInteractiveNode(n) && n.children?.some((c: any) => typeof c !== 'string'))) {
         const directText = (n.children || []).filter((c: any) => typeof c === 'string').join(' ');
         const hay = (own + ' ' + (n.name ? '' : (isContainer ? directText : textOf(n)))).toLowerCase();
@@ -210,6 +288,11 @@ export function findElements(query: string) {
         }
         if (qFull && hay.includes(qFull))
           score += 4;
+        const nm = String(n.name || n.text || '').toLowerCase().trim();
+        if (qFull && nm === qFull)
+          score += 6; // exact name match beats everything
+        else if (nm.length > 80)
+          score *= 0.7; // long text blobs are rarely what's wanted
         if (isContainer && !isInteractiveNode(n))
           score *= 0.5;
         if (score > 0)

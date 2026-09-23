@@ -2,6 +2,7 @@
 /* global browser */
 import { state, saveSettings } from './state.js';
 import { askUser } from './prompt.js';
+import { docTypes } from './netlog.js';
 
 const GROUP_TITLE = 'Kitsune';
 const hasGroups = () => typeof browser.tabs.group === 'function' && !!browser.tabGroups;
@@ -267,6 +268,16 @@ function withTimeout(p, ms, what) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${Math.round(ms / 1000)}s`)), ms))]);
 }
 
+/** MAIN-world hooks: console capture + non-blocking dialogs (see src/content/page-hooks.ts). */
+export async function injectPageHooks(tabId, frameId = 0, allFrames = false) {
+  try {
+    await browser.scripting.executeScript({ target: allFrames ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] }, files: ['content/page-hooks.js'], world: 'MAIN', injectImmediately: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureContent(tabId, frameId = 0) {
   try {
     const r = await withTimeout(browser.tabs.sendMessage(tabId, { kitsune: true, cmd: 'ping', prefix: framePrefix(tabId, frameId) }, { frameId }), 1500, 'ping');
@@ -274,11 +285,18 @@ export async function ensureContent(tabId, frameId = 0) {
       return;
   } catch { /* not injected yet */ }
   const target = frameId === 0 ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] };
+  await injectPageHooks(tabId, frameId, frameId === 0);
   try {
     await browser.scripting.executeScript({ target, files: ['content/content.js'] });
   } catch (e) {
     if (/Missing host permission/i.test(String(e?.message)) && frameId === 0) {
       const t = await browser.tabs.get(tabId);
+      const doc = docTypes.get(tabId) || { type: '', method: 'GET' };
+      const ct = doc.type;
+      if (/json/.test(ct))
+        throw Object.assign(new Error(`Tab ${tabId} shows a JSON response in Firefox's built-in JSON viewer, which extensions can't read or screenshot. ${doc.method === 'GET' ? 'get_page_text can re-fetch it.' : `It was the answer to a ${doc.method} request, so it can't be re-fetched.`} To read JSON pages directly, the user can set devtools.jsonview.enabled = false in about:config.`), { jsonViewer: doc.method === 'GET' });
+      if (/pdf/.test(ct))
+        throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot.`);
       throw new Error(`Tab ${tabId} is showing a Firefox error or internal page${t.title ? ` ("${t.title}")` : ''} for ${t.url}, which extensions can't read. The site may be down or unreachable; check the URL or try navigating again.`);
     }
     if (frameId === 0) {
@@ -320,7 +338,7 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
     // Acting inside an embedded frame from another site needs that site's approval too.
     await ensureFramePermission(await browser.tabs.get(tabId), f.frameId);
     await ensureContent(tabId, f.frameId);
-    const next = { ...args };
+    const next = { ...args, ...(f.args || {}) };
     if (f.x !== undefined) {
       next.x = f.x;
       next.y = f.y;
@@ -338,6 +356,24 @@ async function setGroupTitle(title) {
   try {
     await browser.tabGroups.update(state.groupId, { title });
   } catch { /* ignore */ }
+}
+
+/** Offset of a frame's viewport inside the top-level viewport, in CSS px. */
+export async function frameOrigin(tabId, frameId) {
+  let x = 0, y = 0;
+  let cur = frameId;
+  for (let i = 0; i < 8 && cur !== 0; i++) {
+    const info = await browser.webNavigation.getFrame({ tabId, frameId: cur });
+    if (!info)
+      return null;
+    const off = await sendContent(tabId, info.parentFrameId, 'frameOffset', { frameId: cur }, 5000);
+    if (!off)
+      return null;
+    x += off.x;
+    y += off.y;
+    cur = info.parentFrameId;
+  }
+  return { x, y };
 }
 
 export async function showActivity(tabId) {

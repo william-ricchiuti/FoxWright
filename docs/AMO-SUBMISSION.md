@@ -19,7 +19,7 @@
 > - `webRequest`: non-blocking; records request URLs/status for agent tabs only (`read_network_requests`).
 > - `storage`: site approvals. `alarms`: reconnect to the helper if it wasn't running.
 >
-> No remote code: this listed build contains no way to run code strings. The `javascript_tool` exists only in a separate, self-distributed build and is compiled out here. `content/console-main.js` is a packaged MAIN-world script that records console output in agent tabs on approved sites. The vendored Playwright files (`vendor/playwright`, Apache-2.0) compute accessibility roles/names; the build instructions are in `scripts/build.mjs`.
+> No remote code: this listed build contains no way to run code strings. The `javascript_tool` exists only in a separate, self-distributed build and is compiled out here. `content/page-hooks.js` is a packaged MAIN-world script, injected only into agent tabs on sites the user approved: it records console output, replaces blocking alert/confirm/prompt dialogs with non-blocking versions (so the page never freezes under automation), and emulates pointer capture during Kitsune-generated gestures. The vendored Playwright files (`vendor/playwright`, Apache-2.0) compute accessibility roles/names; the build instructions are in `scripts/build.mjs`.
 >
 > To test: install the helper with `node host/dist/kitsune.mjs setup` (after `cd host && npm ci && npm run build`), then connect an MCP client, e.g. `claude mcp add kitsune -- node ~/.kitsune/app/kitsune.mjs mcp`, and ask it to read a page. The end-to-end tests in `test/` show every tool working.
 

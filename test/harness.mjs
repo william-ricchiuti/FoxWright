@@ -10,6 +10,7 @@ import path from 'node:path';
 import net from 'node:net';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import webExt from 'web-ext';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -52,7 +53,7 @@ function waitForSocket(p, ms = 30000) {
   });
 }
 
-export function writePolicies(firefoxBin, policy, extra = {}) {
+export function writePolicies(firefoxBin, policy) {
   const dist = path.join(path.dirname(firefoxBin), 'distribution');
   fs.mkdirSync(dist, { recursive: true });
   const file = path.join(dist, 'policies.json');
@@ -63,19 +64,28 @@ export function writePolicies(firefoxBin, policy, extra = {}) {
   const ext = {};
   for (const id of ['kitsune@william-ricchiuti.com', 'kitsune-full@william-ricchiuti.com'])
     ext[id] = policy;
-  fs.writeFileSync(file, JSON.stringify({ policies: { '3rdparty': { Extensions: ext }, ...extra } }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ policies: { '3rdparty': { Extensions: ext } } }, null, 2));
 }
 
 export async function start({ build = 'full', trusted = false, policy = { mode: 'all', confirmUploads: false } } = {}) {
   const firefox = process.env.FIREFOX || '/home/claude/ff/firefox/firefox';
-  // Optional: reach real websites through an HTTP proxy with its own CA (used in CI sandboxes).
-  const extra = {};
+  writePolicies(firefox, policy);
+  // Optional: reach real websites through an HTTP(S) proxy that re-signs TLS with its own CA
+  // (e.g. a CI sandbox). Builds a throwaway profile whose NSS DB trusts that CA.
+  let profile;
+  const proxyPrefs = {};
   if (process.env.KITSUNE_E2E_PROXY) {
-    extra.Proxy = { Mode: 'manual', HTTPProxy: process.env.KITSUNE_E2E_PROXY, UseHTTPProxyForAllProtocols: true, Passthrough: 'localhost, 127.0.0.1', Locked: false };
+    const [host, port] = process.env.KITSUNE_E2E_PROXY.split(':');
+    profile = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-prof-'));
+    execFileSync('certutil', ['-N', '-d', `sql:${profile}`, '--empty-password']);
     if (process.env.KITSUNE_E2E_PROXY_CA)
-      extra.Certificates = { Install: [process.env.KITSUNE_E2E_PROXY_CA] };
+      execFileSync('certutil', ['-A', '-n', 'e2e-proxy', '-t', 'C,,', '-i', process.env.KITSUNE_E2E_PROXY_CA, '-d', `sql:${profile}`]);
+    Object.assign(proxyPrefs, {
+      'network.proxy.type': 1, 'network.proxy.http': host, 'network.proxy.http_port': Number(port),
+      'network.proxy.ssl': host, 'network.proxy.ssl_port': Number(port), 'network.proxy.no_proxies_on': 'localhost, 127.0.0.1',
+      'security.OCSP.enabled': 0, 'network.captive-portal-service.enabled': false, 'network.connectivity-service.enabled': false,
+    });
   }
-  writePolicies(firefox, policy, extra);
   const s1 = await serve(8765);
   const s2 = await serve(8766);
   const sock = path.join(os.homedir(), '.kitsune', 'kitsune.sock');
@@ -86,19 +96,21 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
     args.push('--headless');
   if (trusted)
     args.push('--remote-debugging-port=9222');
-  const runner = await webExt.cmd.run({
+  const runOpts = {
     sourceDir: path.join(root, 'dist', build),
     firefox,
     args,
     noReload: true,
+    ...(profile ? { firefoxProfile: profile } : {}),
     noInput: true,
     browserConsole: false,
     pref: {
       'remote.prefs.recommended': true,
       'browser.shell.checkDefaultBrowser': false,
-      ...(process.env.KITSUNE_E2E_PROXY ? { 'security.OCSP.enabled': 0, 'network.captive-portal-service.enabled': false, 'network.connectivity-service.enabled': false, 'security.enterprise_roots.enabled': true } : {}),
+      ...proxyPrefs,
     },
-  }, { shouldExitProgram: false });
+  };
+  let runner = await webExt.cmd.run(runOpts, { shouldExitProgram: false });
   await waitForSocket(sock);
 
   const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'inherit' });
@@ -122,5 +134,13 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
     s1.close();
     s2.close();
   }
-  return { call, stop, client };
+  async function stopFirefoxOnly() {
+    await runner.exit();
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  async function restartFirefox() {
+    runner = await webExt.cmd.run(runOpts, { shouldExitProgram: false });
+    await waitForSocket(sock);
+  }
+  return { call, stop, client, stopFirefoxOnly, restartFirefox };
 }

@@ -23,33 +23,62 @@ function originOf(url: string): string | null {
   }
 }
 
-function consoleDump(clear: boolean): Promise<any[]> {
+/** Ask the MAIN-world hook (page-hooks.ts) for its buffer. The page can forge replies, so validate. */
+function requestDump(request: string, dump: string, detail = ''): Promise<any[]> {
   return new Promise(resolve => {
     let done = false;
     const onDump = (e: Event) => {
       done = true;
-      document.removeEventListener('kitsune:console-dump', onDump);
+      document.removeEventListener(dump, onDump);
       try {
-        // The page can forge this event, so validate the shape.
         const raw = JSON.parse(String((e as CustomEvent).detail));
-        resolve(Array.isArray(raw) ? raw.slice(-1000).map((x: any) => ({
-          level: String(x?.level ?? 'log').slice(0, 20),
-          text: String(x?.text ?? '').slice(0, 4000),
-          time: Number.isFinite(x?.time) ? x.time : Date.now(),
-        })) : []);
+        resolve(Array.isArray(raw) ? raw.slice(-1000) : []);
       } catch {
         resolve([]);
       }
     };
-    document.addEventListener('kitsune:console-dump', onDump);
-    document.dispatchEvent(new CustomEvent('kitsune:console-request', { detail: clear ? 'clear' : '' }));
+    document.addEventListener(dump, onDump);
+    document.dispatchEvent(new CustomEvent(request, { detail }));
     setTimeout(() => {
       if (!done) {
-        document.removeEventListener('kitsune:console-dump', onDump);
+        document.removeEventListener(dump, onDump);
         resolve([]);
       }
     }, 300);
   });
+}
+
+async function consoleDump(clear: boolean) {
+  const raw = await requestDump('kitsune:console-request', 'kitsune:console-dump', clear ? 'clear' : '');
+  return raw.map((x: any) => ({
+    level: String(x?.level ?? 'log').slice(0, 20),
+    text: String(x?.text ?? '').slice(0, 4000),
+    time: Number.isFinite(x?.time) ? x.time : Date.now(),
+  }));
+}
+
+async function dialogsDump() {
+  const raw = await requestDump('kitsune:dialogs-request', 'kitsune:dialogs-dump');
+  return raw.slice(-20).map((x: any) => ({
+    type: String(x?.type ?? 'dialog').slice(0, 10),
+    message: String(x?.message ?? '').slice(0, 500),
+    answer: String(x?.answer ?? '').slice(0, 200),
+  }));
+}
+
+function frameOffset(args: { frameId: number }) {
+  for (const f of Array.from(document.querySelectorAll('iframe, frame'))) {
+    let id = -1;
+    try {
+      id = browser.runtime.getFrameId(f);
+    } catch { /* ignore */ }
+    if (id === args.frameId) {
+      const r = f.getBoundingClientRect();
+      const cs = getComputedStyle(f);
+      return { x: r.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft), y: r.top + parseFloat(cs.borderTopWidth) + parseFloat(cs.paddingTop) };
+    }
+  }
+  return null;
 }
 
 const handlers: Record<string, (args: any) => any> = {
@@ -69,8 +98,14 @@ const handlers: Record<string, (args: any) => any> = {
   refPoint: (a) => input.refPoint(a),
   locate: (a) => input.locate(a),
   focusInfo: () => input.focusInfo(),
+  frameOffset: (a) => frameOffset(a),
   pageText: (a) => pageText(a),
   console: async (a) => consoleDump(!!a.clear),
+  dialogs: async () => dialogsDump(),
+  dialogPolicy: (a) => {
+    document.dispatchEvent(new CustomEvent('kitsune:dialog-policy', { detail: JSON.stringify({ accept: !!a.accept, text: a.text }) }));
+    return true;
+  },
   activity: (a) => {
     if (a.on === false)
       hideActivity();
