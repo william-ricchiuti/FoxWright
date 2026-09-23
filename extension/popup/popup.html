@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kitsune</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="hanko" aria-hidden="true">狐</div>
+    <div class="title">
+      <h1>Kitsune</h1>
+      <p id="status-line"><span class="dot" id="dot"></span><span id="status-text">Checking…</span></p>
+    </div>
+  </header>
+
+  <section id="paused" class="card alert" hidden>
+    <strong>Paused.</strong> The agent can't act until you resume.
+    <button id="resume" class="primary">Resume</button>
+  </section>
+
+  <section id="setup" class="card" hidden>
+    <h2>Connect your AI</h2>
+    <p>Kitsune needs its small helper program. In a terminal, run:</p>
+    <pre><code>npx kitsune-firefox setup</code></pre>
+    <p class="fine">Then restart Firefox. <span id="err"></span></p>
+    <button id="retry">Try again</button>
+  </section>
+
+  <section class="card">
+    <h2>Site access</h2>
+    <label class="choice"><input type="radio" name="mode" value="ask"> <span><b>Ask on each new site</b><br><small>You approve every site before the agent can read or touch it.</small></span></label>
+    <label class="choice"><input type="radio" name="mode" value="all"> <span><b>Allow all sites</b><br><small>No prompts. Only choose this if you trust the agent you've connected.</small></span></label>
+    <ul id="sites"></ul>
+  </section>
+
+  <section class="card compact">
+    <div class="row"><span>Input mode</span><span id="input-mode" class="tag">—</span></div>
+    <div class="row"><span>Agent tabs</span><span id="tabs" class="tag">0</span></div>
+    <button id="pause" class="ghost">Pause the agent <small>(Alt+Shift+K)</small></button>
+  </section>
+
+  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/kitsune" target="_blank" rel="noopener">docs</a></footer>
+  <script src="popup.js"></script>
+</body>
+</html>

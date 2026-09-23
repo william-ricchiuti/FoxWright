@@ -1,0 +1,43 @@
+{
+  "name": "kitsune-firefox",
+  "version": "0.1.0",
+  "description": "MCP server + native helper that lets AI agents like Claude drive your real Firefox through the Kitsune extension.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "kitsune": "dist/kitsune.mjs",
+    "kitsune-firefox": "dist/kitsune.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "firefox",
+    "claude",
+    "browser-automation",
+    "webextension",
+    "webdriver-bidi"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/william-ricchiuti/kitsune"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.1",
+    "ws": "8.21.3",
+    "zod": "4.6.5"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "prepublishOnly": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kitsune needs your OK</title>
+  <link rel="stylesheet" href="../popup/popup.css">
+  <link rel="stylesheet" href="prompt.css">
+</head>
+<body class="prompt">
+  <header>
+    <div class="hanko" aria-hidden="true">狐</div>
+    <div class="title">
+      <h1 id="title">Let Kitsune use this site?</h1>
+      <p id="subtitle">An AI agent connected through Kitsune is asking.</p>
+    </div>
+  </header>
+  <section class="card">
+    <p id="body"></p>
+    <p class="origin"><code id="origin"></code></p>
+    <ul id="files" hidden></ul>
+    <p class="fine" id="tabline"></p>
+  </section>
+  <div class="actions">
+    <button id="deny">Deny</button>
+    <button id="once">Allow this session</button>
+    <button id="always" class="primary">Always allow</button>
+  </div>
+  <p class="fine note">This window belongs to the Kitsune extension. Web pages and the AI can't press these buttons. You can revoke sites any time from the Kitsune toolbar button.</p>
+  <script src="prompt.js"></script>
+</body>
+</html>

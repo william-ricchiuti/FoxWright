@@ -1,0 +1,40 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Kitsune test: basic form</title>
+<script src="src/events.js"></script>
+<style>body{font-family:sans-serif;margin:20px} #scroller{height:120px;overflow:auto;border:1px solid #999} .spacer{height:1500px} #drop{width:200px;height:60px;border:2px dashed #999} #drag{width:80px;background:#fc9;padding:6px}</style>
+</head><body>
+<h1>Sign up</h1>
+<form id="signup" onsubmit="event.preventDefault(); document.getElementById('result').textContent = 'SUBMITTED name=' + this.name.value + ' email=' + this.email.value + ' plan=' + this.plan.value + ' terms=' + this.terms.checked + ' color=' + this.color.value + ' bio=' + this.bio.value.replace(/\n/g,'\\n');">
+  <label>Full name <input id="name" name="name" placeholder="Jane Doe"></label><br>
+  <label>Email <input id="email" name="email" type="email"></label><br>
+  <label>Plan
+    <select id="plan" name="plan"><option value="free">Free</option><option value="pro">Pro plan</option><option value="team">Team</option></select>
+  </label><br>
+  <label><input id="terms" name="terms" type="checkbox"> I accept the terms</label><br>
+  <fieldset><legend>Favorite color</legend>
+    <label><input type="radio" name="color" value="red" id="c-red" checked> Red</label>
+    <label><input type="radio" name="color" value="blue" id="c-blue"> Blue</label>
+  </fieldset>
+  <label>Bio <textarea id="bio" name="bio"></textarea></label><br>
+  <label>Volume <input id="vol" type="range" min="0" max="100" value="10"></label>
+  <label>Birthday <input id="bday" type="date"></label><br>
+  <label>Avatar <input id="avatar" type="file"></label>
+  <button id="submit" type="submit">Create account</button>
+</form>
+<p id="result">not submitted</p>
+<p><a id="same" href="page2.html">Go to page two</a> · <a id="newtab" href="page2.html?from=blank" target="_blank">Open page two in new tab</a></p>
+<div id="ce" contenteditable="true" style="border:1px solid #999;min-height:30px">Edit me:</div>
+<button id="counter" onclick="this.textContent = 'Clicked ' + (++window.clicks) + ' times'">Clicked 0 times</button>
+<button id="dbl" ondblclick="this.textContent='double clicked'">Double-click me</button>
+<button id="ctx" oncontextmenu="event.preventDefault(); this.textContent='custom menu opened'">Right-click me</button>
+<div id="hoverbox" onmouseenter="this.textContent='hovered!'">Hover over me</div>
+<div id="scroller"><div class="spacer">Top of scroller</div><button id="deep">Deep button</button></div>
+<div id="drag" draggable="true" ondragstart="event.dataTransfer.setData('text/plain','fox')">Drag me</div>
+<div id="drop" ondragover="event.preventDefault()" ondrop="event.preventDefault(); this.textContent='dropped: ' + event.dataTransfer.getData('text/plain')">Drop here</div>
+<h2>Frames</h2>
+<iframe id="same-frame" src="frame.html" width="300" height="90"></iframe>
+<iframe id="xo-frame" src="http://localhost:8766/frame.html" width="300" height="90"></iframe>
+<script>window.clicks = 0; console.log('basic page loaded'); console.error('fixture error message');</script>
+<div style="height:600px"></div>
+<button id="bottom">Bottom button</button>
+</body></html>

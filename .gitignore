@@ -1,0 +1,8 @@
+node_modules/
+dist/
+host/dist/
+host/node_modules/
+test/results/
+test/fixtures/build/
+*.log
+.DS_Store
