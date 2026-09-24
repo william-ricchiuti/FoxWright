@@ -236,8 +236,11 @@ function truncateLines(s, max) {
 
 // ---------- JavaScript tool (full build only) ----------
 
-function runUserCode(code) {
+function runUserCode(code, expectOrigin) {
   // Runs in the page's MAIN world. Page CSP may forbid eval; we report that clearly.
+  // Refuse if the tab navigated to another site since the permission check.
+  if (expectOrigin && location.origin !== expectOrigin)
+    return Promise.resolve({ ok: false, error: `The tab is now showing ${location.origin}, not ${expectOrigin} (it navigated). Call the tool again.` });
   const AsyncFunction = (async () => {}).constructor;
   const ser = (v) => {
     if (v === undefined)
@@ -336,7 +339,7 @@ export const tools = {
       await browser.tabs.goForward(tab.id);
     } else {
       const url = normalizeUrl(args.url);
-      await ensureOriginPermission(url, tab.title); // ask before sending the user's cookies anywhere new
+      await ensureOriginPermission(url); // ask before sending the user's cookies anywhere new (no tab title: it's the page being left, not the site asked about)
       await browser.tabs.update(tab.id, { url });
     }
     const done = await waitForLoad(tab.id, 30000);
@@ -563,7 +566,10 @@ export const tools = {
       const tab = await tabForPageTool(args);
       if (typeof args.text !== 'string' || !args.text.trim())
         throw new Error('text (the JavaScript to run) is required.');
-      const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text] });
+      const expectOrigin = await frameOriginOf(tab.id, 0).catch(() => null);
+      if (expectOrigin && !isAllowed(expectOrigin))
+        throw new Error(`Kitsune is not allowed to access ${expectOrigin}.`);
+      const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text, expectOrigin && /^https?:/.test(expectOrigin) ? expectOrigin : null] });
       if (res?.error)
         throw new Error(String(res.error.message || res.error));
       const out = res?.result;
@@ -594,7 +600,7 @@ export const tools = {
     }
     const limit = args.limit || 100;
     list = list.slice(-limit);
-    const note = hooked === 'new' ? '\n(Console capture just started for this page; messages logged earlier are not available. Reload the page to capture everything.)' : '';
+    const note = hooked !== 'existing' ? '\n(Console capture just started for this page; messages logged earlier are not available. Reload the page to capture everything.)' : '';
     if (!list.length)
       return text(`No console messages${args.pattern ? ` matching /${args.pattern}/` : ''}.${note}`);
     return text(list.map(e => `[${new Date(e.time).toISOString().slice(11, 23)}] ${e.level.toUpperCase()}: ${e.text}`).join('\n') + note);
@@ -718,9 +724,9 @@ export async function adoptOpenedTab(tabId) {
 
 async function ensureConsoleHook(tabId) {
   try {
-    const [r] = await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, world: 'MAIN', func: () => !!window.__kitsuneConsoleHooked });
+    const [r] = await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: () => (globalThis.__kitsuneHooks ? (globalThis.__kitsuneHooks.early ? 'existing' : 'late') : '') });
     if (r?.result)
-      return 'existing';
+      return r.result;
   } catch { /* ignore */ }
   await injectPageHooks(tabId, 0);
   return 'new';

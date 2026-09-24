@@ -3,7 +3,7 @@
 import { state, loadSettings, saveSettings, publicStatus, updateBadge } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf, injectPageHooks } from './tabs.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
 
@@ -20,7 +20,15 @@ onRequest(async (tool, args) => {
     throw new Error(`Unknown tool ${tool}`);
   if (state.paused && tool !== '_status')
     throw new Error(PAUSED_MSG);
-  const result = await fn(args);
+  if (!tool.startsWith('_'))
+    noteAgentActivity(args?.tabId);
+  let result;
+  try {
+    result = await fn(args);
+  } finally {
+    if (!tool.startsWith('_'))
+      noteAgentActivity(args?.tabId);
+  }
   // Stop pressed while this command ran: don't report success for an interrupted action.
   if (state.paused && !tool.startsWith('_'))
     throw new Error(PAUSED_MSG);

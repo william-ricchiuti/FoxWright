@@ -14,7 +14,12 @@ function answer(a) {
     return;
   }
   $('origin').textContent = req.origin;
-  $('tabline').textContent = req.tabTitle ? `Tab: ${req.tabTitle}` : '';
+  // The title is chosen by the web page, so label it as such and keep it short: a hostile page
+  // could otherwise use it to talk the user into allowing.
+  if (req.tabTitle) {
+    const t = req.tabTitle.replace(/\s+/g, ' ').trim();
+    $('tabline').textContent = `Page title (set by the website): “${t.length > 70 ? t.slice(0, 70) + '…' : t}”`;
+  }
   if (req.type === 'upload') {
     document.title = 'Kitsune: allow file upload?';
     $('title').textContent = 'Upload files to this site?';
@@ -33,6 +38,35 @@ function answer(a) {
       ? 'The AI agent wants to read and interact with an embedded frame from:'
       : 'The AI agent wants to open, read and interact with pages on:';
   }
+  // Clickjacking guard: the window can pop up under a cursor that's mid-click, so the buttons only
+  // work after the window has been visible and focused for a moment (as Firefox's own dialogs do).
+  const buttons = [$('deny'), $('once'), $('always')];
+  let armTimer = null;
+  const disarm = () => {
+    clearTimeout(armTimer);
+    armTimer = null;
+    buttons.forEach(b => { b.disabled = true; });
+  };
+  const pendingArm = () => armTimer !== null;
+  const arm = () => {
+    disarm();
+    armTimer = setTimeout(() => {
+      armTimer = null;
+      buttons.forEach(b => { b.disabled = false; });
+      $('deny').focus();
+    }, 800);
+  };
+  disarm();
+  window.addEventListener('blur', disarm);
+  window.addEventListener('focus', arm);
+  document.addEventListener('visibilitychange', () => (document.hidden ? disarm() : arm()));
+  // Some window managers don't focus new windows: pointer movement inside it also counts as "seen".
+  document.documentElement.addEventListener('pointermove', () => {
+    if (buttons[0].disabled && !document.hidden && !pendingArm())
+      arm();
+  });
+  if (document.hasFocus() || !document.hidden)
+    arm();
   $('deny').addEventListener('click', () => answer('deny'));
   $('once').addEventListener('click', () => answer('once'));
   $('always').addEventListener('click', () => answer('always'));

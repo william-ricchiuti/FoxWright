@@ -10,6 +10,12 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - Stop/Pause now interrupts work in progress: open permission windows are denied, typing and drags stop at the next step, and the running command reports that the user stopped it. The popup's Pause does the same as the shortcut and the in-page Stop.
 - Trusted mode only sends input to a WebDriver BiDi endpoint that identifies as Firefox.
 - A page can no longer make its own elements look like Kitsune's UI to be skipped.
+- The permission window's buttons only work after it has been on screen for a moment (clickjacking guard). *Allow this session* is now the default button, and the page title is labelled as coming from the website.
+- Console capture and dialog handling moved out of the page's reach (Firefox's isolated content-script world): pages can no longer switch them off or forge the dialog reports Kitsune gives the agent.
+- Dialogs are only auto-answered while the agent is working in the tab. When you use the tab yourself, the page's dialogs appear normally.
+- `javascript_tool` (full build) refuses to run if the tab navigated to another site since it was approved.
+- `file_upload` also refuses browser profiles (saved logins, cookies), shell history, Claude's settings and system password files, matches paths case-insensitively, and checks size and file type before reading.
+- A tab group is only re-adopted after a restart if it has Kitsune's title and orange color.
 
 **Fixes**
 - Editors inside `about:blank` and `srcdoc` iframes (TinyMCE, CKEditor 4, many webmail composers) can be read, clicked and typed into.

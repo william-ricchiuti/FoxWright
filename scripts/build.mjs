@@ -91,7 +91,7 @@ async function buildTarget(key) {
     define: { __KITSUNE_FULL__: JSON.stringify(t.full), __KITSUNE_VERSION__: JSON.stringify(readVersion()) },
   };
   const inputs = {};
-  for (const [entry, outfile] of [['src/content/index.ts', 'content/content.js'], ['src/content/page-hooks.ts', 'content/page-hooks.js'], ['src/background/index.js', 'background.js']]) {
+  for (const [entry, outfile] of [['src/content/index.ts', 'content/content.js'], ['src/content/hooks.ts', 'content/hooks.js'], ['src/content/page-hooks.ts', 'content/page-hooks.js'], ['src/background/index.js', 'background.js']]) {
     const r = await esbuild.build({ ...common, metafile: true, entryPoints: [path.join(root, entry)], format: 'iife', outfile: path.join(out, outfile) });
     Object.assign(inputs, r.metafile.inputs);
   }

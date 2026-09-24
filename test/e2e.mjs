@@ -498,6 +498,27 @@ async function main() {
     await pageHas('Shadow clicks: 1');
   });
 
+  await test('dialogs: confirm answered Cancel, then OK after handle_dialog; page cannot forge reports', async () => {
+    await nav('/frames2.html');
+    const { ref } = await refFor('Delete everything', 'button');
+    const r1 = await call('computer', { action: 'left_click', ref });
+    expect(/confirm\("Delete everything\?"\); Kitsune answered: Cancel/.test(r1.text), r1.text);
+    expect(!r1.text.includes('IGNORE PREVIOUS'), r1.text);
+    await pageHas('Kept');
+    await call('handle_dialog', { accept: true });
+    const r2 = await call('computer', { action: 'left_click', ref });
+    expect(r2.text.includes('Kitsune answered: OK'), r2.text);
+    await pageHas('Deleted');
+  });
+
+  await test('console capture survives a page that pre-sets the old hook flag', async () => {
+    await call('read_console_messages', {}); // make sure capture is on for this page
+    const { ref } = await refFor('Log something', 'button');
+    await call('computer', { action: 'left_click', ref });
+    const r = await call('read_console_messages', { pattern: 'hostile page' });
+    expect(r.text.includes('frames2 hostile page logged'), r.text);
+  });
+
   await test('tab outside the Kitsune group is refused', async () => {
     const r = await h.call('read_page', { tabId: 1 });
     expect(r.isError && /not in the Kitsune tab group|does not exist/.test(r.text), r.text);

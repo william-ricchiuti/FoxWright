@@ -3,6 +3,7 @@ import { takeSnapshot, findElements, setRefPrefix, getRefPrefix } from './snapsh
 import * as input from './input';
 import { pageText } from './text';
 import { showActivity, hideActivity } from './overlay';
+import { AGENT_WINDOW_MS, type Hooks } from './hooks';
 
 declare const browser: any;
 
@@ -40,47 +41,20 @@ function currentOrigin(): string | null {
   }
 }
 
-/** Ask the MAIN-world hook (page-hooks.ts) for its buffer. The page can forge replies, so validate. */
-function requestDump(request: string, dump: string, detail = ''): Promise<any[]> {
-  return new Promise(resolve => {
-    let done = false;
-    const onDump = (e: Event) => {
-      done = true;
-      document.removeEventListener(dump, onDump);
-      try {
-        const raw = JSON.parse(String((e as CustomEvent).detail));
-        resolve(Array.isArray(raw) ? raw.slice(-1000) : []);
-      } catch {
-        resolve([]);
-      }
-    };
-    document.addEventListener(dump, onDump);
-    document.dispatchEvent(new CustomEvent(request, { detail }));
-    setTimeout(() => {
-      if (!done) {
-        document.removeEventListener(dump, onDump);
-        resolve([]);
-      }
-    }, 300);
-  });
+function hooks(): Hooks {
+  return g.__kitsuneHooks;
 }
 
-async function consoleDump(clear: boolean) {
-  const raw = await requestDump('kitsune:console-request', 'kitsune:console-dump', clear ? 'clear' : '');
-  return raw.map((x: any) => ({
-    level: String(x?.level ?? 'log').slice(0, 20),
-    text: String(x?.text ?? '').slice(0, 4000),
-    time: Number.isFinite(x?.time) ? x.time : Date.now(),
-  }));
+function consoleDump(clear: boolean) {
+  const h = hooks();
+  const out = h.console.slice(-1000);
+  if (clear)
+    h.console.length = 0;
+  return out;
 }
 
-async function dialogsDump() {
-  const raw = await requestDump('kitsune:dialogs-request', 'kitsune:dialogs-dump');
-  return raw.slice(-20).map((x: any) => ({
-    type: String(x?.type ?? 'dialog').slice(0, 10),
-    message: String(x?.message ?? '').slice(0, 500),
-    answer: String(x?.answer ?? '').slice(0, 200),
-  }));
+function dialogsDump() {
+  return hooks().dialogs.splice(0).slice(-20).map(d => ({ type: d.type, message: d.message.slice(0, 500), answer: d.answer }));
 }
 
 function frameOffset(args: { frameId: number }) {
@@ -117,10 +91,10 @@ const handlers: Record<string, (args: any) => any> = {
   focusInfo: () => input.focusInfo(),
   frameOffset: (a) => frameOffset(a),
   pageText: (a) => pageText(a),
-  console: async (a) => consoleDump(!!a.clear),
-  dialogs: async () => dialogsDump(),
+  console: (a) => consoleDump(!!a.clear),
+  dialogs: () => dialogsDump(),
   dialogPolicy: (a) => {
-    document.dispatchEvent(new CustomEvent('kitsune:dialog-policy', { detail: JSON.stringify({ accept: !!a.accept, text: a.text }) }));
+    hooks().next = { accept: !!a.accept, text: typeof a.text === 'string' ? a.text : undefined };
     return true;
   },
   activity: (a) => {
@@ -151,11 +125,18 @@ if (!g.__kitsuneContent) {
     const h = handlers[msg.cmd];
     if (!h)
       return Promise.resolve({ ok: false, error: `Unknown content command ${msg.cmd}` });
+    // The agent is working in this tab: answer dialogs automatically until shortly after.
+    const agentWork = msg.cmd !== 'ping' && msg.cmd !== 'activity';
+    if (agentWork)
+      hooks().agentUntil = Date.now() + AGENT_WINDOW_MS;
     return (async () => {
       try {
         return { ok: true, result: await h(msg.args || {}) };
       } catch (e: any) {
         return { ok: false, error: e?.message || String(e) };
+      } finally {
+        if (agentWork)
+          hooks().agentUntil = Date.now() + AGENT_WINDOW_MS;
       }
     })();
   });

@@ -19,15 +19,15 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## 2. Safety hardening
 
-- [ ] 9. Permission window: short click delay; "Allow this session" as default
-- [ ] 10. Permission window shows the page's own title (and the wrong one for `navigate`)
-- [ ] 11. Pages can disable/forge page hooks (`__kitsuneConsoleHooked`, dialog answers)
-- [ ] 12. Dialogs auto-answered even when the user is using the tab
-- [ ] 13. `javascript_tool` not bound to the approved origin (full build)
-- [~] 14. Trusted mode trusts anything on port 9222 (check browserName, document risk) — browserName checked; docs warning still to do
-- [ ] 15. Secret-file denylist gaps (browser profiles, shell history, Claude config, case)
-- [ ] 16. `file_upload` reads before size check; accepts non-regular files
-- [ ] 17. Any group titled "Kitsune" is adopted
+- [x] 9. Permission window: short click delay; "Allow this session" as default — buttons armed 800 ms after the window is focused/visible (or the pointer moves in it); Deny focused; "Allow this session" is the primary button
+- [x] 10. Permission window shows the page's own title (and the wrong one for `navigate`) — title labelled as set by the website and truncated; not shown for navigate (it was the page being left)
+- [x] 11. Pages can disable/forge page hooks (`__kitsuneConsoleHooked`, dialog answers) — console/dialog state moved to the isolated world (hooks.ts, exportFunction); MAIN world keeps only pointer capture; e2e tests with a hostile fixture
+- [x] 12. Dialogs auto-answered even when the user is using the tab — auto-answer only while the agent works in the tab (+8 s, also across a navigation it caused); otherwise native dialogs
+- [x] 13. `javascript_tool` not bound to the approved origin (full build) — runUserCode refuses if location.origin differs from the approved origin
+- [x] 14. Trusted mode trusts anything on port 9222 (check browserName, document risk) — browserName checked; README explains the risk and `KITSUNE_BIDI_PORT`
+- [x] 15. Secret-file denylist gaps (browser profiles, shell history, Claude config, case) — adds browser profiles, Claude config, shell history, /etc/shadow, Windows hives; case-insensitive
+- [x] 16. `file_upload` reads before size check; accepts non-regular files — stat first: regular files only, size checked before reading
+- [x] 17. Any group titled "Kitsune" is adopted — re-adopt by title only if the group is also orange
 
 ## 3. Speed and tokens
 
@@ -69,6 +69,7 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## Later / ideas
 
+- Console capture from the very first script: needs a registered document_start content script (today capture starts when Kitsune's hooks land, usually after inline `<head>` scripts)
 - Model-based `find`
 - `javascript_tool` on strict-CSP sites via `userScripts`
 - Download handling
@@ -80,3 +81,4 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 Newest last. One line per commit so an interrupted session can pick up where it stopped.
 
 - 1–8 fixed, plus 21, 25, 26, 27, 28, part of 14; also: BiDi timers cleared, Windows pipe-id race (`wx`), `KITSUNE_SOCKET` chmod limited to ~/.kitsune, `<kitsune-ui>` decoy check (identity only), input-mode line only when it changes. e2e 53/53 both modes; permissions 5/5, store 2/2, resilience 5/5.
+- 9–17 done (safety hardening). e2e 55/55 both modes; permissions 5/5; store 2/2.

@@ -489,11 +489,15 @@ Actions:
         const abs = await fs.realpath(path.resolve(p));
         if (isSecretPath(abs))
           throw new Error(`Refusing to upload ${abs}: it looks like a credential or key file. If the user really wants this, they should attach it themselves.`);
-        const buf = await fs.readFile(abs);
-        shown.push(`${abs} (${buf.length < 1024 ? `${buf.length} bytes` : `${Math.round(buf.length / 1024)} KB`})`);
-        total += buf.length;
+        // Check type and size before reading: /dev/zero, a FIFO or a huge file would hang or exhaust memory.
+        const st = await fs.stat(abs);
+        if (!st.isFile())
+          throw new Error(`${abs} is not a regular file.`);
+        total += st.size;
         if (total > 25 * 1024 * 1024)
           throw new Error('Files larger than 25 MB in total are not supported.');
+        const buf = await fs.readFile(abs);
+        shown.push(`${abs} (${buf.length < 1024 ? `${buf.length} bytes` : `${Math.round(buf.length / 1024)} KB`})`);
         files.push({ name: path.basename(abs), type: mimeFor(abs), base64: buf.toString('base64') });
       }
       return call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files, paths: shown }, 180000);
@@ -598,17 +602,33 @@ Actions:
 }
 
 // Never upload obvious secrets, even if asked (a prompt-injected agent might try).
-const SECRET_DIRS = ['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.kitsune', '.password-store', '1Password', 'Keychains', path.join('.config', 'gcloud'), path.join('.config', 'gh')];
-const SECRET_FILES = /(^|[\\/])(id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|\.env(\..*)?|\.netrc|\.npmrc|\.pypirc|\.git-credentials|credentials(\.json)?|.*\.(pem|key|p12|pfx|kdbx|keychain-db))$/i;
+const SECRET_DIRS = [
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.kitsune', '.password-store', '1password', 'keychains',
+  '.config/gcloud', '.config/gh',
+  // Claude Code / Claude Desktop settings and credentials
+  '.claude', '.config/claude', 'application support/claude', 'appdata/roaming/claude',
+  // browser profiles: saved logins, cookies, session tokens
+  '.mozilla/firefox', 'application support/firefox', 'appdata/roaming/mozilla', 'snap/firefox', '.var/app/org.mozilla.firefox',
+  '.librewolf', 'application support/librewolf', '.waterfox',
+  'google/chrome', '.config/google-chrome', '.config/chromium', 'bravesoftware', 'microsoft/edge', '.config/microsoft-edge',
+  'system32/config', // Windows password hives
+];
+const SECRET_FILES = new RegExp('(^|[\\\\/])(' + [
+  'id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?', '\\.env(\\..*)?', '\\.netrc', '\\.npmrc', '\\.pypirc', '\\.git-credentials',
+  'credentials(\\.json)?', '.*\\.(pem|key|p12|pfx|kdbx|keychain-db|ovpn)',
+  'logins\\.json', 'key[34]\\.db', 'cookies\\.sqlite', 'login data', // browser secret stores, wherever they are
+  '\\.(bash|zsh|sh|python|node_repl|psql|mysql)_history', '\\.histfile', 'fish_history',
+  'shadow', 'gshadow', 'master\\.passwd', // Unix password databases
+].join('|') + ')$', 'i');
 
+// Case-insensitive filesystems (macOS, Windows) make ".SSH" the same folder as ".ssh".
 function isSecretPath(abs) {
-  const parts = abs.split(/[\\/]/);
-  if (SECRET_DIRS.some(d => {
-    const segs = d.split(/[\\/]/);
+  const parts = abs.toLowerCase().split(/[\\/]/);
+  const hit = SECRET_DIRS.some(d => {
+    const segs = d.split('/');
     return parts.some((_, i) => segs.every((sg, j) => parts[i + j] === sg));
-  }))
-    return true;
-  return SECRET_FILES.test(abs);
+  });
+  return hit || SECRET_FILES.test(abs);
 }
 
 function mimeFor(p) {

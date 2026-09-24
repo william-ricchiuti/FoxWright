@@ -20,9 +20,13 @@ async function validGroupId() {
     } catch { /* group gone (closed or restored with a new id) */ }
   }
   try {
-    let found = await browser.tabGroups.query({ title: GROUP_TITLE });
+    // The saved id is gone (e.g. after a browser restart restored the group with a new id).
+    // Re-adopt a group only if it looks exactly like ours: title and orange color. A group the
+    // user made for their own tabs is unlikely to match both, and its tabs would otherwise
+    // become usable by the agent without anyone asking.
+    let found = await browser.tabGroups.query({ title: GROUP_TITLE, color: 'orange' });
     if (!found.length)
-      found = await browser.tabGroups.query({ title: 'Kitsune ● working' });
+      found = await browser.tabGroups.query({ title: 'Kitsune ● working', color: 'orange' });
     if (found.length) {
       state.groupId = found[0].id;
       await saveSettings();
@@ -268,10 +272,41 @@ function withTimeout(p, ms, what) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} timed out after ${Math.round(ms / 1000)}s`)), ms))]);
 }
 
-/** MAIN-world hooks: console capture + non-blocking dialogs (see src/content/page-hooks.ts). */
+// Tabs the agent acted in recently: a page that loads right after an agent action (a click that
+// navigates, navigate itself) still gets its dialogs answered automatically.
+const agentActivity = new Map(); // tabId -> time of the last agent command
+export function noteAgentActivity(tabId) {
+  if (typeof tabId === 'number')
+    agentActivity.set(tabId, Date.now());
+}
+browser.tabs.onRemoved.addListener((tabId) => agentActivity.delete(tabId));
+
+/**
+ * Console capture + non-blocking dialogs (isolated world, src/content/hooks.ts) and pointer-capture
+ * emulation (page world, src/content/page-hooks.ts), injected as early as possible.
+ */
 export async function injectPageHooks(tabId, frameId = 0) {
+  const target = { tabId, frameIds: [frameId] };
+  const recent = Date.now() - (agentActivity.get(tabId) || 0) < 15000;
   try {
-    await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['content/page-hooks.js'], world: 'MAIN', injectImmediately: true });
+    // Start both injections at once: every round trip here lets more of the page's own
+    // scripts run before console capture starts.
+    await Promise.all([
+      browser.scripting.executeScript({ target, files: ['content/hooks.js'], injectImmediately: true }),
+      browser.scripting.executeScript({ target, files: ['content/page-hooks.js'], world: 'MAIN', injectImmediately: true }),
+    ]);
+    if (recent) {
+      await browser.scripting.executeScript({
+        target,
+        func: (ms) => {
+          const h = globalThis.__kitsuneHooks;
+          if (h)
+            h.agentUntil = Math.max(h.agentUntil, Date.now() + ms);
+        },
+        args: [8000],
+        injectImmediately: true,
+      });
+    }
     return true;
   } catch {
     return false;

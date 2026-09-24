@@ -89,6 +89,7 @@ Kitsune picks it up automatically. `tabs_context_mcp` reports `Input mode: trust
 **Before turning this on, know that:**
 
 - Any program on your computer can then control Firefox through that port, with no password. Only use it on a machine you trust, and don't leave it on all the time.
+- Kitsune sends keystrokes (which can include text you gave the agent for a form) to whatever answers on that port. It checks that the answer comes from Firefox, but another local program could still take the port first if Firefox isn't using it. To use a different port, start Firefox with `--remote-debugging-port=N` and set `KITSUNE_BIDI_PORT=N` for the MCP server.
 - Firefox shows a striped address bar and a robot icon while it's on.
 - Pages can tell the browser is being automated: Firefox sets `navigator.webdriver` to `true` whenever remote debugging is on. On your Mac, Google showed its "unusual traffic" check in this mode but not in the default mode. Kitsune deliberately doesn't hide this.
 - At startup, Firefox applies a few "automation" preferences, such as turning off update checks. Set `remote.prefs.recommended` to `false` in `about:config` to stop that.
@@ -102,11 +103,15 @@ Without it, Kitsune works on most sites. The things that need real input are lis
   - This covers embedded frames from other sites too: they stay hidden from the agent until you approve that site.
   - You can review and revoke sites in the toolbar popup, or switch to "Allow all sites" if you prefer.
 - **Commands stay on the approved site.** Every command is tied to the site you approved. If the page has since navigated to another site, the content script refuses it.
-- **File uploads need your OK each time.** Kitsune shows you the file names and sizes and waits for your confirmation. Key and credential files (`~/.ssh`, `.env`, `*.pem`, cloud CLI credentials…) are always refused.
+- **File uploads need your OK each time.** Kitsune shows you the file names and sizes and waits for your confirmation. Key and credential files are always refused: `~/.ssh`, `.env`, `*.pem`, cloud CLI credentials, browser profiles (saved passwords and cookies), shell history, and Claude's own settings.
+- **Passwords stay hidden.** Password fields appear to the agent as `(password, N characters)`, never their contents, even when Firefox has filled in a saved login.
+- **The permission window can't be clicked by accident.** Its buttons only work after it has been on screen for a moment, so a window that pops up under your cursor mid-click can't catch that click. The default button is *Allow this session*, not *Always allow*. The page's title is shown, labelled as coming from the website.
 - **Stopping the agent.** Any of these pauses it:
   - the toolbar popup
   - **Alt+Shift+K**
   - the in-page *Stop* pill
+
+  Stopping interrupts work already in progress: open permission windows are denied, typing and drags stop at the next keystroke or step, and the agent is told you stopped it.
 
   While the agent is working, the tab group title changes to **Kitsune ● working** and the page gets an orange glow. The in-page pill and glow are only a convenience, because a hostile page could hide or imitate them. The toolbar and the keyboard shortcut are the controls the page can't touch.
 - **No open ports.** The helper talks to AI clients through a Unix socket in `~/.kitsune` that only your user can open (directory mode 0700, socket 0600). On Windows it uses a named pipe with an unguessable name. Nothing listens on TCP unless you turn on real input yourself.
@@ -129,7 +134,7 @@ The names and arguments match Claude in Chrome.
 | `gif_creator` | Record the session as an animated GIF with clicks marked (`start_recording` → act → `stop_recording` → `export`, which saves to Downloads). |
 | `browser_batch` | Several of the above in one call, e.g. fill three fields and click Submit. Stops at the first error. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
-| `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. Dialogs never block the page: by default alerts are dismissed and confirms/prompts are cancelled, and the tool result reports what the page asked. |
+| `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. While the agent is working in a tab (and for a few seconds after), dialogs don't block the page: alerts are dismissed, confirms/prompts are cancelled, and the tool result reports what the page asked. When you use the tab yourself, the page's dialogs appear normally. |
 | `read_console_messages` / `read_network_requests` | Console output and HTTP requests of an agent tab. |
 | `resize_window` | Resize the browser window. |
 | `javascript_tool` | Run JS in the page. **Full build only** (see below). |
