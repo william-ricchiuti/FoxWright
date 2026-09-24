@@ -86,3 +86,11 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 - 24, 29 (most), 31, 32, 35 done; 34 partly. Found and fixed while testing: permission-window buttons were clickable before its script ran (now disabled in the HTML); typing in a background tab ran at one character per second (timer throttling), now unthrottled. e2e 57/57, safety 7/7, resilience 5/5, idle ok.
 - 30 done: agent-eval verifiers tightened, --ask/--repeat, signup-wizard task; test/bidi-driver.mjs shared by e2e-safety and agent-eval.
 - 33, 34, 36–40 done (docs, listing, screenshots, project files, release workflow).
+- Final check of this round: e2e 57/57 both modes, safety 7/7, permissions 5/5, store 2/2, resilience 5/5, real sites 49/51 synthetic (the same two sandbox-network failures as before: DuckDuckGo, react.dev search), lint 0 errors. Also: links that open a new tab get the same URL and permission checks as navigate; doctor says when the debugging port is busy with another Kitsune session.
+
+## Next steps (need you or a normal network)
+
+1. Push to GitHub and check that both CI workflows pass (the ESR 140 job and the Windows/macOS package jobs have never run).
+2. Run the full agent evaluation on the Mac: `bash scripts/mac-test.sh agent` (and `agent trusted`), about $1.50–2 each.
+3. Publish to npm, then submit to AMO: docs/RELEASE.md.
+4. The manual checks in docs/MANUAL-CHECKS.md, especially Windows.

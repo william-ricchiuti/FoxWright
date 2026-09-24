@@ -28,6 +28,8 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - A command that times out says the action may still have happened.
 - `npx kitsune-firefox` warns once if the MCP server, helper and extension versions don't match.
 - Windows: the helper and MCP server can no longer pick different pipe names on first run.
+- Links that open in a new tab get the same checks as `navigate` (http(s) only, approved sites).
+- `doctor` says when the debugging port is already in use by a running Kitsune MCP server, instead of reporting real input as off.
 
 **Packaging**
 - `kitsune-firefox uninstall` also removes the Claude Code and Claude Desktop entries and `~/.kitsune`. `setup` also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when they're installed. New `kitsune-firefox --version`.

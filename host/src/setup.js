@@ -208,8 +208,12 @@ function probeSocket() {
 async function probeBidi() {
   const { Bidi } = await import('./bidi.js');
   const b = new Bidi();
-  if (!(await b.available()))
+  if (!(await b.available())) {
+    // Firefox allows one WebDriver session: a running Kitsune MCP server may already hold it.
+    if (/session not created|maximum|already/i.test(b.lastError || ''))
+      return `WebDriver BiDi at ${b.url} (in use, probably by a running Kitsune MCP server)`;
     return null;
+  }
   try {
     await b.cmd('session.end', {});
   } catch { /* ignore */ }

@@ -197,8 +197,15 @@ async function afterAction(tab, before, r) {
   const budget = r?.mayNavigate === 'likely' ? 400 : r?.mayNavigate === false ? 0 : 100;
   await waitNav(tab.id, started, budget);
   if (r?.openUrl) {
-    const nt = await createAgentTab(r.openUrl, false);
-    extra.push(`The link opens in a new tab: created tab ${nt.id} (${r.openUrl}) in the Kitsune group.`);
+    // The URL comes from the page's link: same checks as navigate (http(s) only, approved site).
+    try {
+      const url = normalizeUrl(r.openUrl);
+      await ensureOriginPermission(url);
+      const nt = await createAgentTab(url, false);
+      extra.push(`The link opens in a new tab: created tab ${nt.id} (${url}) in the Kitsune group.`);
+    } catch (e) {
+      extra.push(`The link wanted to open ${String(r.openUrl).slice(0, 200)} in a new tab, but Kitsune didn't: ${e.message}`);
+    }
   }
   const navigated = started(navState.get(tab.id) || {});
   const now = await browser.tabs.get(tab.id);

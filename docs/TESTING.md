@@ -17,7 +17,7 @@ Every test drives Kitsune the way an AI client does: an MCP client calls the too
 | `e2e-resilience.mjs`: concurrency, latency, crash/restart recovery | 5/5 | n/a |
 | `e2e-store.mjs`: the addons.mozilla.org build | 2/2 | n/a |
 | `e2e-idle.mjs`: works after the event page's idle timeout | pass | n/a |
-| `realsites.mjs`: 51 tasks on 25 real websites (0.2.0) | **49/51** | **49/51** |
+| `realsites.mjs`: 51 tasks on 25 real websites | **49/51** | 49/51 (0.2.0; not re-run) |
 | `web-ext lint` (store and full builds) | 0 errors | n/a |
 
 ### Speed (`test/bench-actions.mjs`, local fixture, median of 15)

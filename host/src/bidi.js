@@ -62,8 +62,9 @@ export class Bidi {
       await this.open();
       this.onChange(true);
       return true;
-    } catch {
+    } catch (e) {
       this.lastFail = Date.now();
+      this.lastError = String(e?.message || e);
       this.onChange(false);
       return false;
     }
