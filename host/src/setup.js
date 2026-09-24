@@ -26,6 +26,27 @@ function appScript() {
 function wrapperPath() {
   return path.join(kitsuneDir(), isWin ? 'kitsune-host.bat' : 'kitsune-host');
 }
+/**
+ * Native-messaging manifest folders of Firefox-based browsers that are installed besides Firefox
+ * itself (they accept the same extension IDs). Only folders whose browser appears to be present.
+ */
+function extraManifestDirs() {
+  if (process.env.KITSUNE_NATIVE_MANIFEST_DIR || isWin)
+    return [];
+  const home = os.homedir();
+  const mac = process.platform === 'darwin';
+  const candidates = mac
+    ? [['LibreWolf', path.join(home, 'Library', 'Application Support', 'LibreWolf')], ['Waterfox', path.join(home, 'Library', 'Application Support', 'Waterfox')]]
+    : [
+      ['Flatpak Firefox', path.join(home, '.var', 'app', 'org.mozilla.firefox', '.mozilla')],
+      ['LibreWolf', path.join(home, '.librewolf')],
+      ['Waterfox', path.join(home, '.waterfox')],
+      ['Floorp', path.join(home, '.floorp')],
+    ];
+  return candidates.filter(([, base]) => fs.existsSync(base))
+    .map(([name, base]) => [name, path.join(base, mac ? 'NativeMessagingHosts' : 'native-messaging-hosts')]);
+}
+
 function manifestFile() {
   return path.join(nativeManifestDir(), `${HOST_NAME}.json`);
 }
@@ -96,10 +117,19 @@ export async function setup(flags) {
   if (isWin)
     execFileSync('reg', ['add', REG_KEY, '/ve', '/t', 'REG_SZ', '/d', manifestFile(), '/f'], { stdio: 'ignore' });
   console.log(c.ok(`Registered with Firefox: ${manifestFile()}${isWin ? ` (+ registry ${REG_KEY})` : ''}`));
+  for (const [name, dir] of extraManifestDirs()) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, `${HOST_NAME}.json`), JSON.stringify(manifest, null, 2) + '\n');
+      console.log(c.ok(`Also registered with ${name}: ${dir}`));
+    } catch (e) {
+      console.log(c.warn(`Couldn't register with ${name} (${e.message}).`));
+    }
+  }
 
   if (process.platform === 'linux') {
     if (fs.existsSync('/snap/bin/firefox') || which('flatpak') && fs.existsSync(path.join(os.homedir(), '.var/app/org.mozilla.firefox')))
-      console.log(c.warn('Snap/Flatpak Firefox is sandboxed and may not be able to start the helper. The Mozilla .deb or tarball Firefox works best.'));
+      console.log(c.warn('Snap/Flatpak Firefox is sandboxed and may not be able to start the helper (Ubuntu ships the Snap by default). If the toolbar fox keeps its "!" badge, install Firefox from Mozilla\'s .deb repository or tarball: https://support.mozilla.org/kb/install-firefox-linux'));
   }
 
   // 4. Hook up AI clients.
@@ -234,7 +264,10 @@ export async function doctor() {
 }
 
 export async function uninstall() {
-  for (const p of [manifestFile(), wrapperPath(), appScript()]) {
+  const files = [manifestFile(), ...extraManifestDirs().map(([, d]) => path.join(d, `${HOST_NAME}.json`)), wrapperPath(), appScript()];
+  for (const p of files) {
+    if (!fs.existsSync(p))
+      continue;
     try {
       fs.rmSync(p, { force: true });
       console.log(c.ok(`Removed ${p}`));
@@ -245,5 +278,30 @@ export async function uninstall() {
       execFileSync('reg', ['delete', REG_KEY, '/f'], { stdio: 'ignore' });
     } catch { /* ignore */ }
   }
-  console.log('Kitsune helper removed. Also remove the extension from Firefox and the "kitsune" MCP server from your AI client.');
+  // AI client registrations made by `setup --claude-code / --claude-desktop`.
+  const claude = which('claude');
+  if (claude) {
+    try {
+      execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'kitsune'], { stdio: 'ignore' });
+      console.log(c.ok('Removed Kitsune from Claude Code.'));
+    } catch { /* wasn't registered */ }
+  }
+  const cfgPath = claudeDesktopConfigPath();
+  try {
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    if (cfg.mcpServers?.kitsune) {
+      delete cfg.mcpServers.kitsune;
+      fs.copyFileSync(cfgPath, cfgPath + '.bak');
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+      console.log(c.ok(`Removed Kitsune from Claude Desktop (${cfgPath}).`));
+    }
+  } catch { /* no config */ }
+  // The rest of ~/.kitsune: socket, pipe id, logs.
+  // Only a folder that is clearly Kitsune's own: KITSUNE_HOME could point anywhere.
+  const dir = kitsuneDir();
+  if (path.isAbsolute(dir) && path.basename(dir) === '.kitsune' && fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    console.log(c.ok(`Removed ${dir}`));
+  }
+  console.log('Kitsune helper removed. Also remove the Kitsune extension from Firefox (about:addons) and from any other AI client you added it to.');
 }

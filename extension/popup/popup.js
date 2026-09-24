@@ -46,6 +46,7 @@ function render(s) {
       x.className = 'x';
       x.textContent = '✕';
       x.title = `Revoke ${origin}`;
+      x.setAttribute('aria-label', `Revoke access to ${origin}`);
       x.addEventListener('click', () => act({ kind: 'removeSite', origin }));
       li.append(x);
     }
@@ -63,5 +64,5 @@ $('retry').addEventListener('click', () => act({ kind: 'reconnect' }));
 for (const r of document.querySelectorAll('input[name=mode]'))
   r.addEventListener('change', () => act({ kind: 'setMode', mode: r.value }));
 
-act({ kind: 'status' });
+act({ kind: 'status', initial: true });
 setInterval(() => act({ kind: 'status' }), 1500);

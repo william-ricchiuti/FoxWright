@@ -24,7 +24,11 @@ onRequest(async (tool, args) => {
     noteAgentActivity(args?.tabId);
   let result;
   try {
-    result = await fn(args);
+    // One command at a time per tab: two agents (or parallel tool calls) acting on the same tab
+    // would otherwise interleave focus, typing and refs.
+    result = await inTabQueue(tool, args?.tabId, () => fn(args));
+  } catch (e) {
+    throw friendlyTabError(e, args?.tabId);
   } finally {
     if (!tool.startsWith('_'))
       noteAgentActivity(args?.tabId);
@@ -35,9 +39,38 @@ onRequest(async (tool, args) => {
   return result;
 });
 
+const tabQueues = new Map(); // tabId -> promise of the last queued command
+// Read-only status probes don't need to wait behind a long action.
+const UNQUEUED = new Set(['_status', 'tabs_context_mcp', 'tabs_create_mcp', 'read_console_messages', 'read_network_requests']);
+
+function inTabQueue(tool, tabId, run) {
+  if (typeof tabId !== 'number' || UNQUEUED.has(tool))
+    return run();
+  const prev = tabQueues.get(tabId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(run);
+  const tail = next.catch(() => {});
+  tabQueues.set(tabId, tail);
+  tail.then(() => {
+    if (tabQueues.get(tabId) === tail)
+      tabQueues.delete(tabId);
+  });
+  return next;
+}
+
+function friendlyTabError(e, tabId) {
+  const m = String(e?.message || e);
+  if (/Invalid tab ID|No tab with id|tab.*(closed|removed)/i.test(m) && !/^Tab \d+ /.test(m))
+    return new Error(`Tab ${tabId ?? ''} was closed (by the user or the page) while Kitsune was using it. Call tabs_context_mcp to see the open tabs.`.replace('Tab  ', 'The tab '));
+  return e;
+}
+
 const PAUSED_MSG = 'Kitsune is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Kitsune toolbar popup if they want you to carry on.';
 
 // ---------- messages from the popup and in-page UI ----------
+function isOwnPage(sender) {
+  return sender?.id === browser.runtime.id && typeof sender.url === 'string' && sender.url.startsWith(browser.runtime.getURL('popup/'));
+}
+
 async function pauseAgent() {
   state.paused = true;
   // Stop work already in progress, not just new commands: open permission windows are denied
@@ -61,13 +94,14 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
     await pauseAgent();
     return true;
   }
-  // Everything else must come from our own popup page, not from content scripts.
-  if (sender.tab)
+  // Everything else must come from one of our own pages (the toolbar popup, also when opened in
+  // a tab), never from a content script: those report the web page's URL as sender.url.
+  if (!isOwnPage(sender))
     return undefined;
   switch (msg.kind) {
     case 'status':
-      if (!state.connected)
-        reconnectNow();
+      if (!state.connected && msg.initial)
+        reconnectNow(); // only when the popup opens: its 1.5 s refresh must not reset the reconnect backoff
       await groupTabs();
       return publicStatus();
     case 'pause':

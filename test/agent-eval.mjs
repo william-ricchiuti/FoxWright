@@ -42,7 +42,11 @@ try {
 const STRICT = help.includes('--strict-mcp-config');
 
 const mcpConfig = path.join(os.tmpdir(), `kitsune-agent-eval-${process.pid}.json`);
-fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { kitsune: { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'] } } }));
+// Written after the harness starts (below), so the MCP server can point at the harness's Kitsune folder.
+function writeMcpConfig(h) {
+  const env = { KITSUNE_HOME: path.join(h.home, '.kitsune'), ...(h.bidiUrl ? { KITSUNE_BIDI_URL: h.bidiUrl } : {}) };
+  fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { kitsune: { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], env } } }));
+}
 const uploadFile = path.join(os.tmpdir(), 'kitsune-agent-upload.txt');
 fs.writeFileSync(uploadFile, 'Uploaded by an AI agent through Kitsune.\n');
 
@@ -130,7 +134,10 @@ function runClaude(prompt, transcriptPath) {
 
 async function main() {
   console.log(`Kitsune agent evaluation: Claude Code + Kitsune (${MODE} input)${MODEL ? `, model ${MODEL}` : ''}${STRICT ? '' : ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]'}`);
-  const h = await start({ trusted: TRUSTED });
+  // In trusted mode Firefox gets a debugging port for Claude's Kitsune MCP server; the harness's
+  // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
+  const h = await start({ testDriver: TRUSTED });
+  writeMcpConfig(h);
   const v = async (name, args = {}) => h.call(name, args);
   const groupTabs = async () => {
     const r = await v('tabs_context_mcp', {});

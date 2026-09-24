@@ -29,7 +29,7 @@ const expect = (c, m) => { if (!c) throw new Error(m); };
 const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.min(arr.length - 1, Math.floor(arr.length * p))];
 
 async function newClient() {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'ignore' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'ignore', env: { ...process.env, KITSUNE_HOME: path.join(h.home, '.kitsune') } });
   const client = new Client({ name: 'kitsune-resilience', version: '0' });
   await client.connect(transport);
   const call = async (name, args = {}) => {
@@ -95,7 +95,7 @@ await test('latency under repetition (60 mixed calls)', async () => {
 });
 
 await test('helper crash: extension restarts it and calls work again', async () => {
-  const sock = path.join(os.homedir(), '.kitsune', 'kitsune.sock');
+  const sock = h.sock;
   const status = await new Promise((resolve) => {
     const s = net.connect(sock);
     s.on('connect', () => s.write(JSON.stringify({ type: 'status', id: 1 }) + '\n'));

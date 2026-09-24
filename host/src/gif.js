@@ -112,8 +112,14 @@ export function exportGif(tabId, { filename, width = 800 } = {}) {
   // Only a file name is honoured (no directories), so an agent can't write GIFs over arbitrary files.
   const name = path.basename(filename || `kitsune-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.gif`).replace(/[^\w.-]/g, '_');
   let file = path.join(defaultDir(), name.endsWith('.gif') ? name : name + '.gif');
-  if (fs.existsSync(file))
+  // 'wx' never follows an existing file or symlink: pick a new name instead of overwriting.
+  try {
+    fs.writeFileSync(file, bytes, { flag: 'wx' });
+  } catch (e) {
+    if (e.code !== 'EEXIST')
+      throw e;
     file = file.replace(/\.gif$/, `-${Date.now()}.gif`);
-  fs.writeFileSync(file, bytes);
+    fs.writeFileSync(file, bytes, { flag: 'wx' });
+  }
   return { file, frames: r.frames.length, bytes: bytes.length };
 }

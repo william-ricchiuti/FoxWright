@@ -4,11 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 6 * * 1' # weekly, to catch breakage from new Firefox releases
 
 jobs:
   test:
+    name: Linux · Firefox ${{ matrix.firefox }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # latest, and the oldest version the manifest allows (strict_min_version 140)
+        firefox: [latest, 140.0esr]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,32 +26,69 @@ jobs:
       - name: Install Firefox
         uses: browser-actions/setup-firefox@v1
         with:
-          firefox-version: latest
+          firefox-version: ${{ matrix.firefox }}
       - name: Install dependencies
         run: |
           npm ci
           npm ci --prefix host
-      - name: Build extension and helper
+      - name: Versions agree
+        run: node scripts/version.mjs check
+      - name: Build extension, helper and fixtures
         run: |
           npm run build
           node test/build-fixtures.mjs
-          node host/dist/kitsune.mjs setup
       - name: Lint extension builds
         run: |
           npx web-ext lint --source-dir dist/store
           npx web-ext lint --source-dir dist/full
+      # The tests set up their own copy of the helper in a temporary HOME (see test/harness.mjs).
       - name: End-to-end tests (synthetic input)
         run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e.mjs
       - name: End-to-end tests (trusted input via WebDriver BiDi)
         run: FIREFOX="$(readlink -f "$(command -v firefox)")" KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
-      - name: Permission, store-build and resilience tests
+      - name: Safety, permission, store-build and resilience tests
         run: |
           export FIREFOX="$(readlink -f "$(command -v firefox)")"
+          node test/e2e-safety.mjs
           node test/e2e-permissions.mjs
           node test/e2e-store.mjs
           node test/e2e-resilience.mjs
+      - name: Event page idle timeout
+        if: matrix.firefox == 'latest'
+        run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e-idle.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.firefox }}
           path: test/results/
+
+  package:
+    name: npm package installs and runs (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build and pack the helper
+        shell: bash
+        run: |
+          npm ci --prefix host
+          npm run build --prefix host
+          cd host && npm pack
+      - name: Install the packed tarball and run setup + doctor
+        shell: bash
+        run: |
+          npm install -g ./host/kitsune-firefox-*.tgz
+          kitsune-firefox --version
+          kitsune-firefox setup
+          # doctor exits non-zero because no Firefox is running with the extension here;
+          # it must still run and report the installed pieces.
+          kitsune-firefox doctor | tee doctor.txt || true
+          grep -qi "native" doctor.txt
+          kitsune-firefox uninstall

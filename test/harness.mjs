@@ -92,9 +92,37 @@ export function writePolicies(firefoxBin, policy) {
   fs.writeFileSync(file, JSON.stringify({ policies: { '3rdparty': { Extensions: ext } } }, null, 2));
 }
 
-export async function start({ build = 'full', trusted = false, policy = { mode: 'all', confirmUploads: false } } = {}) {
-  const firefox = process.env.FIREFOX || '/home/claude/ff/firefox/firefox';
+/**
+ * Start fixture servers, Firefox with the Kitsune build, and an MCP client.
+ *   trusted:     Firefox gets a remote-debugging port and the MCP server uses it (trusted input).
+ *   testDriver:  Firefox gets a remote-debugging port, but the MCP server is told not to use it,
+ *                so the test itself can open a WebDriver BiDi session (e.g. to press buttons in
+ *                Kitsune's permission window like a person would). Returned as `bidiUrl`.
+ *
+ * On Linux the run is isolated from your own Kitsune install: HOME points at a temporary folder,
+ * where the dev build is set up (native-messaging manifest, ~/.kitsune), and GIFs go to a temp
+ * folder. Set KITSUNE_E2E_ISOLATE=0 to use your real install instead (macOS always does).
+ */
+export async function start({ build = 'full', trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false } } = {}) {
+  const firefox = process.env.FIREFOX;
+  if (!firefox || !fs.existsSync(firefox))
+    throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
   writePolicies(firefox, policy);
+
+  const isolate = process.platform === 'linux' && process.env.KITSUNE_E2E_ISOLATE !== '0';
+  let home = os.homedir();
+  const env = { ...process.env };
+  if (isolate) {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-home-'));
+    env.HOME = home;
+    execFileSync(process.execPath, [path.join(root, 'host/dist/kitsune.mjs'), 'setup'], { env, stdio: 'ignore' });
+  }
+  env.KITSUNE_GIF_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-gifs-'));
+  const bidiPort = trusted || testDriver ? await freePort(0) : null;
+  if (bidiPort)
+    env.KITSUNE_BIDI_PORT = String(bidiPort);
+  if (testDriver)
+    env.KITSUNE_TRUSTED = '0';
   // Optional: reach real websites through an HTTP(S) proxy that re-signs TLS with its own CA
   // (e.g. a CI sandbox). Builds a throwaway profile whose NSS DB trusts that CA.
   let profile;
@@ -113,14 +141,16 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
   }
   const s1 = await serve(P1);
   const s2 = await serve(P2);
-  const sock = path.join(os.homedir(), '.kitsune', 'kitsune.sock');
+  const sock = path.join(home, '.kitsune', 'kitsune.sock');
   fs.rmSync(sock, { force: true });
 
   const args = [];
   if (!process.env.KITSUNE_E2E_HEADFUL)
     args.push('--headless');
-  if (trusted)
-    args.push('--remote-debugging-port=9222');
+  if (bidiPort)
+    args.push(`--remote-debugging-port=${bidiPort}`);
+  if (testDriver)
+    args.push('-remote-allow-system-access'); // lets the test script read and press buttons in extension pages
   const runOpts = {
     sourceDir: path.join(root, 'dist', build),
     firefox,
@@ -135,10 +165,26 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
       ...proxyPrefs,
     },
   };
-  let runner = await webExt.cmd.run(runOpts, { shouldExitProgram: false });
+  // Firefox (and the helper it starts) inherit the environment at launch: point HOME at the
+  // isolated folder just for that.
+  const runFirefox = async () => {
+    const saved = { HOME: process.env.HOME, KITSUNE_GIF_DIR: process.env.KITSUNE_GIF_DIR };
+    Object.assign(process.env, { HOME: env.HOME, KITSUNE_GIF_DIR: env.KITSUNE_GIF_DIR });
+    try {
+      return await webExt.cmd.run(runOpts, { shouldExitProgram: false });
+    } finally {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined)
+          delete process.env[k];
+        else
+          process.env[k] = v;
+      }
+    }
+  };
+  let runner = await runFirefox();
   await waitForSocket(sock);
 
-  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'inherit' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'inherit', env });
   const client = new Client({ name: 'kitsune-e2e', version: '0' });
   await client.connect(transport);
 
@@ -164,8 +210,8 @@ export async function start({ build = 'full', trusted = false, policy = { mode: 
     await new Promise(r => setTimeout(r, 1500));
   }
   async function restartFirefox() {
-    runner = await webExt.cmd.run(runOpts, { shouldExitProgram: false });
+    runner = await runFirefox();
     await waitForSocket(sock);
   }
-  return { call, stop, client, stopFirefoxOnly, restartFirefox };
+  return { call, stop, client, stopFirefoxOnly, restartFirefox, home, sock, gifDir: env.KITSUNE_GIF_DIR, bidiUrl: bidiPort ? `ws://127.0.0.1:${bidiPort}/session` : null };
 }

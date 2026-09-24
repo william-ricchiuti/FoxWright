@@ -40,7 +40,7 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## 4. Reliability
 
-- [ ] 24. Two agents collide on the same tab; no per-tab queue; raw "Invalid tab ID" errors
+- [x] 24. Two agents collide on the same tab; no per-tab queue; raw "Invalid tab ID" errors — per-tab command queue in the extension and in the MCP server (trusted input bypasses the extension); "tab was closed" errors; a second connected client gets its own tab; e2e test
 - [x] 25. Trusted-mode state lost after helper reconnect — client re-sends its state on reconnect; helper tracks it per client (also fixes #24-style multi-client flag)
 - [x] 26. No version check between MCP server, helper and extension — helper reports its version; MCP warns once in tabs_context_mcp on minor mismatch
 - [x] 27. Closed shadow roots invisible (`openOrClosedShadowRoot`) — build patch + input.ts; e2e test
@@ -48,16 +48,16 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## 5. Tests
 
-- [ ] 29. Safety features untested (pause/stop, allow/deny buttons, upload approve, origin binding, GIF filename)
+- [~] 29. Safety features untested (pause/stop, allow/deny buttons, upload approve, origin binding, GIF filename) — new test/e2e-safety.mjs drives the permission window and popup through the test's own WebDriver BiDi session: Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause during typing, Pause during a prompt, upload approval; GIF file-name test in e2e.mjs. Not covered: Alt+Shift+K and the in-page Stop pill (browser-chrome input), cross-site origin binding race
 - [ ] 30. Agent eval easier than real use (auto-allow, full build, single run, loose verifiers)
-- [ ] 31. Tests touch the real install (`~/.kitsune`, `~/Downloads`, port 9222)
-- [ ] 32. CI: Firefox 140/ESR, idle suite, Windows setup job, pack→install smoke, version check
+- [x] 31. Tests touch the real install (`~/.kitsune`, `~/Downloads`, port 9222) — on Linux the harness sets up the dev build in a temporary HOME, picks a free debugging port and a temp GIF folder; `FIREFOX` must be set explicitly
+- [~] 32. CI: Firefox 140/ESR, idle suite, Windows setup job, pack→install smoke, version check — Firefox matrix (latest + 140.0esr), safety + idle suites, `scripts/version.mjs check`, npm pack → install → setup/doctor/uninstall on Linux, Windows and macOS; weekly scheduled run. Not verified yet: the workflow has only run locally in parts
 
 ## 6. Install and cross-platform
 
 - [ ] 33. Install-from-source path in README until npm/AMO are live
-- [ ] 34. Windows/Ubuntu instructions; Flatpak manifest location
-- [ ] 35. `uninstall` leaves Claude entries and `~/.kitsune`
+- [~] 34. Windows/Ubuntu instructions; Flatpak manifest location — setup also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when present, and the Snap warning links Mozilla's install guide; README per-OS instructions still to do
+- [x] 35. `uninstall` leaves Claude entries and `~/.kitsune` — also removes Claude Code / Desktop entries, extra browser manifests and ~/.kitsune
 
 ## 7. Docs, listing, project files
 
@@ -83,3 +83,4 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 - 1–8 fixed, plus 21, 25, 26, 27, 28, part of 14; also: BiDi timers cleared, Windows pipe-id race (`wx`), `KITSUNE_SOCKET` chmod limited to ~/.kitsune, `<kitsune-ui>` decoy check (identity only), input-mode line only when it changes. e2e 53/53 both modes; permissions 5/5, store 2/2, resilience 5/5.
 - 9–17 done (safety hardening). e2e 55/55 both modes; permissions 5/5; store 2/2.
 - 18, 19, 22, 23 done; 20 partly. New `test/bench-actions.mjs`. e2e 55/55 both modes (synthetic 3 runs in a row); permissions 5/5, resilience 5/5, store 2/2. BiDi retry backoff 15 s → 5 s (Firefox may still be starting).
+- 24, 29 (most), 31, 32, 35 done; 34 partly. Found and fixed while testing: permission-window buttons were clickable before its script ran (now disabled in the HTML); typing in a background tab ran at one character per second (timer throttling), now unthrottled. e2e 57/57, safety 7/7, resilience 5/5, idle ok.

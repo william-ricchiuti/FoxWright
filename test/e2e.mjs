@@ -453,6 +453,16 @@ async function main() {
     fs.rmSync(file, { force: true });
   });
 
+  await test('gif_creator export ignores directories in the file name', async () => {
+    await call('gif_creator', { action: 'start_recording' });
+    await call('computer', { action: 'left_click', coordinate: [100, 100] });
+    await call('gif_creator', { action: 'stop_recording' });
+    const r = await call('gif_creator', { action: 'export', filename: '../../kitsune-escape.gif' });
+    const file = /to (\S+\.gif)/.exec(r.text)?.[1];
+    expect(file && path.dirname(file) === h.gifDir && path.basename(file).includes('kitsune-escape'), `GIF written outside the GIF folder: ${r.text}`);
+    fs.rmSync(file, { force: true });
+  });
+
   await test('password values never reach the agent', async () => {
     await nav('/frames2.html');
     const outline = (await call('read_page', { max_chars: 200000 })).text;
@@ -517,6 +527,19 @@ async function main() {
     await call('computer', { action: 'left_click', ref });
     const r = await call('read_console_messages', { pattern: 'hostile page' });
     expect(r.text.includes('frames2 hostile page logged'), r.text);
+  });
+
+  await test('parallel commands on one tab run one at a time (no interleaved typing)', async () => {
+    await nav('/basic.html');
+    const { ref } = await refFor('Full name', 'textbox');
+    await call('form_input', { ref, value: '' });
+    await call('computer', { action: 'left_click', ref });
+    await Promise.all([
+      call('computer', { action: 'type', text: 'aaaaaaaaaa' }),
+      call('computer', { action: 'type', text: 'bbbbbbbbbb' }),
+    ]);
+    const v = await js(`document.querySelector('#name, input[placeholder="Jane Doe"]').value`);
+    expect(/"(a{10}b{10}|b{10}a{10})"/.test(v), `typing interleaved: ${v}`);
   });
 
   await test('tab outside the Kitsune group is refused', async () => {

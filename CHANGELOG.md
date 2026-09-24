@@ -10,7 +10,7 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - Stop/Pause now interrupts work in progress: open permission windows are denied, typing and drags stop at the next step, and the running command reports that the user stopped it. The popup's Pause does the same as the shortcut and the in-page Stop.
 - Trusted mode only sends input to a WebDriver BiDi endpoint that identifies as Firefox.
 - A page can no longer make its own elements look like Kitsune's UI to be skipped.
-- The permission window's buttons only work after it has been on screen for a moment (clickjacking guard). *Allow this session* is now the default button, and the page title is labelled as coming from the website.
+- The permission window's buttons only work after it has been on screen for a moment, and are disabled in its HTML until then (clickjacking guard). *Allow this session* is now the default button, and the page title is labelled as coming from the website.
 - Console capture and dialog handling moved out of the page's reach (Firefox's isolated content-script world): pages can no longer switch them off or forge the dialog reports Kitsune gives the agent.
 - Dialogs are only auto-answered while the agent is working in the tab. When you use the tab yourself, the page's dialogs appear normally.
 - `javascript_tool` (full build) refuses to run if the tab navigated to another site since it was approved.
@@ -18,6 +18,9 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - A tab group is only re-adopted after a restart if it has Kitsune's title and orange color.
 
 **Fixes**
+- Typing in a tab that isn't in front ran at about one character per second (Firefox throttles timers in background tabs). It now runs at full speed.
+- Commands for the same tab run one at a time, so parallel tool calls or two agents can't interleave their typing. A second AI client gets its own tab instead of sharing the first one's, and a tab closed mid-command gives a clear message.
+- The toolbar popup also works when opened in a tab.
 - Editors inside `about:blank` and `srcdoc` iframes (TinyMCE, CKEditor 4, many webmail composers) can be read, clicked and typed into.
 - Web components with closed shadow roots appear in the outline and can be clicked.
 - The MCP server exits when the AI client closes it, releasing Firefox's single WebDriver BiDi session.
@@ -27,6 +30,13 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - Windows: the helper and MCP server can no longer pick different pipe names on first run.
 
 **Packaging**
+- `kitsune-firefox uninstall` also removes the Claude Code and Claude Desktop entries and `~/.kitsune`. `setup` also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when they're installed. New `kitsune-firefox --version`.
+- `scripts/version.mjs` checks and bumps the version in all three places.
+
+**Tests**
+- New `test/e2e-safety.mjs` presses the real buttons in the permission window and the toolbar popup (Deny, Allow this session, Always allow and revoke, Pause and Resume, including Pause while typing and while a permission window is open, and upload approval).
+- On Linux, tests no longer touch your own Kitsune install: they set up the helper in a temporary home folder and use a free debugging port and a temporary GIF folder.
+- CI tests the oldest supported Firefox (140 ESR) as well as the latest, runs the safety and idle suites, and installs the packed npm package on Linux, Windows and macOS.
 - The npm package has no runtime dependencies (everything is bundled), so `npx` downloads one package instead of ~96.
 - Built add-ons and the npm bundle include LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt (Playwright's Apache-2.0 notice and the MIT/ISC notices of bundled packages).
 - The AMO source zip now includes `host/` and a BUILDING.txt; rebuilding from it gives a byte-identical add-on.

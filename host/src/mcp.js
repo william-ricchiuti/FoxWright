@@ -39,16 +39,21 @@ const NO_TAB_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp']);
 let lastTab = null;
 
 async function defaultTab() {
-  let ids = [];
+  let st = {};
   try {
-    ids = (await helper.call('_status', {}, 10000))?.data?.groupTabIds || [];
+    st = (await helper.call('_status', {}, 10000))?.data || {};
   } catch { /* fall through */ }
+  const ids = st.groupTabIds || [];
   if (lastTab != null && ids.includes(lastTab))
     return lastTab;
-  if (ids.length)
+  // With another AI client connected, taking "the first tab" would put two agents in one tab:
+  // open a fresh tab for this session instead.
+  if (ids.length && !(st.clients > 1))
     return ids[0];
-  const r = await helper.call('tabs_context_mcp', { createIfEmpty: true });
-  const m = /tabId (\d+)/.exec(r?.content?.[0]?.text || '');
+  const r = await helper.call(ids.length ? 'tabs_create_mcp' : 'tabs_context_mcp', ids.length ? {} : { createIfEmpty: true });
+  const m = /(?:tabId|Created tab) (\d+)/.exec(r?.content?.[0]?.text || '');
+  if (m)
+    lastTab = Number(m[1]);
   return m ? Number(m[1]) : undefined;
 }
 
@@ -244,6 +249,23 @@ async function trustedComputerInner(a, st) {
   return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }] };
 }
 
+// ---------- one action at a time per tab ----------
+// Clients may send tool calls in parallel. Trusted input goes straight to Firefox over WebDriver
+// BiDi, so the extension's own per-tab queue can't order it: queue here too.
+const UNSERIALIZED = new Set(['browser_batch', 'tabs_context_mcp', 'tabs_create_mcp', 'read_console_messages', 'read_network_requests', 'gif_creator']);
+const queues = new Map();
+function serialized(key, run) {
+  const prev = queues.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(run);
+  const tail = next.catch(() => {});
+  queues.set(key, tail);
+  tail.then(() => {
+    if (queues.get(key) === tail)
+      queues.delete(key);
+  });
+  return next;
+}
+
 // ---------- version check ----------
 // `npx kitsune-firefox mcp` may run a newer release than the helper copied to ~/.kitsune/app
 // or the installed extension. Say so once, instead of failing in confusing ways later.
@@ -299,7 +321,9 @@ export async function runMcp() {
       const p = obj.safeParse(a);
       if (!p.success)
         return errorResult(`Invalid arguments for ${name}: ${p.error.issues.map(i => `${i.path.join('.') || '(args)'}: ${i.message}`).join('; ')}`);
-      return fn(p.data);
+      if (UNSERIALIZED.has(name))
+        return fn(p.data);
+      return serialized(p.data.tabId ?? 'default', () => fn(p.data));
     };
     handlers[name] = run;
     return register(name, { ...rest, inputSchema: Object.keys(aliases).length ? z.looseObject(inputSchema) : obj }, run);

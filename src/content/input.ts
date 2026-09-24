@@ -868,7 +868,21 @@ export function setCancelled(v: boolean) {
 /** Let the page's microtasks/timers run between keystrokes. Editors like Lexical and
  * ProseMirror update their model asynchronously; typing a whole string inside one task
  * would feed them stale selections. Throws once the user has pressed Stop. */
-const tick = () => new Promise<void>((resolve, reject) => setTimeout(() => cancelled ? reject(new Error('Stopped: the user paused Kitsune.')) : resolve(), 0));
+const tick = () => new Promise<void>((resolve, reject) => {
+  const done = () => (cancelled ? reject(new Error('Stopped: the user paused Kitsune.')) : resolve());
+  if (document.hidden) {
+    // Timers in background tabs run at most once a second, which would make typing 300 characters
+    // take five minutes. A message-channel task isn't throttled and still lets microtasks run.
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => {
+      ch.port1.close();
+      done();
+    };
+    ch.port2.postMessage(0);
+  } else {
+    setTimeout(done, 0);
+  }
+});
 
 export async function pressKeys(args: { text: string; repeat?: number }): Promise<any> {
   const fwd = focusedFrameForward();

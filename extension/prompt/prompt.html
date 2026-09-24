@@ -21,9 +21,10 @@
     <p class="fine" id="tabline"></p>
   </section>
   <div class="actions">
-    <button id="deny">Deny</button>
-    <button id="always">Always allow</button>
-    <button id="once" class="primary">Allow this session</button>
+    <!-- disabled until prompt.js has shown the request and the window has been on screen for a moment -->
+    <button id="deny" disabled>Deny</button>
+    <button id="always" disabled>Always allow</button>
+    <button id="once" class="primary" disabled>Allow this session</button>
   </div>
   <p class="fine note">This window belongs to the Kitsune extension. Web pages and the AI can't press these buttons. You can revoke sites any time from the Kitsune toolbar button.</p>
   <script src="prompt.js"></script>
