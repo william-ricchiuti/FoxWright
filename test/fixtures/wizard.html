@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kitsune fixture: signup wizard</title>
+<style>
+  body { font: 15px system-ui, sans-serif; max-width: 520px; margin: 30px auto; }
+  .step[hidden] { display: none; }
+  .error { color: #b00020; font-size: 13px; }
+  label { display: block; margin: 10px 0 4px; }
+  button { margin-top: 14px; }
+</style>
+</head>
+<body>
+<h1>Join the Fox Club</h1>
+<p id="progress">Step 1 of 3</p>
+
+<!-- Step 1: account details, validated in the page -->
+<section class="step" id="step1">
+  <h2>Account</h2>
+  <label for="user">Username</label>
+  <input id="user" autocomplete="off">
+  <label for="email">Email</label>
+  <input id="email" autocomplete="off">
+  <label for="pw">Password (at least 10 characters, one digit)</label>
+  <input id="pw" type="password" autocomplete="off">
+  <div id="errors1" role="alert" class="error"></div>
+  <button id="next1">Next</button>
+</section>
+
+<!-- Step 2: choices -->
+<section class="step" id="step2" hidden>
+  <h2>Preferences</h2>
+  <fieldset>
+    <legend>Favorite fox</legend>
+    <label><input type="radio" name="fox" value="red"> Red fox</label>
+    <label><input type="radio" name="fox" value="arctic"> Arctic fox</label>
+    <label><input type="radio" name="fox" value="fennec"> Fennec fox</label>
+  </fieldset>
+  <label for="plan">Membership</label>
+  <select id="plan">
+    <option value="">Choose…</option>
+    <option value="basic">Basic</option>
+    <option value="den">Den (family)</option>
+  </select>
+  <label><input type="checkbox" id="terms"> I accept the club rules</label>
+  <div id="errors2" role="alert" class="error"></div>
+  <button id="back2">Back</button>
+  <button id="next2">Next</button>
+</section>
+
+<!-- Step 3: review -->
+<section class="step" id="step3" hidden>
+  <h2>Review</h2>
+  <dl id="review"></dl>
+  <button id="back3">Back</button>
+  <button id="submit">Create membership</button>
+</section>
+
+<section class="step" id="done" hidden>
+  <h2>Welcome!</h2>
+  <p id="welcome"></p>
+</section>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const state = {};
+  function show(id, n) {
+    for (const s of document.querySelectorAll('.step'))
+      s.hidden = s.id !== id;
+    $('progress').textContent = n ? `Step ${n} of 3` : 'Done';
+  }
+  $('next1').onclick = () => {
+    const errs = [];
+    const user = $('user').value.trim(), email = $('email').value.trim(), pw = $('pw').value;
+    if (!/^[a-z0-9_]{3,}$/i.test(user)) errs.push('Username must be at least 3 letters or digits.');
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(email)) errs.push('Enter a valid email address.');
+    if (pw.length < 10 || !/\d/.test(pw)) errs.push('Password must be at least 10 characters and contain a digit.');
+    $('errors1').textContent = errs.join(' ');
+    if (errs.length) return;
+    Object.assign(state, { user, email });
+    show('step2', 2);
+  };
+  $('back2').onclick = () => show('step1', 1);
+  $('next2').onclick = () => {
+    const errs = [];
+    const fox = document.querySelector('input[name=fox]:checked')?.value;
+    if (!fox) errs.push('Pick a favorite fox.');
+    if (!$('plan').value) errs.push('Choose a membership.');
+    if (!$('terms').checked) errs.push('You must accept the club rules.');
+    $('errors2').textContent = errs.join(' ');
+    if (errs.length) return;
+    Object.assign(state, { fox, plan: $('plan').value });
+    $('review').innerHTML = '';
+    for (const [k, v] of Object.entries(state)) {
+      const dt = document.createElement('dt'); dt.textContent = k;
+      const dd = document.createElement('dd'); dd.textContent = v;
+      $('review').append(dt, dd);
+    }
+    show('step3', 3);
+  };
+  $('back3').onclick = () => show('step2', 2);
+  $('submit').onclick = () => {
+    // The code depends on every answer, so the checker can tell exactly what was submitted.
+    const code = 'FOX-' + [state.user, state.email, state.fox, state.plan].join('|').split('').reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7).toString(36).toUpperCase().slice(0, 6);
+    window.__wizard = { ...state, code };
+    $('welcome').textContent = `Welcome, ${state.user}! Your membership code is ${code}.`;
+    show('done');
+  };
+</script>
+</body>
+</html>

@@ -36,6 +36,7 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 **Tests**
 - New `test/e2e-safety.mjs` presses the real buttons in the permission window and the toolbar popup (Deny, Allow this session, Always allow and revoke, Pause and Resume, including Pause while typing and while a permission window is open, and upload approval).
 - On Linux, tests no longer touch your own Kitsune install: they set up the helper in a temporary home folder and use a free debugging port and a temporary GIF folder.
+- The agent evaluation checks results more strictly (e.g. that exactly the right to-do is completed, that only "Kitsune" is bold, that the agent really used the site's search), adds a local multi-step sign-up task with validation errors, and can run with permission prompts on (`--ask`, answered by a scripted user) and repeat tasks (`--repeat N`, pass@1 and pass@N).
 - CI tests the oldest supported Firefox (140 ESR) as well as the latest, runs the safety and idle suites, and installs the packed npm package on Linux, Windows and macOS.
 - The npm package has no runtime dependencies (everything is bundled), so `npx` downloads one package instead of ~96.
 - Built add-ons and the npm bundle include LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt (Playwright's Apache-2.0 notice and the MIT/ISC notices of bundled packages).

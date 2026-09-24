@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { start } from './harness.mjs';
+import { connectDriver } from './bidi-driver.mjs';
 
 const results = [];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -34,58 +35,8 @@ const ORIGIN = {
 console.log('Kitsune safety e2e');
 const h = await start({ testDriver: true, policy: { mode: 'ask', promptTimeoutSec: 30, confirmUploads: true } });
 
-// ---------- a minimal WebDriver BiDi client for the test itself ----------
-const ws = new WebSocket(h.bidiUrl);
-await new Promise((resolve, reject) => {
-  ws.addEventListener('open', resolve);
-  ws.addEventListener('error', reject);
-});
-let nextId = 0;
-const pending = new Map();
-ws.addEventListener('message', (e) => {
-  const m = JSON.parse(e.data);
-  if (pending.has(m.id)) {
-    pending.get(m.id)(m);
-    pending.delete(m.id);
-  }
-});
-function bidi(method, params) {
-  return new Promise((resolve, reject) => {
-    const id = ++nextId;
-    pending.set(id, (m) => (m.type === 'error' ? reject(new Error(`${method}: ${m.message}`)) : resolve(m.result)));
-    ws.send(JSON.stringify({ id, method, params }));
-  });
-}
-await bidi('session.new', { capabilities: {} });
-
-async function contexts() {
-  return (await bidi('browsingContext.getTree', {})).contexts;
-}
-async function evalIn(context, expression) {
-  const r = await bidi('script.evaluate', { expression, target: { context }, awaitPromise: true });
-  if (r.type === 'exception')
-    throw new Error(`evaluate failed: ${r.exceptionDetails?.text}`);
-  return r.result?.value;
-}
-/** Wait for Kitsune's permission window; returns its browsing context and when it was first seen. */
-async function promptWindow(ms = 10000) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < ms) {
-    const c = (await contexts()).find(x => x.url.includes('/prompt/prompt.html'));
-    if (c)
-      return c;
-    await sleep(30);
-  }
-  throw new Error('no permission window appeared');
-}
-async function answer(button) {
-  const w = await promptWindow();
-  // Buttons are disabled for a moment after the window appears (clickjacking guard).
-  for (let i = 0; i < 100 && await evalIn(w.context, `document.getElementById('${button}').disabled`); i++)
-    await sleep(50);
-  await evalIn(w.context, `document.getElementById('${button}').click()`);
-  return w;
-}
+const driver = await connectDriver(h.bidiUrl);
+const { bidi, contexts, evalIn, promptWindow, answer } = driver;
 
 let popup = null;
 async function openPopup(extBase) {
@@ -217,7 +168,7 @@ await test('file upload: the user approves it in the Kitsune window', async () =
   fs.rmSync(file, { force: true });
 });
 
-ws.close();
+driver.close();
 await h.stop();
 const passed = results.filter(r => r.ok).length;
 console.log(`\n${passed}/${results.length} safety tests passed`);

@@ -1,10 +1,16 @@
 // Real-agent evaluation: Claude Code (headless) completes everyday browser tasks using
 // only Kitsune's tools, and an independent verifier checks the result in the browser.
 //
-//   node test/agent-eval.mjs [--trusted] [--only REGEX] [--model NAME] [--max-turns N] [--repeat N]
+//   node test/agent-eval.mjs [--trusted | --ask] [--only REGEX] [--model NAME] [--max-turns N] [--repeat N]
+//
+//   --trusted  real input through WebDriver BiDi
+//   --ask      Kitsune asks before every new site, as it does for real users; a scripted "user"
+//              presses "Allow this session" in each permission window (synthetic input only)
+//   --repeat N run every task N times and report pass@1 and pass@N
 //
 // Needs the `claude` CLI (logged in). Uses the same throwaway-Firefox harness as the other
 // tests. Writes test/results/agent-eval-<mode>.{json,md} and one transcript per task.
+// Exits 1 if any task failed. Each full run costs roughly $1.50–2 of Claude usage.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,18 +18,24 @@ import { spawn, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { start } from './harness.mjs';
 import { TASKS } from './agent-tasks.mjs';
+import { connectDriver } from './bidi-driver.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(n);
 const opt = (n, d) => (argv.includes(n) ? argv[argv.indexOf(n) + 1] : d);
 const TRUSTED = flag('--trusted');
+const ASK = flag('--ask');
+if (TRUSTED && ASK) {
+  console.error('--ask needs the debugging port for its scripted user, so it only works without --trusted.');
+  process.exit(2);
+}
 const ONLY = opt('--only') ? new RegExp(opt('--only'), 'i') : null;
 const MODEL = opt('--model');
 const MAX_TURNS = opt('--max-turns', '40');
 const REPEAT = Number(opt('--repeat', '1'));
 const CLAUDE = opt('--claude', 'claude');
-const MODE = TRUSTED ? 'trusted' : 'synthetic';
+const MODE = (TRUSTED ? 'trusted' : 'synthetic') + (ASK ? '-ask' : '');
 const outDir = path.join(root, 'test', 'results');
 const transcriptDir = path.join(outDir, 'agent');
 fs.mkdirSync(transcriptDir, { recursive: true });
@@ -67,7 +79,7 @@ function runClaude(prompt, transcriptPath) {
     const child = spawn(CLAUDE, args, { env, cwd: os.tmpdir(), stdio: ['ignore', 'pipe', 'pipe'] });
     const out = fs.createWriteStream(transcriptPath);
     let buf = '', stderr = '';
-    const m = { toolCalls: {}, toolErrors: 0, resultChars: {}, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, seen: new Set(), idToTool: {}, final: null };
+    const m = { calls: [], toolCalls: {}, toolErrors: 0, resultChars: {}, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, seen: new Set(), idToTool: {}, final: null };
     const onLine = (line) => {
       let ev;
       try {
@@ -81,6 +93,7 @@ function runClaude(prompt, transcriptPath) {
           if (c.type === 'tool_use') {
             const name = String(c.name).replace(/^mcp__kitsune__/, '');
             m.toolCalls[name] = (m.toolCalls[name] || 0) + 1;
+            m.calls.push({ name, input: c.input || {} });
             m.idToTool[c.id] = name;
           }
         }
@@ -136,8 +149,10 @@ async function main() {
   console.log(`Kitsune agent evaluation: Claude Code + Kitsune (${MODE} input)${MODEL ? `, model ${MODEL}` : ''}${STRICT ? '' : ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]'}`);
   // In trusted mode Firefox gets a debugging port for Claude's Kitsune MCP server; the harness's
   // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
-  const h = await start({ testDriver: TRUSTED });
+  const h = await start({ testDriver: TRUSTED || ASK, policy: ASK ? { mode: 'ask', confirmUploads: true } : undefined });
   writeMcpConfig(h);
+  const driver = ASK ? await connectDriver(h.bidiUrl) : null;
+  const approver = driver ? driver.autoAnswer('once') : null;
   const v = async (name, args = {}) => h.call(name, args);
   const groupTabs = async () => {
     const r = await v('tabs_context_mcp', {});
@@ -154,7 +169,7 @@ async function main() {
       if (ONLY && !ONLY.test(task.id))
         continue;
       await resetTabs();
-      const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile);
+      const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.KITSUNE_P1}`);
       const transcript = path.join(transcriptDir, `${MODE}-${task.id}${REPEAT > 1 ? `-${rep + 1}` : ''}.jsonl`);
       process.stdout.write(`  … ${task.id}`);
       const run = await runClaude(prompt, transcript);
@@ -163,6 +178,7 @@ async function main() {
       const active = tabs.find(t => t.active) || tabs[tabs.length - 1];
       const ctx = {
         answer,
+        calls: run.m.calls, // [{ name, input }] tool calls the agent made, in order
         tabs: async () => tabs,
         texts: async () => {
           let all = '';
@@ -191,7 +207,7 @@ async function main() {
       const f = run.m.final || {};
       const u = f.usage ? { input: f.usage.input_tokens || 0, output: f.usage.output_tokens || 0, cacheRead: f.usage.cache_read_input_tokens || 0, cacheWrite: f.usage.cache_creation_input_tokens || 0 } : run.m.usage;
       const row = {
-        id: task.id, ok, ms: run.ms, turns: f.num_turns ?? null, cost: f.total_cost_usd ?? null,
+        id: task.id, rep: rep + 1, ok, ms: run.ms, turns: f.num_turns ?? null, cost: f.total_cost_usd ?? null,
         tools: run.m.toolCalls, toolCalls: Object.values(run.m.toolCalls).reduce((a, b) => a + b, 0), toolErrors: run.m.toolErrors,
         resultChars: run.m.resultChars, usage: u, answer: answer.slice(0, 400), exit: run.code, verifyError,
         stderr: run.stderr.slice(-400), hitTurnLimit: /max_turns/.test(String(f.subtype || '')),
@@ -203,11 +219,17 @@ async function main() {
         console.log(`      answer: ${answer.replace(/\s+/g, ' ').slice(0, 220) || '(none)'}${verifyError ? `\n      verify error: ${verifyError}` : ''}${run.code && run.stderr ? `\n      stderr: ${run.stderr.trim().slice(-200)}` : ''}`);
     }
   }
+  approver?.stop();
+  driver?.close();
   await h.stop();
   fs.rmSync(mcpConfig, { force: true });
 
   // ----- summary -----
   const passed = rows.filter(r => r.ok).length;
+  // With --repeat: pass@1 = share of all runs that passed; pass@N = share of tasks passed at least once.
+  const taskIds = [...new Set(rows.map(r => r.id))];
+  const passAtN = taskIds.filter(id => rows.some(r => r.id === id && r.ok)).length;
+  const allPass = taskIds.filter(id => rows.filter(r => r.id === id).every(r => r.ok)).length;
   const med = (a) => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] ?? 0;
   const byTool = {};
   for (const r of rows)
@@ -223,8 +245,10 @@ async function main() {
     '',
     `${new Date().toISOString()} · ${os.platform()} ${os.arch()}${MODEL ? ` · model ${MODEL}` : ''} · max turns ${MAX_TURNS}`,
     '',
-    `**${passed}/${rows.length} tasks succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,
+    REPEAT > 1 ? `Each task ran ${REPEAT} times. pass@1: **${Math.round(100 * passed / rows.length)}%** (${passed}/${rows.length} runs). pass@${REPEAT}: ${passAtN}/${taskIds.length} tasks. Passed every time: ${allPass}/${taskIds.length} tasks.\n` : '',
+    `**${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,
     '',
+    ASK ? `Kitsune was in "ask" mode: a scripted user approved ${approver.count} permission window(s).\n` : '',
     '| Task | Result | Time | Tool calls | Errors | Tokens (in+cache / out) | Cost | Answer |',
     '|---|---|---|---|---|---|---|---|',
     ...rows.map(r => `| ${r.id} | ${r.ok ? 'pass' : '**fail**'} | ${Math.round(r.ms / 1000)} s | ${r.toolCalls} | ${r.toolErrors} | ${Math.round((r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / 1000)}k / ${Math.round(r.usage.output / 1000)}k | ${r.cost != null ? '$' + r.cost.toFixed(3) : '–'} | ${r.answer.replace(/\s+/g, ' ').replace(/\|/g, '/').slice(0, 90)} |`),
@@ -238,8 +262,8 @@ async function main() {
   ].join('\n');
   fs.writeFileSync(path.join(outDir, `agent-eval-${MODE}.md`), md);
   fs.writeFileSync(path.join(outDir, `agent-eval-${MODE}.json`), JSON.stringify(rows, null, 2));
-  console.log(`\n${passed}/${rows.length} tasks succeeded. Report: test/results/agent-eval-${MODE}.md`);
-  process.exit(0);
+  console.log(`\n${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded. Report: test/results/agent-eval-${MODE}.md`);
+  process.exit(passed === rows.length ? 0 : 1);
 }
 
 main().catch((e) => {
