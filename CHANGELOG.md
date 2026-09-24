@@ -32,6 +32,12 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - The AMO source zip now includes `host/` and a BUILDING.txt; rebuilding from it gives a byte-identical add-on.
 
 **Speed and tokens**
+- Actions wait on Firefox's navigation events instead of fixed sleeps, and only as long as the action could start a page load. On the local fixtures (`test/bench-actions.mjs`, medians): clicking a button 323 → 120 ms, typing 10 characters 347 → 46 ms, a key press 318 → 25 ms, clicking a link that loads a page 258 → 114 ms.
+- `navigate` and clicks that load a page return once the new page's HTML is parsed, plus at most 1 s for the full load, instead of waiting for every image and tracker.
+- `read_page` returns 20k characters by default (was 50k); the "on screen now" list after a navigation is capped at 1.5k, and inside `browser_batch` only the last step gets one.
+- `read_page` and `find` reach into iframes in parallel.
+- The tool list the AI receives with every request is ~10% smaller: alternative argument names are still accepted but no longer advertised.
+- `browser_batch` steps get the same forgiving argument parsing as direct calls.
 - Key presses and typing no longer read the text of the whole page to describe the focused element.
 - `tabs_context_mcp` mentions the input mode only when it's new to the session.
 

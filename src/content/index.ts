@@ -76,7 +76,8 @@ const handlers: Record<string, (args: any) => any> = {
   ping: () => ({ pong: true, url: location.href, prefix: getRefPrefix() }),
   viewport: () => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scrollX: scrollX, scrollY: scrollY }),
   snapshot: (a) => takeSnapshot(a),
-  find: (a) => findElements(a.query),
+  // The viewport comes along so the background doesn't need a second round trip to scale coordinates.
+  find: (a) => ({ ...findElements(a.query), viewport: { width: innerWidth, height: innerHeight } }),
   click: (a) => input.click(a),
   hover: (a) => input.hover(a),
   type: (a) => input.typeText(a),

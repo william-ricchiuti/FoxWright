@@ -308,6 +308,7 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
   const notes: string[] = [];
   let openUrl: string | null = null;
   let prevented = false;
+  let submitEvent: Event | null = null;
 
   hoverTo(target, x, y, mods);
   gesture(true);
@@ -362,7 +363,11 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
         };
         window.addEventListener('click', guard, { once: true });
       }
+      // A click's default action may submit a form; watch for it to know whether a page load follows.
+      const onSubmit = (e: Event) => { submitEvent = e; };
+      window.addEventListener('submit', onSubmit, true);
       const clickOk = fire(target, new MouseEvent('click', mouseInit(x, y, mods, 0, 0, i)));
+      window.removeEventListener('submit', onSubmit, true);
       if (guard)
         window.removeEventListener('click', guard);
       if (!clickOk && !openUrl)
@@ -404,7 +409,20 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
 
   // Only actions on links, buttons and form controls normally start a navigation; the
   // background uses this to skip waiting for one after other clicks.
-  const mayNavigate = !!target.closest('a[href], area[href], button, input, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], form, [onclick]');
+  // 'likely': this click's default action loads a page (a real link, or a form submission the page
+  // didn't cancel). true: a page script might still navigate. false: nothing will.
+  const link = target.closest('a[href], area[href]') as HTMLAnchorElement | null;
+  const isSamePageLink = !!link && (() => {
+    try {
+      const u = new URL(link.href, location.href);
+      return u.origin === location.origin && u.pathname === location.pathname && u.search === location.search && !!u.hash;
+    } catch {
+      return false;
+    }
+  })();
+  const submitted = !!submitEvent && !(submitEvent as Event).defaultPrevented;
+  const mayNavigate: boolean | 'likely' = (!prevented && link && !isSamePageLink && !openUrl) || submitted ? 'likely'
+    : !!target.closest('a[href], area[href], button, input, [role="button"], [role="link"], [role="menuitem"], [role="option"], [role="tab"], form, [onclick]');
   return { target: describe(target), prevented, openUrl, notes, mayNavigate };
 }
 
@@ -868,7 +886,9 @@ export async function pressKeys(args: { text: string; repeat?: number }): Promis
     }
   }
   const a = deepActiveElement();
-  return { focused: describe(a), value: valueOf(a), notes };
+  // Only these keys load pages by default (submit, activate a link/button, history, reload).
+  const mayNavigate = combos.some(c => /^(enter|return|space|\s|f5)$|^(alt|meta|cmd)\+(left|right|arrowleft|arrowright|\[|\])$|^(ctrl|cmd|meta)\+r$/i.test(c)) ? undefined : false;
+  return { focused: describe(a), value: valueOf(a), notes, mayNavigate };
 }
 
 function valueOf(el: Element | null): string | undefined {
@@ -925,7 +945,8 @@ export async function typeText(args: { text: string }): Promise<any> {
     notes.push(`No text field was focused (focus is on ${describe(target)}), so only key events were sent. Click the field first.`);
   }
   const a = deepActiveElement();
-  return { focused: describe(a), value: valueOf(a), notes };
+  // Typing into a field doesn't load pages unless it includes Enter.
+  return { focused: describe(a), value: valueOf(a), notes, mayNavigate: target && isEditable(target) && !/[\r\n]/.test(text) ? false : undefined };
 }
 
 // ---------- scrolling & dragging ----------

@@ -97,16 +97,86 @@ function fmtResult(verb, r) {
   return lines.join('\n');
 }
 
-async function waitForLoad(tabId, timeoutMs = 30000) {
-  const start = Date.now();
-  await sleep(150);
-  while (Date.now() - start < timeoutMs) {
+// ---------- navigation tracking (event-driven) ----------
+// Top-frame navigation milestones per tab, from webNavigation events. Waiting on these instead of
+// polling tab.status returns as soon as the page is usable, and doesn't sleep on pages that never navigate.
+const navState = new Map(); // tabId -> { start, commit, dcl, done, error, url } (timestamps)
+const navWaiters = new Set(); // { tabId, check, resolve }
+
+function navEvent(kind) {
+  return (d) => {
+    // A new tab's initial about:blank load can report its events after we start waiting for the
+    // real page; it never counts as the navigation being waited for.
+    if (d.frameId !== 0 || /^about:blank/.test(d.url || ''))
+      return;
+    const s = navState.get(d.tabId) || {};
+    s[kind] = Date.now();
+    if (kind === 'commit')
+      s.url = d.url;
+    navState.set(d.tabId, s);
+    for (const w of [...navWaiters]) {
+      if (w.tabId === d.tabId && w.check(s)) {
+        navWaiters.delete(w);
+        w.resolve(true);
+      }
+    }
+  };
+}
+browser.webNavigation.onBeforeNavigate.addListener(navEvent('start'));
+browser.webNavigation.onCommitted.addListener(navEvent('commit'));
+browser.webNavigation.onDOMContentLoaded.addListener(navEvent('dcl'));
+browser.webNavigation.onCompleted.addListener(navEvent('done'));
+browser.webNavigation.onErrorOccurred.addListener(navEvent('error'));
+browser.tabs.onRemoved.addListener((tabId) => navState.delete(tabId));
+
+/** Resolve true as soon as check(navState) holds for the tab, or false after ms. */
+function waitNav(tabId, check, ms) {
+  if (check(navState.get(tabId) || {}))
+    return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const w = { tabId, check, resolve };
+    navWaiters.add(w);
+    setTimeout(() => {
+      if (navWaiters.delete(w))
+        resolve(false);
+    }, Math.max(0, ms));
+  });
+}
+
+/**
+ * Wait until a page that started loading at or after `since` is usable: its DOM is parsed, plus up
+ * to 1 s for the full load (images, ads and trackers can hold "load" back for many seconds).
+ * Falls back to tab.status for loads without navigation events (e.g. the back/forward cache).
+ */
+async function waitForLoad(tabId, timeoutMs = 30000, since = Date.now() - 50) {
+  const deadline = Date.now() + timeoutMs;
+  const began = (s) => (s.start || 0) >= since;
+  const parsed = (s) => began(s) && ((s.dcl || 0) >= s.start || (s.done || 0) >= s.start || (s.error || 0) >= s.start);
+  const loaded = (s) => began(s) && ((s.done || 0) >= s.start || (s.error || 0) >= s.start);
+  while (Date.now() < deadline) {
+    if (await waitNav(tabId, parsed, Math.min(500, deadline - Date.now()))) {
+      // An aborted load (NS_BINDING_ABORTED) is often immediately replaced by another one, e.g. when
+      // a brand-new tab's own startup load collides with ours. Keep waiting if a new one begins.
+      const s = navState.get(tabId) || {};
+      const failed = (s.error || 0) >= s.start && !((s.dcl || 0) >= s.start);
+      // (Or the error belonged to an earlier load and the current one is still going.)
+      if (!failed || !(await waitNav(tabId, (x) => (x.start || 0) > s.error || (x.dcl || 0) >= x.start, 500)))
+        break;
+      continue;
+    }
     const t = await browser.tabs.get(tabId);
-    if (t.status === 'complete')
+    if (t.status === 'complete' && Date.now() - since > 500 && !began(navState.get(tabId) || {}))
       return t;
-    await sleep(150);
   }
-  return browser.tabs.get(tabId);
+  await waitNav(tabId, loaded, Math.min(1000, Math.max(0, deadline - Date.now())));
+  // tabs.get() can lag behind webNavigation events: wait until it shows the committed URL.
+  const committed = navState.get(tabId) || {};
+  let t = await browser.tabs.get(tabId);
+  for (let i = 0; i < 120 && committed.url && began(committed) && t.url !== committed.url; i++) {
+    await sleep(25);
+    t = await browser.tabs.get(tabId);
+  }
+  return t;
 }
 
 async function dialogNotes(tabId) {
@@ -118,32 +188,24 @@ async function dialogNotes(tabId) {
   }
 }
 
-// Navigations that an action starts (link clicks, form submits) begin asynchronously.
-const navStarts = new Map(); // tabId -> timestamp of last top-level navigation start
-browser.webNavigation.onBeforeNavigate.addListener((d) => {
-  if (d.frameId === 0)
-    navStarts.set(d.tabId, Date.now());
-});
-
 async function afterAction(tab, before, r) {
   const extra = [];
   const t0 = before.t0 || Date.now() - 50;
-  const waitRounds = r?.mayNavigate === false ? 1 : 5; // key presses and clicks on links/buttons may navigate
-  for (let i = 0; i < waitRounds && !((navStarts.get(tab.id) || 0) >= t0); i++)
-    await sleep(60);
+  const started = (s) => (s.start || 0) >= t0;
+  // Navigations an action starts (link clicks, form submits, script redirects) begin asynchronously.
+  // Wait for one only as long as this action could plausibly have started it.
+  const budget = r?.mayNavigate === 'likely' ? 400 : r?.mayNavigate === false ? 0 : 100;
+  await waitNav(tab.id, started, budget);
   if (r?.openUrl) {
     const nt = await createAgentTab(r.openUrl, false);
     extra.push(`The link opens in a new tab: created tab ${nt.id} (${r.openUrl}) in the Kitsune group.`);
   }
-  let now = await browser.tabs.get(tab.id);
-  if ((navStarts.get(tab.id) || 0) >= t0 && now.url === before.url && now.status !== 'loading') {
-    await sleep(300); // navigation started but the tab hasn't switched to loading yet
-    now = await browser.tabs.get(tab.id);
-  }
-  if (now.url === before.url && now.status !== 'loading')
+  const navigated = started(navState.get(tab.id) || {});
+  const now = await browser.tabs.get(tab.id);
+  if (now.url === before.url && now.status !== 'loading' && !navigated)
     extra.push(...await dialogNotes(tab.id));
-  if (now.url !== before.url || now.status === 'loading') {
-    const done = await waitForLoad(tab.id, 15000);
+  if (now.url !== before.url || now.status === 'loading' || navigated) {
+    const done = await waitForLoad(tab.id, 15000, t0);
     const o = originOf(done.url);
     if (o && !isAllowed(o))
       extra.push(`The page navigated to ${o}, a site the user hasn't approved yet; the next tool call on it will ask them.`);
@@ -185,45 +247,43 @@ function indentBlock(textBlock, indent) {
   return textBlock.split('\n').map(l => ' '.repeat(indent) + l).join('\n');
 }
 
+/**
+ * Splice the outlines of child frames under their <iframe> lines. Frames are fetched in parallel
+ * (each with its own timeout), then inserted in one pass over the parent's lines.
+ */
 async function stitchFrames(tabId, res, args, depthLeft) {
-  let yaml = res.yaml;
-  if (depthLeft <= 0)
+  const yaml = res.yaml;
+  const frames = (res.iframes || []).filter(f => f.frameId >= 0);
+  if (depthLeft <= 0 || !frames.length)
     return yaml;
-  for (const { ref, frameId } of res.iframes || []) {
-    if (frameId < 0)
-      continue;
+  const inserts = new Map(); // ref -> text to insert under it
+  await Promise.all(frames.map(async ({ ref, frameId }) => {
     if (!(await isFrameAllowed(tabId, frameId))) {
       const o = await frameOriginOf(tabId, frameId).catch(() => null);
-      const lines = yaml.split('\n');
-      const idx = lines.findIndex(l => l.includes(`[ref=${ref}]`));
-      if (idx >= 0) {
-        const indent = lines[idx].match(/^\s*/)[0].length;
-        if (!lines[idx].trimEnd().endsWith(':'))
-          lines[idx] = lines[idx].trimEnd() + ':';
-        lines.splice(idx + 1, 0, ' '.repeat(indent + 2) + `- note: embedded content from ${o || 'another site'} is hidden until the user approves it (read_page with ref_id ${ref} asks them)`);
-        yaml = lines.join('\n');
-      }
-      continue;
+      inserts.set(ref, `- note: embedded content from ${o || 'another site'} is hidden until the user approves it (read_page with ref_id ${ref} asks them)`);
+      return;
     }
-    let child;
     try {
       await ensureContent(tabId, frameId);
-      child = await sendContent(tabId, frameId, 'snapshot', { filter: args.filter, depth: args.depth }, 10000);
-    } catch (e) {
-      continue; // cross-origin frame we can't reach, or it navigated away
-    }
-    const childYaml = await stitchFrames(tabId, child, args, depthLeft - 1);
-    const lines = yaml.split('\n');
-    const idx = lines.findIndex(l => l.includes(`[ref=${ref}]`));
-    if (idx < 0)
+      const child = await sendContent(tabId, frameId, 'snapshot', { filter: args.filter, depth: args.depth, visible_only: args.visible_only }, 10000);
+      inserts.set(ref, await stitchFrames(tabId, child, args, depthLeft - 1));
+    } catch { /* cross-origin frame we can't reach, or it navigated away */ }
+  }));
+  if (!inserts.size)
+    return yaml;
+  const out = [];
+  for (const line of yaml.split('\n')) {
+    const m = /\[ref=([^\]]+)\]/.exec(line);
+    const add = m ? inserts.get(m[1]) : undefined;
+    if (!add) {
+      out.push(line);
       continue;
-    const indent = lines[idx].match(/^\s*/)[0].length;
-    if (!lines[idx].trimEnd().endsWith(':'))
-      lines[idx] = lines[idx].trimEnd() + ':';
-    lines.splice(idx + 1, 0, indentBlock(childYaml, indent + 2));
-    yaml = lines.join('\n');
+    }
+    const indent = line.match(/^\s*/)[0].length;
+    out.push(line.trimEnd().endsWith(':') ? line : line.trimEnd() + ':');
+    out.push(indentBlock(add, indent + 2));
   }
-  return yaml;
+  return out.join('\n');
 }
 
 function truncateLines(s, max) {
@@ -333,6 +393,7 @@ export const tools = {
       prefix = `(Using tab ${tabId} from the Kitsune group.)\n`;
     }
     const tab = await requireTab(tabId);
+    const navSince = Date.now();
     if (args.url === 'back') {
       await browser.tabs.goBack(tab.id);
     } else if (args.url === 'forward') {
@@ -342,7 +403,7 @@ export const tools = {
       await ensureOriginPermission(url); // ask before sending the user's cookies anywhere new (no tab title: it's the page being left, not the site asked about)
       await browser.tabs.update(tab.id, { url });
     }
-    const done = await waitForLoad(tab.id, 30000);
+    const done = await waitForLoad(tab.id, 30000, navSince);
     const all = await groupTabs();
     const ctx = all.length > 1 ? `\nTabs in group: ${all.map(t => t.id).join(', ')}` : '';
     const o = originOf(done.url);
@@ -380,37 +441,43 @@ export const tools = {
     const vp = res.viewport;
     const header = `Page: ${res.title || '(untitled)'}\nURL: ${res.url}\nViewport: ${vp.width}x${vp.height} CSS px, scrolled to y=${vp.scrollY} of ${vp.scrollHeight}\n`;
     const body = args.ref_id ? `Subtree of ${args.ref_id}:\n${yaml}` : yaml;
-    return text(truncateLines(header + body, args.max_chars || 50000));
+    return text(truncateLines(header + body, args.max_chars || 20000));
   },
 
   async find(args) {
     const tab = await tabForPageTool(args);
     if (!args.query)
       throw new Error('query is required.');
-    const vp = await viewportOf(tab);
-    const s = scaleFor(vp.width, vp.height);
     const top = await sendContent(tab.id, 0, 'find', { query: args.query });
+    const vp = top.viewport || await viewportOf(tab);
+    const s = scaleFor(vp.width, vp.height);
     const lines = top.items.map(i => i.line + (i.center ? ` at (${Math.round(i.center.x * s)}, ${Math.round(i.center.y * s)})${i.center.inView ? '' : ' (off-screen)'}` : ''));
     let total = top.total;
     try {
-      const frames = (await browser.webNavigation.getAllFrames({ tabId: tab.id })) || [];
-      for (const f of frames) {
-        if (f.frameId === 0 || lines.length >= 20)
-          continue;
-        if (!(await isFrameAllowed(tab.id, f.frameId)))
-          continue;
+      // Search approved frames in parallel; keep results in frame order.
+      const frames = ((await browser.webNavigation.getAllFrames({ tabId: tab.id })) || []).filter(f => f.frameId !== 0);
+      const perFrame = await Promise.all(frames.map(async (f) => {
         try {
+          if (!(await isFrameAllowed(tab.id, f.frameId)))
+            return null;
           await ensureContent(tab.id, f.frameId);
           const r = await sendContent(tab.id, f.frameId, 'find', { query: args.query }, 5000);
-          total += r.total;
           const o = r.items.length ? await frameOrigin(tab.id, f.frameId).catch(() => null) : null;
-          for (const i of r.items) {
-            if (lines.length >= 20)
-              break;
-            const where = o && i.center ? ` at (${Math.round((i.center.x + o.x) * s)}, ${Math.round((i.center.y + o.y) * s)})${i.center.inView ? '' : ' (off-screen)'}` : '';
-            lines.push(i.line + where + ' (inside an iframe)');
-          }
-        } catch { /* skip unreachable frames */ }
+          return { r, o };
+        } catch {
+          return null; // unreachable frame
+        }
+      }));
+      for (const x of perFrame) {
+        if (!x)
+          continue;
+        total += x.r.total;
+        for (const i of x.r.items) {
+          if (lines.length >= 20)
+            break;
+          const where = x.o && i.center ? ` at (${Math.round((i.center.x + x.o.x) * s)}, ${Math.round((i.center.y + x.o.y) * s)})${i.center.inView ? '' : ' (off-screen)'}` : '';
+          lines.push(i.line + where + ' (inside an iframe)');
+        }
       }
     } catch { /* ignore */ }
     if (!lines.length)

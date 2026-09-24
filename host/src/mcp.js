@@ -77,10 +77,14 @@ async function call(tool, args, timeoutMs) {
   }
 }
 
+let suppressSummary = false; // set by browser_batch for all but its last step
+
 /** A compact list of what's clickable on screen, appended after navigation to save a read_page round trip. */
 async function onScreenSummary(tab) {
+  if (suppressSummary)
+    return '';
   try {
-    const r = await helper.call('read_page', { tabId: tab, filter: 'interactive', visible_only: true, max_chars: 3000 }, 20000);
+    const r = await helper.call('read_page', { tabId: tab, filter: 'interactive', visible_only: true, max_chars: 1500 }, 20000);
     const t = r?.content?.[0]?.text || '';
     const body = t.split('\n').filter(l => !/^(Page|URL|Viewport):/.test(l)).join('\n').trim();
     return body ? `\n\nOn screen now (interactive elements; call read_page for the full outline):\n${body}` : '';
@@ -114,12 +118,15 @@ async function recordFrame(tab, click) {
 /** When an action navigated the page, append what's on the new page (saves a read_page call). */
 async function withNavSummary(r, tab) {
   const t = (r?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
-  if (!r?.isError && typeof tab === 'number' && /The page navigated to https?:/.test(t))
-    r.content.push({ type: 'text', text: await onScreenSummary(tab) });
+  if (!r?.isError && typeof tab === 'number' && /The page navigated to https?:/.test(t)) {
+    const summary = await onScreenSummary(tab);
+    if (summary)
+      r.content.push({ type: 'text', text: summary });
+  }
   return r;
 }
 
-const tabId = numish(z.number().int().optional()).describe('ID of a tab in the Kitsune tab group (from tabs_context_mcp). Optional: defaults to the tab you used last.');
+const tabId = numish(z.number().optional()).describe('ID of a tab in the Kitsune tab group (from tabs_context_mcp). Optional: defaults to the tab you used last.');
 const coord = jsonish(z.array(numish(z.number())).length(2));
 
 // ---------- trusted (WebDriver BiDi) input path for `computer` ----------
@@ -276,9 +283,26 @@ export async function runMcp() {
   const server = new McpServer({ name: 'kitsune', version: VERSION }, { instructions: INSTRUCTIONS });
   const handlers = {};
   const register = server.registerTool.bind(server);
+  // Each tool's arguments go through the same parsing whether the tool is called directly or as
+  // a browser_batch step. `aliases` ({wrongName: rightName}) are accepted but not advertised,
+  // so they don't cost tokens in every tool listing.
   server.registerTool = (name, def, fn) => {
-    handlers[name] = fn;
-    return register(name, def, fn);
+    const { aliases = {}, inputSchema = {}, ...rest } = def;
+    const obj = z.object(inputSchema);
+    const run = async (raw) => {
+      const a = { ...(raw || {}) };
+      for (const [alias, canon] of Object.entries(aliases)) {
+        if (a[canon] === undefined && a[alias] !== undefined)
+          a[canon] = a[alias];
+        delete a[alias];
+      }
+      const p = obj.safeParse(a);
+      if (!p.success)
+        return errorResult(`Invalid arguments for ${name}: ${p.error.issues.map(i => `${i.path.join('.') || '(args)'}: ${i.message}`).join('; ')}`);
+      return fn(p.data);
+    };
+    handlers[name] = run;
+    return register(name, { ...rest, inputSchema: Object.keys(aliases).length ? z.looseObject(inputSchema) : obj }, run);
   };
 
   server.registerTool('tabs_context_mcp', {
@@ -319,7 +343,9 @@ export async function runMcp() {
   }, async (a) => {
     const r = await call('navigate', a, 60000);
     if (!r.isError && lastTab != null) {
-      r.content.push({ type: 'text', text: await onScreenSummary(lastTab) });
+      const summary = await onScreenSummary(lastTab);
+      if (summary)
+        r.content.push({ type: 'text', text: summary });
       await recordFrame(lastTab);
     }
     return r;
@@ -330,10 +356,10 @@ export async function runMcp() {
     inputSchema: {
       tabId,
       filter: z.enum(['all', 'interactive']).optional().describe('"interactive" lists only elements with refs (buttons, links, inputs...). Default "all".'),
-      depth: z.number().int().positive().optional().describe('Maximum tree depth (default 25). Lower it for huge pages.'),
+      depth: z.number().positive().optional().describe('Maximum tree depth (default 25). Lower it for huge pages.'),
       ref_id: z.string().optional().describe('Only return the subtree under this ref (or, for an iframe ref, the frame\'s content).'),
       visible_only: z.boolean().optional().describe('Only include what is currently on screen (much smaller on long pages; scroll to see more).'),
-      max_chars: z.number().int().positive().optional().describe('Maximum characters to return (default 50000).'),
+      max_chars: numish(z.number().positive()).optional().describe('Maximum characters to return (default 20000).'),
     },
   }, async (a) => call('read_page', a));
 
@@ -341,12 +367,11 @@ export async function runMcp() {
     description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates.',
     inputSchema: {
       query: z.string().optional().describe('What to look for.'),
-      text: z.string().optional().describe('Alias of query.'),
-      description: z.string().optional().describe('Alias of query.'),
       tabId,
     },
+    aliases: { text: 'query', description: 'query' },
   }, async (a) => {
-    const query = a.query ?? a.text ?? a.description;
+    const query = a.query;
     if (!query)
       return errorResult('find needs a query, e.g. {"query": "search box"}.');
     return call('find', { tabId: a.tabId, query });
@@ -379,7 +404,6 @@ Actions:
       coordinate: coord.optional().describe('[x, y] in screenshot pixels.'),
       ref: z.string().optional().describe('Element ref from read_page/find; alternative to coordinate for clicks, hover, scroll, scroll_to.'),
       text: z.string().optional().describe('Text for "type", or keys for "key".'),
-      key: z.string().optional().describe('Alias of text for the "key" action.'),
       modifiers: z.string().optional().describe('Modifier keys for clicks, e.g. "ctrl", "shift", "cmd+shift".'),
       duration: numish(z.number()).optional().describe('Seconds, for "wait" (max 10).'),
       scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional(),
@@ -389,11 +413,9 @@ Actions:
       repeat: numish(z.number()).optional().describe('Times to repeat a key action (max 100).'),
       scale: numish(z.number()).optional().describe('For zoom: output size factor, 0.1-1.'),
     },
+    aliases: { key: 'text', keys: 'text' }, // common slip: {action: "key", key: "Enter"}
   }, async (a0) => {
-    // eslint-disable-next-line no-param-reassign
     const clamp = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : undefined);
-    if (a0.text === undefined && typeof (a0.key ?? a0.keys) === 'string')
-      a0 = { ...a0, text: a0.key ?? a0.keys }; // common slip: {action: "key", key: "Enter"}
     const a = { ...a0, scroll_amount: clamp(a0.scroll_amount, 1, 30), repeat: clamp(a0.repeat, 1, 100), duration: typeof a0.duration === 'number' ? Math.min(10, Math.max(0, a0.duration)) : undefined };
     if (typeof a.tabId !== 'number')
       a.tabId = await defaultTab();
@@ -425,14 +447,14 @@ Actions:
   server.registerTool('javascript_tool', {
     description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Only available in the self-distributed "Kitsune (Full)" build, and pages with a strict Content-Security-Policy may block it.',
     inputSchema: {
-      action: z.literal('javascript_exec').describe('Must be "javascript_exec".'),
+      action: z.literal('javascript_exec').optional(),
       text: z.string().describe('The JavaScript to run.'),
       tabId,
     },
   }, async (a) => call('javascript_tool', a));
 
   server.registerTool('handle_dialog', {
-    description: 'Kitsune never lets JavaScript alert/confirm/prompt dialogs block the page: by default alerts are dismissed, confirms answered Cancel and prompts cancelled, and the tool result tells you what the page asked. Call this BEFORE an action to answer the next dialog in that tab differently (e.g. accept a "Are you sure?" confirm, or type into a prompt).',
+    description: 'While you work in a tab, JavaScript alert/confirm/prompt dialogs don\'t block it: alerts are dismissed, confirms answered Cancel and prompts cancelled, and the tool result tells you what the page asked. Call this BEFORE an action to answer the next dialog in that tab differently (e.g. accept a "Are you sure?" confirm, or type into a prompt).',
     inputSchema: {
       tabId,
       accept: z.boolean().describe('true = OK, false = Cancel.'),
@@ -446,7 +468,7 @@ Actions:
       tabId,
       pattern: z.string().optional().describe('Regex to filter messages (case-insensitive).'),
       onlyErrors: z.boolean().optional(),
-      limit: z.number().int().positive().optional().describe('Max messages (default 100, most recent).'),
+      limit: z.number().positive().optional().describe('Max messages (default 100, most recent).'),
       clear: z.boolean().optional().describe('Clear the buffer after reading.'),
     },
   }, async (a) => call('read_console_messages', a));
@@ -456,31 +478,31 @@ Actions:
     inputSchema: {
       tabId,
       urlPattern: z.string().optional().describe('Only include URLs containing this string.'),
-      limit: z.number().int().positive().optional(),
+      limit: z.number().positive().optional(),
       clear: z.boolean().optional(),
     },
   }, async (a) => call('read_network_requests', a));
 
   server.registerTool('resize_window', {
     description: 'Resize the Firefox window that contains the tab (outer size in pixels).',
-    inputSchema: { width: z.number().int().positive(), height: z.number().int().positive(), tabId },
+    inputSchema: { width: z.number().positive(), height: z.number().positive(), tabId },
   }, async (a) => call('resize_window', a));
 
   server.registerTool('file_upload', {
     description: 'Attach local files to a file input (or drop them on a drop zone) without opening the file picker. Give absolute file paths on this computer. The user confirms every upload in a Kitsune window; key/credential files are always refused.',
     inputSchema: {
-      paths: jsonish(z.array(z.string())).optional().describe('Absolute paths of files to upload.'),
-      files: jsonish(z.union([z.array(z.string()), z.string()])).optional().describe('Alias of paths.'),
+      paths: jsonish(z.union([z.array(z.string()), z.string()])).optional().describe('Absolute paths of files to upload.'),
       ref: z.string().optional().describe('Ref of the file input or drop zone.'),
       coordinate: coord.optional().describe('Screenshot coordinate of the drop zone, if no ref.'),
       tabId,
     },
+    aliases: { files: 'paths' },
   }, async (a) => {
     try {
       let total = 0;
       const files = [];
       const shown = [];
-      const list = a.paths ?? (typeof a.files === 'string' ? [a.files] : a.files);
+      const list = typeof a.paths === 'string' ? [a.paths] : a.paths;
       if (!Array.isArray(list) || !list.length)
         return errorResult('file_upload needs paths: ["/absolute/path/to/file"].');
       if (typeof a.tabId !== 'number')
@@ -543,28 +565,40 @@ Actions:
   server.registerTool('browser_batch', {
     description: 'Run several Kitsune actions in one call, in order, stopping at the first error, e.g. fill three fields and click Submit. Each step is {tool, args} using the same tools and arguments as when called directly (tabId defaults to the tab used last). Saves round trips; only the last screenshot of the batch is returned.',
     inputSchema: {
-      actions: jsonish(z.array(z.object({
+      actions: jsonish(z.array(z.looseObject({
         tool: z.enum(['navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'handle_dialog', 'tabs_create_mcp']),
         args: jsonish(z.record(z.string(), z.any())).optional(),
-        params: jsonish(z.record(z.string(), z.any())).optional().describe('Alias of args.'),
       })).max(30)).optional(),
-      steps: jsonish(z.array(z.any())).optional().describe('Alias of actions.'),
       tabId: tabId.describe('Default tab for steps that don\'t name one.'),
     },
+    aliases: { steps: 'actions' },
   }, async (a) => {
-    const actions = a.actions ?? a.steps ?? [];
+    const actions = a.actions ?? [];
     if (!actions.length)
       return errorResult('browser_batch needs actions: [{tool, args}, ...].');
     const out = [];
     let image = null;
     for (let i = 0; i < actions.length; i++) {
       const tool = actions[i].tool;
-      const args = { ...(a.tabId != null ? { tabId: a.tabId } : {}), ...(actions[i].args ?? actions[i].params ?? {}) };
+      let stepArgs = actions[i].args ?? actions[i].params ?? {};
+      if (typeof stepArgs === 'string') {
+        try {
+          stepArgs = JSON.parse(stepArgs);
+        } catch { /* reported by the tool's own validation */ }
+      }
+      const args = { ...(a.tabId != null ? { tabId: a.tabId } : {}), ...stepArgs };
       if (!handlers[tool] || tool === 'browser_batch')
         return errorResult(`Step ${i + 1}: unknown tool "${tool}".`);
       if (typeof args.tabId === 'string' && /^\d+$/.test(args.tabId))
         args.tabId = Number(args.tabId);
-      const r = await handlers[tool](args);
+      // Only the last step gets the "on screen now" summary after a navigation.
+      suppressSummary = i < actions.length - 1;
+      let r;
+      try {
+        r = await handlers[tool](args);
+      } finally {
+        suppressSummary = false;
+      }
       const txt = (r.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
       const img = (r.content || []).find(c => c.type === 'image');
       if (img)

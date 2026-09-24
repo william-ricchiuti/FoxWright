@@ -31,12 +31,12 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## 3. Speed and tokens
 
-- [ ] 18. Lower `read_page` default; shorter navigate summary; none for mid-batch steps
-- [ ] 19. Event-driven navigation waits instead of fixed polling
-- [ ] 20. Big pages: limits passed into the page, frames in parallel, `find` reuse
+- [x] 18. Lower `read_page` default; shorter navigate summary; none for mid-batch steps — read_page default 20k chars; navigate summary capped at 1.5k; no summary for mid-batch steps
+- [x] 19. Event-driven navigation waits instead of fixed polling — webNavigation events instead of polling; waits scaled to whether the action can navigate (see test/bench-actions.mjs: click 323→120 ms, type 347→46 ms, key 318→25 ms, link click 258→114 ms)
+- [~] 20. Big pages: limits passed into the page, frames in parallel, `find` reuse — frames fetched in parallel for read_page and find; find returns the viewport in the same call. Not done: stopping the outline early inside the page (needs deeper changes to the vendored Playwright code)
 - [x] 21. `describe()` reads whole-page innerText on every key press — uses textContent, skips body/html
-- [ ] 22. Alias parameters bloat tool schemas
-- [ ] 23. `browser_batch` skips per-tool argument parsing
+- [x] 22. Alias parameters bloat tool schemas — aliases accepted but not advertised; `.int()` bounds dropped; tool listing 15.6k → 14.2k chars
+- [x] 23. `browser_batch` skips per-tool argument parsing — every batch step goes through the same argument parsing as a direct call
 
 ## 4. Reliability
 
@@ -82,3 +82,4 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 
 - 1–8 fixed, plus 21, 25, 26, 27, 28, part of 14; also: BiDi timers cleared, Windows pipe-id race (`wx`), `KITSUNE_SOCKET` chmod limited to ~/.kitsune, `<kitsune-ui>` decoy check (identity only), input-mode line only when it changes. e2e 53/53 both modes; permissions 5/5, store 2/2, resilience 5/5.
 - 9–17 done (safety hardening). e2e 55/55 both modes; permissions 5/5; store 2/2.
+- 18, 19, 22, 23 done; 20 partly. New `test/bench-actions.mjs`. e2e 55/55 both modes (synthetic 3 runs in a row); permissions 5/5, resilience 5/5, store 2/2. BiDi retry backoff 15 s → 5 s (Firefox may still be starting).

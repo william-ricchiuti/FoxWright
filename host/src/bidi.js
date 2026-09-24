@@ -56,7 +56,7 @@ export class Bidi {
       return false;
     if (this.ready && this.ws && this.ws.readyState === WebSocket.OPEN)
       return true;
-    if (Date.now() - this.lastFail < 15000)
+    if (Date.now() - this.lastFail < 5000) // retry soon: Firefox may still be starting up
       return false;
     try {
       await this.open();
