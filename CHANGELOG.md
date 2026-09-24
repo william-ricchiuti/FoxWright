@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
+
+**Security and privacy**
+- Password values are never shown to the agent: the outline says `(password, N characters)`, and click/type results leave them out.
+- Kitsune's scripts go only into the frames a tool actually reaches (after that frame's site is approved), not into every ad, payment or login iframe on the page.
+- Stop/Pause now interrupts work in progress: open permission windows are denied, typing and drags stop at the next step, and the running command reports that the user stopped it. The popup's Pause does the same as the shortcut and the in-page Stop.
+- Trusted mode only sends input to a WebDriver BiDi endpoint that identifies as Firefox.
+- A page can no longer make its own elements look like Kitsune's UI to be skipped.
+
+**Fixes**
+- Editors inside `about:blank` and `srcdoc` iframes (TinyMCE, CKEditor 4, many webmail composers) can be read, clicked and typed into.
+- Web components with closed shadow roots appear in the outline and can be clicked.
+- The MCP server exits when the AI client closes it, releasing Firefox's single WebDriver BiDi session.
+- Trusted mode survives an extension reload or Firefox restart, and a second MCP client no longer switches it off for the first.
+- A command that times out says the action may still have happened.
+- `npx kitsune-firefox` warns once if the MCP server, helper and extension versions don't match.
+- Windows: the helper and MCP server can no longer pick different pipe names on first run.
+
+**Packaging**
+- The npm package has no runtime dependencies (everything is bundled), so `npx` downloads one package instead of ~96.
+- Built add-ons and the npm bundle include LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt (Playwright's Apache-2.0 notice and the MIT/ISC notices of bundled packages).
+- The AMO source zip now includes `host/` and a BUILDING.txt; rebuilding from it gives a byte-identical add-on.
+
+**Speed and tokens**
+- Key presses and typing no longer read the text of the whole page to describe the focused element.
+- `tabs_context_mcp` mentions the input mode only when it's new to the session.
+
 ## 0.3.0 (2026-09-23)
 
 - New `gif_creator` tool records an agent session as an animated GIF, with clicks marked. `export` saves it to Downloads, or to `KITSUNE_GIF_DIR`. Only a file name is accepted, never a path, so an agent can't overwrite other files.

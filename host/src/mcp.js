@@ -237,6 +237,39 @@ async function trustedComputerInner(a, st) {
   return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }] };
 }
 
+// ---------- version check ----------
+// `npx kitsune-firefox mcp` may run a newer release than the helper copied to ~/.kitsune/app
+// or the installed extension. Say so once, instead of failing in confusing ways later.
+let lastReportedMode = null;
+let versionChecked = false;
+
+function minor(v) {
+  return String(v || '').split('.').slice(0, 2).join('.');
+}
+
+export function describeVersionMismatch(mine, helperV, extV) {
+  const bad = [];
+  if (helperV && minor(helperV) !== minor(mine))
+    bad.push(`helper ${helperV}`);
+  if (extV && minor(extV) !== minor(mine))
+    bad.push(`extension ${extV}`);
+  if (!bad.length)
+    return null;
+  return `Warning: version mismatch (MCP server ${mine}, ${bad.join(', ')}). Tell the user to run \`npx kitsune-firefox@latest setup\` and update the Kitsune extension; some tools may misbehave until then.`;
+}
+
+async function versionWarning() {
+  if (versionChecked)
+    return null;
+  versionChecked = true;
+  try {
+    const st = await helper.status();
+    return describeVersionMismatch(VERSION, st?.helper?.version, st?.extension?.version);
+  } catch {
+    return null;
+  }
+}
+
 // ---------- server ----------
 
 export async function runMcp() {
@@ -255,7 +288,14 @@ export async function runMcp() {
     const r = await call('tabs_context_mcp', a);
     if (!r.isError) {
       const trusted = await bidi.available();
-      r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : 'Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=9222 for real, trusted input).' });
+      // Only mention the input mode when it's new to this session, to keep repeated calls short.
+      if (trusted !== lastReportedMode) {
+        lastReportedMode = trusted;
+        r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : 'Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=9222 for real, trusted input).' });
+      }
+      const warn = await versionWarning();
+      if (warn)
+        r.content.push({ type: 'text', text: warn });
     }
     return r;
   });
@@ -538,6 +578,21 @@ Actions:
   });
 
   const transport = new StdioServerTransport();
+  // The SDK doesn't notice stdin closing, and the open helper/BiDi sockets would keep this
+  // process alive as an orphan that still holds Firefox's only WebDriver BiDi session.
+  let exiting = false;
+  const shutdown = async () => {
+    if (exiting)
+      return;
+    exiting = true;
+    await bidi.close().catch(() => {});
+    process.exit(0);
+  };
+  process.stdin.on('end', shutdown);
+  process.stdin.on('close', shutdown);
+  transport.onclose = shutdown;
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
   await server.connect(transport);
   helper.connect().then(() => bidi.available()).catch(() => {});
 }

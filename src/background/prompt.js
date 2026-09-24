@@ -74,3 +74,12 @@ browser.windows.onRemoved.addListener((windowId) => {
       finish(id, 'dismissed');
   }
 });
+
+/** The user paused Kitsune: answer every open question with "deny" and close the windows. */
+export function denyAllPrompts() {
+  for (const [id, e] of [...pending]) {
+    if (e.windowId != null)
+      browser.windows.remove(e.windowId).catch(() => {});
+    finish(id, 'deny');
+  }
+}

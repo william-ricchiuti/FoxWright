@@ -453,6 +453,51 @@ async function main() {
     fs.rmSync(file, { force: true });
   });
 
+  await test('password values never reach the agent', async () => {
+    await nav('/frames2.html');
+    const outline = (await call('read_page', { max_chars: 200000 })).text;
+    expect(!outline.includes('hunter2'), `password leaked in read_page:\n${outline.slice(0, 800)}`);
+    expect(/password, 14 characters/.test(outline), outline.slice(0, 800));
+    const { ref } = await refFor('Password', 'textbox');
+    const r = await call('computer', { action: 'left_click', ref });
+    expect(!r.text.includes('hunter2'), r.text);
+    const k = await call('computer', { action: 'key', text: 'End' });
+    expect(!k.text.includes('hunter2'), k.text);
+    const f = await call('find', { query: 'password' });
+    expect(!f.text.includes('hunter2'), f.text);
+  });
+
+  await test('srcdoc iframe: form_input into its field', async () => {
+    const outline = await pageHas('Coupon code');
+    const line = outline.split('\n').find(l => l.includes('textbox "Coupon code"'));
+    expect(line, outline.slice(0, 1500));
+    const ref = /\[ref=([^\]]+)\]/.exec(line)[1];
+    const r = await call('form_input', { ref, value: 'FOX10' });
+    expect(r.text.includes('FOX10'), r.text);
+    const v = await js(`document.getElementById('srcdoc-frame').contentDocument.getElementById('coupon').value`);
+    expect(v.includes('FOX10'), v);
+  });
+
+  await test('about:blank iframe editor: click + type', async () => {
+    const outline = await pageHas('Message body');
+    const line = outline.split('\n').find(l => /textbox "Message body".*\[ref=f/.test(l));
+    expect(line, `no editor ref inside the blank frame:\n${outline.slice(0, 1500)}`);
+    const ref = /\[ref=([^\]]+)\]/.exec(line)[1];
+    await call('computer', { action: 'left_click', ref });
+    await call('computer', { action: 'key', text: 'ctrl+End' });
+    await call('computer', { action: 'type', text: ' from Kitsune' });
+    const v = await js(`document.getElementById('blank-editor').contentDocument.body.innerText`);
+    expect(v.includes('from Kitsune'), v);
+  });
+
+  await test('closed shadow root: outline sees it and click works', async () => {
+    const outline = await pageHas('Secret shadow button');
+    const line = outline.split('\n').find(l => l.includes('button "Secret shadow button"'));
+    const ref = /\[ref=([^\]]+)\]/.exec(line)[1];
+    await call('computer', { action: 'left_click', ref });
+    await pageHas('Shadow clicks: 1');
+  });
+
   await test('tab outside the Kitsune group is refused', async () => {
     const r = await h.call('read_page', { tabId: 1 });
     expect(r.isError && /not in the Kitsune tab group|does not exist/.test(r.text), r.text);

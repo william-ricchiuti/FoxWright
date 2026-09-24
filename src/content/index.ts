@@ -23,6 +23,23 @@ function originOf(url: string): string | null {
   }
 }
 
+/**
+ * Origin of this document for the "same site as approved" check. about:blank and srcdoc frames
+ * (rich editors like TinyMCE and CKEditor 4, webmail composers) have no origin in their URL:
+ * they inherit their creator's, which is what the background computes too.
+ */
+function currentOrigin(): string | null {
+  if (location.protocol !== 'about:')
+    return originOf(location.href);
+  if (self.origin && self.origin !== 'null')
+    return self.origin;
+  try {
+    return originOf(window.parent.location.href); // file: parents give "null" above
+  } catch {
+    return null; // sandboxed: an opaque origin; its content came from the (approved) parent
+  }
+}
+
 /** Ask the MAIN-world hook (page-hooks.ts) for its buffer. The page can forge replies, so validate. */
 function requestDump(request: string, dump: string, detail = ''): Promise<any[]> {
   return new Promise(resolve => {
@@ -122,8 +139,15 @@ if (!g.__kitsuneContent) {
       return undefined;
     if (typeof msg.prefix === 'string')
       setRefPrefix(msg.prefix);
-    if (msg.expectOrigin && originOf(location.href) !== msg.expectOrigin)
-      return Promise.resolve({ ok: false, error: `This frame is now showing ${originOf(location.href) || location.href}, not ${msg.expectOrigin} (it navigated). Call the tool again.` });
+    const here = currentOrigin();
+    const opaqueChild = here === null && location.protocol === 'about:' && window !== window.top;
+    if (msg.expectOrigin && here !== msg.expectOrigin && !opaqueChild)
+      return Promise.resolve({ ok: false, error: `This frame is now showing ${here || location.href}, not ${msg.expectOrigin} (it navigated). Call the tool again.` });
+    if (msg.cmd === 'cancel') {
+      input.setCancelled(true);
+      return Promise.resolve({ ok: true, result: true });
+    }
+    input.setCancelled(false);
     const h = handlers[msg.cmd];
     if (!h)
       return Promise.resolve({ ok: false, error: `Unknown content command ${msg.cmd}` });

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Kitsune fixture: blank frames, passwords, closed shadow</title></head>
+<body>
+<h1>Edge cases</h1>
+
+<form id="login" onsubmit="return false">
+  <label>Username <input id="user" value="ada"></label>
+  <label>Password <input id="pw" type="password" value="hunter2-secret"></label>
+</form>
+
+<p>srcdoc frame:</p>
+<iframe id="srcdoc-frame" width="320" height="70"
+  srcdoc="<label>Coupon <input id='coupon' aria-label='Coupon code'></label>"></iframe>
+
+<p>about:blank editor (TinyMCE-style):</p>
+<iframe id="blank-editor" width="320" height="80" title="Message body"></iframe>
+
+<p>Closed shadow root:</p>
+<closed-widget id="cw"></closed-widget>
+<p id="shadow-count">Shadow clicks: 0</p>
+
+<script>
+  // about:blank iframe whose body is contenteditable, created by the parent (same origin).
+  const f = document.getElementById('blank-editor');
+  const d = f.contentDocument;
+  d.open();
+  d.write('<!doctype html><html><body contenteditable="true" aria-label="Message body" style="font:14px sans-serif"><p>Hello</p></body></html>');
+  d.close();
+
+  class ClosedWidget extends HTMLElement {
+    constructor() {
+      super();
+      const root = this.attachShadow({ mode: 'closed' });
+      const b = document.createElement('button');
+      b.textContent = 'Secret shadow button';
+      let n = 0;
+      b.addEventListener('click', () => {
+        document.getElementById('shadow-count').textContent = `Shadow clicks: ${++n}`;
+      });
+      root.append(b);
+    }
+  }
+  customElements.define('closed-widget', ClosedWidget);
+</script>
+</body>
+</html>

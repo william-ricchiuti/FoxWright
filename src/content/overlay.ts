@@ -12,7 +12,8 @@ let root: ShadowRoot | null = null;
 let hideTimer: any = null;
 
 export function isKitsuneUi(el: Element | null): boolean {
-  return !!el && (el === host || el.tagName?.toLowerCase() === HOST_TAG);
+  // Identity only: a page could name its own elements <kitsune-ui> to be skipped as decoys.
+  return !!el && el === host;
 }
 
 const CSS = `
@@ -66,6 +67,7 @@ function ensureRoot(): ShadowRoot {
   const style = document.createElement('style');
   style.textContent = CSS;
   root.appendChild(style);
+  // Appended to <html>, outside <body>, so the page outline (rooted at <body>) never includes it.
   (document.documentElement || document.body).appendChild(host);
   return root;
 }

@@ -79,7 +79,11 @@ export class Bidi {
       ws.on('open', async () => {
         this.ws = ws;
         try {
-          await this.cmd('session.new', { capabilities: {} });
+          const r = await this.cmd('session.new', { capabilities: {} });
+          // Keystrokes may include text the user gave for a login; only send them to Firefox itself.
+          const name = r?.capabilities?.browserName;
+          if (name && name.toLowerCase() !== 'firefox')
+            throw new Error(`port answered as "${name}", not Firefox`);
           this.ready = true;
           clearTimeout(timer);
           resolve();
@@ -129,15 +133,31 @@ export class Bidi {
       if (!this.ws)
         return reject(new Error('BiDi not connected'));
       const id = this.nextId++;
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
           reject(new Error(`BiDi ${method} timed out`));
         }
       }, 20000);
+      this.pending.set(id, {
+        resolve: (v) => { clearTimeout(timer); resolve(v); },
+        reject: (e) => { clearTimeout(timer); reject(e); },
+      });
+      this.ws.send(JSON.stringify({ id, method, params }));
     });
+  }
+
+  /** End the WebDriver session (Firefox allows only one) and close the socket. */
+  async close() {
+    if (!this.ws)
+      return;
+    try {
+      if (this.ready)
+        await Promise.race([this.cmd('session.end', {}), new Promise(r => setTimeout(r, 500))]);
+    } catch { /* already gone */ }
+    try {
+      this.ws?.close();
+    } catch { /* ignore */ }
   }
 
   /** Find the BiDi browsing context for a Firefox tab (and optionally one of its frames), using a probe attribute set by the extension. */

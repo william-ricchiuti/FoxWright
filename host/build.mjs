@@ -1,8 +1,10 @@
 // Bundles the CLI (helper + MCP server + setup) into one dependency-free file.
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
+import { thirdPartyNotices } from '../scripts/licenses.mjs';
 const pkg = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url)));
-await esbuild.build({
+const result = await esbuild.build({
+  metafile: true,
   entryPoints: ['src/cli.js'],
   bundle: true,
   platform: 'node',
@@ -16,4 +18,6 @@ await esbuild.build({
   logLevel: 'warning',
 });
 fs.chmodSync('dist/kitsune.mjs', 0o755);
+// MIT/ISC/Apache licenses of the bundled packages must ship with the bundle.
+fs.writeFileSync('dist/THIRD-PARTY-NOTICES.txt', thirdPartyNotices(result.metafile, process.cwd()) || 'No third-party code bundled.\n');
 console.log('built dist/kitsune.mjs', (fs.statSync('dist/kitsune.mjs').size / 1024).toFixed(0) + ' KB');

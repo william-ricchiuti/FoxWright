@@ -269,9 +269,9 @@ function withTimeout(p, ms, what) {
 }
 
 /** MAIN-world hooks: console capture + non-blocking dialogs (see src/content/page-hooks.ts). */
-export async function injectPageHooks(tabId, frameId = 0, allFrames = false) {
+export async function injectPageHooks(tabId, frameId = 0) {
   try {
-    await browser.scripting.executeScript({ target: allFrames ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] }, files: ['content/page-hooks.js'], world: 'MAIN', injectImmediately: true });
+    await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ['content/page-hooks.js'], world: 'MAIN', injectImmediately: true });
     return true;
   } catch {
     return false;
@@ -284,8 +284,10 @@ export async function ensureContent(tabId, frameId = 0) {
     if (r && r.ok)
       return;
   } catch { /* not injected yet */ }
-  const target = frameId === 0 ? { tabId, allFrames: true } : { tabId, frameIds: [frameId] };
-  await injectPageHooks(tabId, frameId, frameId === 0);
+  // One frame at a time: embedded frames (ads, payment and login widgets) only get Kitsune's scripts
+  // when a tool actually reaches into them, after their own site has been approved.
+  const target = { tabId, frameIds: [frameId] };
+  await injectPageHooks(tabId, frameId);
   try {
     await browser.scripting.executeScript({ target, files: ['content/content.js'] });
   } catch (e) {
@@ -299,12 +301,7 @@ export async function ensureContent(tabId, frameId = 0) {
         throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot.`);
       throw new Error(`Tab ${tabId} is showing a Firefox error or internal page${t.title ? ` ("${t.title}")` : ''} for ${t.url}, which extensions can't read. The site may be down or unreachable; check the URL or try navigating again.`);
     }
-    if (frameId === 0) {
-      // allFrames can fail if one sub-frame is restricted; retry the top frame only
-      await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: ['content/content.js'] });
-    } else {
-      throw e;
-    }
+    throw e;
   }
 }
 

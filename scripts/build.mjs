@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { thirdPartyNotices } from './licenses.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -30,6 +31,18 @@ const PATCHES = [
     find: 'function computeAriaRole(element: Element): AriaRole | null {\n  const explicitRole = getExplicitAriaRole(element);\n  if (!explicitRole)\n    return getImplicitAriaRole(element);',
     replace: 'function computeAriaRole(element: Element): AriaRole | null {\n  const explicitRole = getExplicitAriaRole(element);\n  // [kitsune patch] expose contenteditable roots as textboxes, as Firefox/Chrome accessibility trees do.\n  if (!explicitRole && (element as HTMLElement).isContentEditable && !(element.parentElement as HTMLElement | null)?.isContentEditable)\n    return \'textbox\';\n  if (!explicitRole)\n    return getImplicitAriaRole(element);',
   },
+  {
+    file: 'vendor/playwright/injected/ariaSnapshot.ts',
+    find: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      result.children = [element.value];",
+    replace: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      // [kitsune patch] never show password values to the agent (Firefox autofills saved logins into the DOM).\n      result.children = [element.type === 'password' ? (element.value ? `(password, ${element.value.length} characters)` : '') : element.value];",
+  },
+  // [kitsune patch] see closed shadow roots too. Firefox gives content scripts `openOrClosedShadowRoot`.
+  ...['ariaSnapshot.ts', 'roleUtils.ts'].map(f => ({
+    file: `vendor/playwright/injected/${f}`,
+    find: /if \(element\.shadowRoot\) \{\n(\s*)for \(let child = element\.shadowRoot\.firstChild;/,
+    replace: 'if (kitsuneShadowRoot(element)) {\n$1for (let child = kitsuneShadowRoot(element)!.firstChild;',
+    append: '\n// [kitsune patch]\nfunction kitsuneShadowRoot(e: Element): ShadowRoot | null {\n  return (e as any).openOrClosedShadowRoot ?? e.shadowRoot;\n}\n',
+  })),
 ];
 
 const patchPlugin = {
@@ -39,9 +52,10 @@ const patchPlugin = {
       let src = fs.readFileSync(args.path, 'utf8');
       for (const p of PATCHES) {
         if (args.path.endsWith(p.file.split('/').join(path.sep))) {
-          if (!src.includes(p.find))
+          const applies = typeof p.find === 'string' ? src.includes(p.find) : p.find.test(src);
+          if (!applies)
             throw new Error(`Vendored patch no longer applies to ${p.file}; update scripts/build.mjs`);
-          src = src.replace(p.find, p.replace);
+          src = src.replace(p.find, p.replace) + (p.append || '');
         }
       }
       return { contents: src, loader: 'ts' };
@@ -76,9 +90,18 @@ async function buildTarget(key) {
     plugins: [patchPlugin],
     define: { __KITSUNE_FULL__: JSON.stringify(t.full), __KITSUNE_VERSION__: JSON.stringify(readVersion()) },
   };
-  await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/content/index.ts')], format: 'iife', outfile: path.join(out, 'content/content.js') });
-  await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/content/page-hooks.ts')], format: 'iife', outfile: path.join(out, 'content/page-hooks.js') });
-  await esbuild.build({ ...common, entryPoints: [path.join(root, 'src/background/index.js')], format: 'iife', outfile: path.join(out, 'background.js') });
+  const inputs = {};
+  for (const [entry, outfile] of [['src/content/index.ts', 'content/content.js'], ['src/content/page-hooks.ts', 'content/page-hooks.js'], ['src/background/index.js', 'background.js']]) {
+    const r = await esbuild.build({ ...common, metafile: true, entryPoints: [path.join(root, entry)], format: 'iife', outfile: path.join(out, outfile) });
+    Object.assign(inputs, r.metafile.inputs);
+  }
+
+  // License files the shipped add-on must carry: Kitsune's own, and Playwright's (Apache-2.0 §4),
+  // plus any npm packages that got bundled.
+  fs.copyFileSync(path.join(root, 'LICENSE'), path.join(out, 'LICENSE'));
+  fs.copyFileSync(path.join(root, 'NOTICE'), path.join(out, 'NOTICE'));
+  const playwright = `Playwright (vendored, modified at build time; see NOTICE)\nLicense: Apache-2.0\n\n${fs.readFileSync(path.join(root, 'vendor/playwright/NOTICE'), 'utf8').trim()}\n\n${fs.readFileSync(path.join(root, 'vendor/playwright/LICENSE'), 'utf8').trim()}`;
+  fs.writeFileSync(path.join(out, 'THIRD-PARTY-NOTICES.txt'), thirdPartyNotices({ inputs }, root, [playwright]));
 
   const manifestPath = path.join(out, 'manifest.json');
   const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));

@@ -24,9 +24,20 @@ export function socketPath() {
       id = fs.readFileSync(idFile, 'utf8').trim();
     } catch { /* first run */ }
     if (!id || !/^[a-f0-9]{32}$/.test(id)) {
-      id = crypto.randomBytes(16).toString('hex');
+      // The helper and an MCP server may both get here on first run. Create the file exclusively
+      // ('wx') and, if the other process won, use its id, so both end up on the same pipe.
       fs.mkdirSync(kitsuneDir(), { recursive: true });
-      fs.writeFileSync(idFile, id);
+      const fresh = crypto.randomBytes(16).toString('hex');
+      try {
+        fs.writeFileSync(idFile, fresh, { flag: 'wx' });
+        id = fresh;
+      } catch {
+        id = fs.readFileSync(idFile, 'utf8').trim();
+        if (!/^[a-f0-9]{32}$/.test(id)) {
+          fs.writeFileSync(idFile, fresh); // corrupt file: replace it
+          id = fresh;
+        }
+      }
     }
     return `\\\\.\\pipe\\kitsune-${id}`;
   }

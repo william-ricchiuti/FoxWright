@@ -46,8 +46,8 @@ function frameIdOf(el: Element): number {
 export function elementAt(x: number, y: number): Element | null {
   const all = document.elementsFromPoint(x, y).filter(e => !isKitsuneUi(e));
   let el: Element | null = all[0] || null;
-  while (el && (el as any).shadowRoot) {
-    const inner = ((el as any).shadowRoot as ShadowRoot).elementFromPoint(x, y);
+  while (el && shadowOf(el)) {
+    const inner = shadowOf(el)!.elementFromPoint(x, y);
     if (!inner || inner === el)
       break;
     el = inner;
@@ -71,9 +71,14 @@ function iframeForward(el: Element | null, x: number, y: number): Forward | null
 
 function deepActiveElement(): Element | null {
   let a: Element | null = document.activeElement;
-  while (a && (a as any).shadowRoot && (a as any).shadowRoot.activeElement)
-    a = (a as any).shadowRoot.activeElement;
+  while (a && shadowOf(a)?.activeElement)
+    a = shadowOf(a)!.activeElement;
   return a;
+}
+
+/** Open or closed shadow root (Firefox exposes closed ones to content scripts). */
+export function shadowOf(el: Element): ShadowRoot | null {
+  return (el as any).openOrClosedShadowRoot ?? el.shadowRoot;
 }
 
 export function describe(el: Element | null): string {
@@ -82,7 +87,11 @@ export function describe(el: Element | null): string {
   const tag = el.tagName.toLowerCase();
   const id = el.id ? `#${el.id}` : '';
   const role = el.getAttribute('role');
-  const label = (el.getAttribute('aria-label') || (el as HTMLElement).innerText || (el as HTMLInputElement).value || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  const isPassword = el instanceof HTMLInputElement && el.type === 'password';
+  // textContent (not innerText): innerText forces layout of the whole subtree, and the focused element is often <body>.
+  const text = tag === 'body' || tag === 'html' ? '' : (el.textContent || '').slice(0, 200);
+  const value = isPassword ? '' : (el as HTMLInputElement).value;
+  const label = (el.getAttribute('aria-label') || text.trim() || value || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
   return `<${tag}${id}${role ? ` role=${role}` : ''}>${label ? ` "${label}"` : ''}`;
 }
 
@@ -312,8 +321,16 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
       // Real browsers move focus on mousedown; synthetic events don't.
       const f = focusableAncestor(target);
       const active = deepActiveElement();
-      if (f && f !== active)
+      // In a frame whose document isn't focused yet (an about:blank editor whose <body> is already
+      // its activeElement), focus the frame's window too, so the parent's focus moves into it.
+      if (f && (f !== active || !document.hasFocus())) {
+        if (window !== window.top && !document.hasFocus()) {
+          try {
+            window.focus();
+          } catch { /* ignore */ }
+        }
         f.focus();
+      }
       else if (!f && active && active !== document.body)
         (active as HTMLElement).blur?.();
       if (f && isTextField(f) && i === 1) {
@@ -823,10 +840,17 @@ function focusedFrameForward(): Forward | null {
   return null;
 }
 
+// Set by the user's Stop/Pause (via the background); checked between keystrokes and gesture steps
+// so long typing or drags stop promptly instead of running to the end.
+let cancelled = false;
+export function setCancelled(v: boolean) {
+  cancelled = v;
+}
+
 /** Let the page's microtasks/timers run between keystrokes. Editors like Lexical and
  * ProseMirror update their model asynchronously; typing a whole string inside one task
- * would feed them stale selections. */
-const tick = () => new Promise(r => setTimeout(r, 0));
+ * would feed them stale selections. Throws once the user has pressed Stop. */
+const tick = () => new Promise<void>((resolve, reject) => setTimeout(() => cancelled ? reject(new Error('Stopped: the user paused Kitsune.')) : resolve(), 0));
 
 export async function pressKeys(args: { text: string; repeat?: number }): Promise<any> {
   const fwd = focusedFrameForward();

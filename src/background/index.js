@@ -4,7 +4,7 @@ import { state, loadSettings, saveSettings, publicStatus, updateBadge } from './
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
 import { groupTabs, isAllowed, originOf, injectPageHooks } from './tabs.js';
-import { handlePromptMessage } from './prompt.js';
+import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
 
 const PUBLIC_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'get_page_text', 'computer', 'javascript_tool', 'read_console_messages', 'read_network_requests', 'handle_dialog', 'resize_window', 'file_upload']);
@@ -19,13 +19,24 @@ onRequest(async (tool, args) => {
   if (!fn || (!PUBLIC_TOOLS.has(tool) && !tool.startsWith('_')))
     throw new Error(`Unknown tool ${tool}`);
   if (state.paused && tool !== '_status')
-    throw new Error('Kitsune is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Kitsune toolbar popup if they want you to carry on.');
-  return fn(args);
+    throw new Error(PAUSED_MSG);
+  const result = await fn(args);
+  // Stop pressed while this command ran: don't report success for an interrupted action.
+  if (state.paused && !tool.startsWith('_'))
+    throw new Error(PAUSED_MSG);
+  return result;
 });
+
+const PAUSED_MSG = 'Kitsune is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Kitsune toolbar popup if they want you to carry on.';
 
 // ---------- messages from the popup and in-page UI ----------
 async function pauseAgent() {
   state.paused = true;
+  // Stop work already in progress, not just new commands: open permission windows are denied
+  // and content scripts abandon typing/drag loops at their next step.
+  denyAllPrompts();
+  for (const id of state.groupTabIds)
+    browser.tabs.sendMessage(id, { kitsune: true, cmd: 'cancel' }).catch(() => {});
   await saveSettings();
   await updateBadge();
   send({ type: 'event', event: 'paused' });
@@ -52,8 +63,8 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
       await groupTabs();
       return publicStatus();
     case 'pause':
-      state.paused = true;
-      break;
+      await pauseAgent();
+      return publicStatus();
     case 'resume':
       state.paused = false;
       break;

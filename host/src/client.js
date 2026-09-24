@@ -9,6 +9,7 @@ export class HelperClient {
     this.pending = new Map();
     this.nextId = 1;
     this.listeners = new Set();
+    this.bidiState = null; // last trusted-input state, re-sent on every (re)connect
   }
 
   onEvent(fn) {
@@ -27,6 +28,9 @@ export class HelperClient {
       s.once('connect', () => {
         this.socket = s;
         this.connecting = null;
+        // A new helper (extension reload, Firefox restart) doesn't know this client's trusted-input state yet.
+        if (this.bidiState !== null)
+          s.write(JSON.stringify({ type: 'bidi', available: this.bidiState }) + '\n');
         resolve();
       });
       s.on('data', (d) => {
@@ -85,7 +89,7 @@ export class HelperClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Firefox did not answer within ${Math.round(timeoutMs / 1000)}s.`));
+        reject(new Error(`Firefox did not answer within ${Math.round(timeoutMs / 1000)}s. The action may still have happened: check the page (read_page or a screenshot) before retrying.`));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       this.socket.write(JSON.stringify({ ...obj, id }) + '\n');
@@ -101,6 +105,7 @@ export class HelperClient {
   }
 
   notifyBidi(available) {
+    this.bidiState = available;
     if (this.socket && !this.socket.destroyed)
       this.socket.write(JSON.stringify({ type: 'bidi', available }) + '\n');
   }

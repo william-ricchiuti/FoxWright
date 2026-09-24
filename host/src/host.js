@@ -86,7 +86,16 @@ let nextClient = 1;
 let nextId = 1;
 let extensionInfo = null;
 let serverError = null;
-let bidiAvailable = false;
+let bidiAvailable = false; // true if any connected MCP server has trusted input
+const VERSION = typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0';
+
+function updateBidi() {
+  const any = [...clients.values()].some(c => c.bidi);
+  if (any !== bidiAvailable) {
+    bidiAvailable = any;
+    writeToExtension({ type: 'bidi', available: bidiAvailable });
+  }
+}
 
 function sendClient(clientId, obj) {
   const c = clients.get(clientId);
@@ -104,12 +113,14 @@ function onClientMessage(clientId, msg) {
     pending.set(gid, { clientId, id: msg.id });
     writeToExtension({ type: 'request', id: gid, tool: msg.tool, args: msg.args || {} });
   } else if (msg.type === 'status') {
-    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, clients: clients.size, pid: process.pid });
+    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clients.size, pid: process.pid });
   } else if (msg.type === 'bidi') {
-    if (bidiAvailable !== !!msg.available) {
-      bidiAvailable = !!msg.available;
-      writeToExtension({ type: 'bidi', available: bidiAvailable });
-    }
+    // Per client: Firefox allows one BiDi session, so a second MCP server may not have one
+    // while the first still does.
+    const c = clients.get(clientId);
+    if (c)
+      c.bidi = !!msg.available;
+    updateBidi();
   }
 }
 
@@ -140,9 +151,12 @@ function prepareSocketDir() {
     return;
   const dir = path.dirname(socketPath());
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  try {
-    fs.chmodSync(dir, 0o700);
-  } catch { /* ignore */ }
+  // Only tighten our own folder: KITSUNE_SOCKET could point into $HOME or a shared directory.
+  if (path.resolve(dir) === path.resolve(kitsuneDir())) {
+    try {
+      fs.chmodSync(dir, 0o700);
+    } catch { /* ignore */ }
+  }
 }
 
 function listen() {
@@ -179,6 +193,7 @@ function listen() {
           pending.delete(gid);
       log(`client ${clientId} disconnected`);
       broadcastClientCount();
+      updateBidi();
     };
     socket.on('close', bye);
     socket.on('error', bye);
