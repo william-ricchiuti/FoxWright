@@ -1,78 +1,64 @@
 # Releasing Kitsune
 
-Most of this is done already. What's left needs your accounts. In order:
+The code side is automated. What's left needs your accounts. `X.Y.Z` below is the new version.
 
-## 1. GitHub (about 5 minutes)
+## Every release
 
-1. Create an empty public repo at <https://github.com/new> named `Kitsune`, under `william-ricchiuti` (already created). Don't add a README, license or .gitignore; the project already has them.
-2. From `~/Desktop/Projects/kitsune`:
+1. Make sure `main` is green in CI (GitHub → Actions).
+2. Run the checks that CI can't:
    ```sh
-   git remote add origin https://github.com/william-ricchiuti/Kitsune.git
-   git push -u origin main
+   export FIREFOX=/path/to/firefox
+   node test/agent-eval.mjs            # a real agent, about $1.50–2 of Claude usage; also --trusted, --ask
+   bash scripts/mac-test.sh quick      # on the Mac
    ```
-   If your branch is called `master`, first run `git branch -m main`.
-3. On the repo page, fill in:
-   - **Description:** "Let Claude and other AI agents drive your real Firefox (MCP). The Firefox answer to Claude in Chrome."
-   - **Topics:** `firefox`, `mcp`, `claude`, `browser-automation`, `webextension`, `ai-agents`
-4. Create a release: `git tag v0.2.0 && git push --tags`. On GitHub, open **Releases → Draft a new release**, pick the tag, and attach `dist/zips/kitsune-full-0.2.0.zip` (renamed `.xpi` once it's signed; see step 3). Paste the 0.2.0 section of `CHANGELOG.md` as the notes.
+   and the items in [MANUAL-CHECKS.md](MANUAL-CHECKS.md) that the change touches.
+3. Set the version and date:
+   ```sh
+   node scripts/version.mjs bump X.Y.Z   # package.json, host/package.json, extension/manifest.json, CHANGELOG
+   npm install && npm install --prefix host   # refresh the lockfiles
+   git commit -am "X.Y.Z" && git tag vX.Y.Z && git push && git push --tags
+   ```
+4. The tag starts `.github/workflows/release.yml`. It builds and lints everything, creates a GitHub release with `kitsune-store-X.Y.Z.zip`, `kitsune-full-X.Y.Z.zip` and `kitsune-source-X.Y.Z.zip` and the CHANGELOG section as notes, and, once the secrets below exist, also signs the full build and publishes to npm.
+5. Submit the store build on addons.mozilla.org (below).
 
-## 2. npm (about 5 minutes)
+## One-time setup
 
-The package is the helper plus MCP server that `npx kitsune-firefox setup` runs.
+### npm (about 5 minutes)
 
-```sh
-cd host
-npm login                  # one time
-npm run build
-npm publish --access public
-```
+The npm package `kitsune-firefox` is the helper plus MCP server that `npx kitsune-firefox setup` runs.
 
-The name `kitsune-firefox` was free on 2026-09-23. If it's taken by the time you publish, change `name` in `host/package.json` and every `npx kitsune-firefox` in the README and docs.
+- First publish by hand, from the repository folder:
+  ```sh
+  npm login
+  npm run build --prefix host
+  cd host && npm publish --access public
+  ```
+- Then, for automatic publishing, create an **automation** token at npmjs.com → Access Tokens and add it to the GitHub repo as the secret `NPM_TOKEN` (Settings → Secrets and variables → Actions).
+- The name `kitsune-firefox` was free on 2026-09-23. If it's taken when you publish, change `name` in `host/package.json` and every `npx kitsune-firefox` in the README and docs.
+- Check it worked on another machine, or after `npx clear-npx-cache`: `npx kitsune-firefox@latest doctor`.
 
-Check it worked on another machine, or after `npx clear-npx-cache`: `npx kitsune-firefox@latest doctor`.
-
-## 3. addons.mozilla.org
+### addons.mozilla.org
 
 1. Make or sign in to a Firefox account at <https://addons.mozilla.org/developers/>.
-2. Build the files:
-   ```sh
-   npm run package                   # → dist/zips/kitsune-store-0.2.0.zip (and full)
-   bash scripts/make-source-zip.sh   # → dist/zips/kitsune-source-0.2.0.zip
-   ```
-3. **Listed store build:**
-   - Go to *Submit a New Add-on → On this site*, upload `kitsune-store-0.2.0.zip` and choose **Firefox (desktop) only**.
-   - When asked about source code, upload `kitsune-source-0.2.0.zip`.
-   - Paste the reviewer notes from `docs/AMO-SUBMISSION.md`.
-   - Set the privacy policy to the text of `PRIVACY.md`, or link it on GitHub.
-   - Screenshots: `test/results/permission-window.png`, `activity-glow.png` and the popup. Frames from `docs/demo.gif` also work.
-   - Expect a manual review, because of `nativeMessaging` + `<all_urls>`. That can take days to a few weeks.
-4. **Full build (optional, self-distributed):**
-   - Create API keys at <https://addons.mozilla.org/developers/addon/api/key/>, then:
-     ```sh
-     npx web-ext sign --channel=unlisted --source-dir dist/full --api-key $AMO_JWT_ISSUER --api-secret $AMO_JWT_SECRET
-     ```
-   - Attach the signed `.xpi` to the GitHub release.
-   - `docs/AMO-SUBMISSION.md` explains why this build carries some policy risk.
+2. For automatic signing of the full build, create API keys at <https://addons.mozilla.org/developers/addon/api/key/> and add them to GitHub as the secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`.
 
-## 4. Let people know
+## Submitting the store build (each release)
 
-- **Post:** a short write-up with the demo GIF and the agent-evaluation table. Places where Firefox + AI-agent users are:
+1. From the GitHub release, download `kitsune-store-X.Y.Z.zip` and `kitsune-source-X.Y.Z.zip` (or build them yourself: `npm run package && bash scripts/make-source-zip.sh`).
+2. On AMO: *Submit a New Add-on* (first time) or *Upload New Version*, choose **On this site** and **Firefox (desktop) only**, and upload the store zip.
+3. When asked for source code, upload the source zip.
+4. Paste the reviewer notes from [AMO-SUBMISSION.md](AMO-SUBMISSION.md), and (first time) the listing text and screenshots from [amo/LISTING.md](amo/LISTING.md).
+5. Expect a manual review, because of `nativeMessaging` + `<all_urls>`. That can take days to a few weeks.
+
+The full build (with `javascript_tool`) is not listed on AMO; AMO-SUBMISSION.md explains why. The release workflow signs it as "unlisted" and attaches the `.xpi` to the GitHub release.
+
+## Let people know (first release)
+
+- **Where:**
   - Hacker News (Show HN)
   - r/firefox
   - r/ClaudeAI
-  - the MCP servers lists: github.com/modelcontextprotocol/servers, mcpservers.org, glama.ai
+  - MCP server lists: github.com/modelcontextprotocol/servers, mcpservers.org, glama.ai
   - X
-- **Angle:** "Claude in Chrome, but for Firefox, with a real-agent benchmark" is concrete and checkable.
+- **Angle:** "Claude in Chrome, but for Firefox, with a real-agent benchmark" is concrete and checkable. Include the demo GIF and the agent-evaluation table.
 - **MCP directories** usually want a one-line description, the install command (`npx kitsune-firefox setup`) and the repo link.
-
-## 5. Before each later release
-
-```sh
-npm run build && node host/dist/kitsune.mjs setup
-node test/e2e.mjs && KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
-node test/e2e-permissions.mjs && node test/e2e-store.mjs && node test/e2e-resilience.mjs
-node test/agent-eval.mjs          # about $1.50 of Claude usage
-npx web-ext lint --source-dir dist/store
-```
-
-Bump `version` in `package.json`, `host/package.json` and `extension/manifest.json` together, and add a `CHANGELOG.md` entry.

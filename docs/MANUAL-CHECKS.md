@@ -15,7 +15,8 @@ Before starting, install the extension (`dist/full` via `about:debugging` → *L
 ## Linux distributions
 
 - **Mozilla's .deb or tarball Firefox:** same steps as Windows 1–3.
-- **Snap or Flatpak Firefox:** check whether the helper starts at all. If it doesn't, the README's warning is right; note the distro.
+- **Snap or Flatpak Firefox:** check whether the helper starts at all (setup also writes the Flatpak manifest location). If it doesn't, the README's warning is right; note the distro and Firefox version.
+- **LibreWolf / Waterfox / Floorp:** setup registers the helper with them when they're installed. Check the toolbar fox loses its `!` badge.
 
 ## Sites you're logged into (your real profile)
 
@@ -32,8 +33,11 @@ Use your normal Firefox profile, and approve each site when asked. Say "stop" or
 
 ## Safety checks worth repeating before each release
 
-- [ ] **Unapproved sites.** A new site shows the Kitsune window. *Deny* makes the tool call fail, and Claude says so.
-- [ ] **Stop controls.** Pressing *Stop* in the page pill, the toolbar *Pause*, or **Alt+Shift+K** makes every later call fail with "paused".
+`test/e2e-safety.mjs` now covers the permission-window buttons, revoking a site, Pause/Resume from the popup (also mid-typing and with a prompt open) and upload approval automatically. These still need a person:
+
+- [ ] **Unapproved sites.** A new site shows the Kitsune window, and its buttons only respond after a moment. *Deny* makes the tool call fail, and Claude says so.
+- [ ] **Stop controls.** Pressing *Stop* in the page pill or **Alt+Shift+K** makes every later call fail with "paused". Pressing it while Claude is typing a long text stops the typing.
+- [ ] **Dialogs when you use the tab.** In an agent tab, click something that shows a JavaScript confirm yourself, a minute after the agent last acted: the real dialog appears.
 - [ ] **Tabs outside the group.** A tab you drag *out* of the orange group can't be used. One you drag *in* can.
 - [ ] **Uploads.** `file_upload` of a normal file asks you first. `~/.ssh/id_ed25519` is refused without asking.
 - [ ] **Hostile pages.** A page can't change what the permission window says or press its buttons. A page that covers the in-page pill doesn't stop Alt+Shift+K from working.

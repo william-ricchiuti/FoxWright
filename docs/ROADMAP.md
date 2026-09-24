@@ -55,17 +55,17 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 
 ## 6. Install and cross-platform
 
-- [ ] 33. Install-from-source path in README until npm/AMO are live
-- [~] 34. Windows/Ubuntu instructions; Flatpak manifest location — setup also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when present, and the Snap warning links Mozilla's install guide; README per-OS instructions still to do
+- [x] 33. Install-from-source path in README until npm/AMO are live — README "install from source" section (build, about:debugging, Developer Edition for a persistent install)
+- [x] 34. Windows/Ubuntu instructions; Flatpak manifest location — setup also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when present, and the Snap warning links Mozilla's install guide; README now has per-OS commands (Windows paths, PowerShell) and the Snap/Flatpak note at the top of Install
 - [x] 35. `uninstall` leaves Claude entries and `~/.kitsune` — also removes Claude Code / Desktop entries, extra browser manifests and ~/.kitsune
 
 ## 7. Docs, listing, project files
 
-- [ ] 36. Outdated docs (test counts, TESTING.md title, RELEASE.md 0.2.0 and personal path, test/README)
-- [ ] 37. AMO listing copy + screenshots in `docs/amo/`
-- [ ] 38. PRIVACY.md gaps; data-collection declaration
-- [ ] 39. SECURITY.md, CONTRIBUTING.md, issue templates, version-bump script, release workflow
-- [ ] 40. Tone down claims (Claude in Chrome compatibility, comparison table, eval wording)
+- [x] 36. Outdated docs (test counts, TESTING.md title, RELEASE.md 0.2.0 and personal path, test/README) — TESTING.md retitled and updated (57/57, speed table, what's still not covered), test/README rewritten, RELEASE.md uses X.Y.Z and no personal path, old e2e-realsites.mjs deleted, README dev section and counts updated
+- [x] 37. AMO listing copy + screenshots in `docs/amo/` — docs/amo/LISTING.md (summary, description, categories, support, screenshot captions) and three 1280×800 screenshots made from the real UI by scripts/amo-screenshots.mjs
+- [x] 38. PRIVACY.md gaps; data-collection declaration — PRIVACY.md covers GIFs, uploads going to the site, in-tab console/network buffers, trusted-mode local connection, GitHub/SECURITY contact; AMO notes explain the data-collection choice
+- [x] 39. SECURITY.md, CONTRIBUTING.md, issue templates, version-bump script, release workflow — SECURITY.md, CONTRIBUTING.md, bug + site-compatibility issue templates, PR template, scripts/version.mjs (check/bump), release workflow (build, GitHub release with zips, optional unlisted signing and npm publish via secrets)
+- [x] 40. Tone down claims (Claude in Chrome compatibility, comparison table, eval wording) — Claude in Chrome wording now "compatible with the core tools" with the differences listed; comparison table adds Playwright MCP and a "your real profile?" column, dated September 2026; eval section says one run each, demo sites, no prompts
 
 ## Later / ideas
 
@@ -85,3 +85,4 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 - 18, 19, 22, 23 done; 20 partly. New `test/bench-actions.mjs`. e2e 55/55 both modes (synthetic 3 runs in a row); permissions 5/5, resilience 5/5, store 2/2. BiDi retry backoff 15 s → 5 s (Firefox may still be starting).
 - 24, 29 (most), 31, 32, 35 done; 34 partly. Found and fixed while testing: permission-window buttons were clickable before its script ran (now disabled in the HTML); typing in a background tab ran at one character per second (timer throttling), now unthrottled. e2e 57/57, safety 7/7, resilience 5/5, idle ok.
 - 30 done: agent-eval verifiers tightened, --ask/--repeat, signup-wizard task; test/bidi-driver.mjs shared by e2e-safety and agent-eval.
+- 33, 34, 36–40 done (docs, listing, screenshots, project files, release workflow).

@@ -14,7 +14,13 @@
     "test:trusted": "KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs",
     "test:permissions": "node test/e2e-permissions.mjs",
     "test:store": "node test/e2e-store.mjs",
-    "test:idle": "node test/e2e-idle.mjs"
+    "test:idle": "node test/e2e-idle.mjs",
+    "test:safety": "node test/e2e-safety.mjs",
+    "test:resilience": "node test/e2e-resilience.mjs",
+    "test:all": "node test/e2e.mjs && KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs && node test/e2e-safety.mjs && node test/e2e-permissions.mjs && node test/e2e-store.mjs && node test/e2e-resilience.mjs",
+    "bench": "node test/bench-actions.mjs",
+    "screenshots": "node scripts/amo-screenshots.mjs",
+    "version:check": "node scripts/version.mjs check"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",

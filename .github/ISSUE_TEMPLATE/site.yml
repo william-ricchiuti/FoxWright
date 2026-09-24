@@ -1,0 +1,30 @@
+name: Site doesn't work
+description: A website where the agent can't read, click, type or fill something
+labels: [site-compatibility]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: URL (a public page if possible)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What the agent tried, and what went wrong
+      description: E.g. "clicked the Continue button, nothing happened"; paste the tool call and its result if you have them.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Input mode (shown in the toolbar popup)
+      options: [Synthetic events, Trusted (WebDriver BiDi), Both, Not sure]
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Kitsune version, Firefox version and OS
+    validations:
+      required: true

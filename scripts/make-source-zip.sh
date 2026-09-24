@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 VERSION=$(node -p "require('./package.json').version")
 mkdir -p dist/zips
 OUT="dist/zips/kitsune-source-$VERSION.zip"
-rm -f "$OUT"
+rm -f dist/zips/kitsune-source-*.zip  # also older versions, so the wrong one can't be uploaded
 NODE_V=$(node -v)
 NPM_V=$(npm -v)
 cat > BUILDING.txt <<TXT

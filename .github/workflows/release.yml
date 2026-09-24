@@ -1,0 +1,57 @@
+name: Release
+
+# Push a tag like v0.4.0 (after `node scripts/version.mjs bump 0.4.0` and a commit) to:
+#  - build and lint both extension builds, the source zip and the npm package
+#  - create a GitHub release with the zips and the CHANGELOG section as notes
+#  - if the AMO_JWT_ISSUER / AMO_JWT_SECRET secrets are set: sign the full build (unlisted) and attach the .xpi
+#  - if the NPM_TOKEN secret is set: publish kitsune-firefox to npm
+# The listed (store) build is still submitted by hand on addons.mozilla.org: docs/AMO-SUBMISSION.md.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+      AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Install
+        run: |
+          npm ci
+          npm ci --prefix host
+      - name: Tag matches the version in all three files
+        run: |
+          node scripts/version.mjs check
+          test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - name: Build, lint and package
+        run: |
+          npm run build
+          npx web-ext lint --source-dir dist/store
+          npm run package
+          bash scripts/make-source-zip.sh
+          VERSION=$(node -p "require('./package.json').version")
+          awk -v v="$VERSION" '$0 ~ "^## "v" " {on=1; next} on && /^## / {exit} on' CHANGELOG.md > release-notes.md
+      - name: Sign the full build (unlisted)
+        if: env.AMO_JWT_ISSUER != ''
+        run: npx web-ext sign --channel=unlisted --source-dir dist/full --artifacts-dir dist/signed --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "Kitsune ${GITHUB_REF_NAME#v}" --notes-file release-notes.md dist/zips/*-"${GITHUB_REF_NAME#v}".zip $(ls dist/signed/*.xpi 2>/dev/null)
+      - name: Publish to npm
+        if: env.NODE_AUTH_TOKEN != ''
+        working-directory: host
+        run: npm publish --access public

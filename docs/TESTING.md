@@ -1,30 +1,43 @@
-# Test report: Kitsune 0.1.0
+# Test report: Kitsune
 
-_Run on 2026-09-23 with Firefox 156.0.1 (Linux, headless and Xvfb) and Node 22._
+_Latest run: the post-0.3.0 review work (unreleased), 2026-09-23, Firefox 156.0.1 on Linux (headless) and Node 22. Earlier sections are marked with the version they were measured on._
 
 Every test drives Kitsune the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
 - **synthetic**: the extension alone.
 - **trusted**: Firefox started with `--remote-debugging-port`, so input goes through WebDriver BiDi.
 
-## Summary
+## Summary (latest)
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
-| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes, drag-and-drop, keys, console, network, tabs) | **43/43** | **43/43** |
-| `realsites.mjs`: 51 tasks on 25 real websites | **49/51** | **49/51** |
-| `e2e-permissions.mjs`: approval windows, frame gating, uploads | 5/5 | n/a |
+| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **57/57** | **57/57** |
+| `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval) | **7/7** | n/a |
+| `e2e-permissions.mjs`: approval timeouts, frame gating, uploads | 5/5 | n/a |
 | `e2e-resilience.mjs`: concurrency, latency, crash/restart recovery | 5/5 | n/a |
 | `e2e-store.mjs`: the addons.mozilla.org build | 2/2 | n/a |
 | `e2e-idle.mjs`: works after the event page's idle timeout | pass | n/a |
-| `web-ext lint` (store and full builds) | 0 errors (1 ignorable Android warning) | n/a |
+| `realsites.mjs`: 51 tasks on 25 real websites (0.2.0) | **49/51** | **49/51** |
+| `web-ext lint` (store and full builds) | 0 errors | n/a |
+
+### Speed (`test/bench-actions.mjs`, local fixture, median of 15)
+
+| Call | 0.3.0 | Now |
+|---|---|---|
+| click a button (no page load) | 323 ms | 120 ms |
+| type 10 characters | 347 ms | 46 ms |
+| press Tab | 318 ms | 25 ms |
+| click a link that loads a page | 258 ms | 114 ms |
+| `read_page` / `find` / screenshot | 26 / 24 / 55 ms | about the same |
+
+The gain comes from waiting on Firefox's navigation events, only as long as the action could start a page load, instead of fixed sleeps. Typing in a tab that isn't in front no longer runs at one character per second.
 
 The 2 real-site failures in each mode come from the test sandbox's network, not from Kitsune:
 
 - **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Kitsune opened the search dialog and typed the query; the dialog showed "No results".
 - **DuckDuckGo**: it served a blank page to the sandbox's data-center IP in 3 of 4 runs. It passed in the one run where the page loaded.
 
-## Real-agent evaluation (Claude Code)
+## Real-agent evaluation (Claude Code, 0.2.0 → 0.3.0)
 
 `test/agent-eval.mjs` runs `claude -p` with only Kitsune's tools enabled. Everything else is blocked: WebFetch, Bash, file tools and Claude in Chrome. After each task, an independent verifier checks the result through Kitsune's own tools: the page state, the tabs that are open and the answer.
 
@@ -48,13 +61,15 @@ What the transcripts showed, and what fixed each problem:
 
 The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-trusted.md`.
 
-## macOS run (your MacBook Pro)
+**Since 0.3.0** the checks are stricter and there's a 17th, local task (`signup-wizard`: validation errors, three steps, a code that depends on every answer). A partial run in the sandbox passed `signup-wizard`, `todos`, `rich-editor` and `two-tabs` under the new checks. `docs-search` now fails in the sandbox, correctly: react.dev's search (Algolia) is blocked there, and the new check requires the agent to have actually used the search. A full run on a normal network (`node test/agent-eval.mjs`, and `--trusted`, `--ask`) is still to do.
+
+## macOS run (0.2.0, your MacBook Pro)
 
 macOS 26.5.1 on Apple Silicon, Firefox 155.0.1 (a throwaway copy made by `scripts/mac-test.sh`), Node 22.22.3.
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
-| `e2e.mjs` | 43/43 | 43/43 |
+| `e2e.mjs` (43 tests at the time) | 43/43 | 43/43 |
 | `realsites.mjs` | 50/51 | 50/51 |
 | permissions / store / resilience / idle | 5/5 · 2/2 · 5/5 · pass | n/a |
 
@@ -94,7 +109,7 @@ macOS 26.5.1 on Apple Silicon, Firefox 155.0.1 (a throwaway copy made by `script
 10. **Navigations weren't always reported.** Some page navigations start a moment after a click or Enter, and Kitsune now watches for them before reporting.
 11. **`read_page` was huge on long pages.** Wikipedia's full outline is about 500 KB. The new `visible_only` option returns just what's on screen: 14.7 KB instead of 512 KB on Wikipedia's Red fox article.
 
-## Performance (local page, 15 rounds)
+## Performance (0.2.0, local page, 15 rounds)
 
 | Tool | p50 | p95 |
 |---|---|---|
@@ -107,7 +122,7 @@ Click latency includes about 300 ms spent watching for a navigation the click mi
 
 ### Outline size on real sites
 
-| Page | Interactive only | Visible only | Full (default 50k cap) |
+| Page | Interactive only | Visible only | Full (0.2.0's 50k cap; now 20k) |
 |---|---|---|---|
 | Wikipedia article | 191k | **14.7k** | 50k (truncated from 513k) |
 | Amazon home | 18.5k | 14.1k | 43k |
@@ -125,8 +140,10 @@ Click latency includes about 300 ms spent watching for a navigation the click mi
 
 ## Not covered yet
 
-- **Other platforms.** macOS and Windows haven't been tested. The code paths are written, and the native-messaging locations and named pipe follow Mozilla's docs.
+- **Windows.** The code paths (named pipe, registry, `.bat` launcher) are written and CI now installs the npm package on Windows, but the extension hasn't been driven on Windows. [MANUAL-CHECKS.md](MANUAL-CHECKS.md) has the checklist.
 - **Snap/Flatpak Firefox.**
-- **Logged-in sites.** Gmail, Google Docs and banking all need an account.
+- **Logged-in sites.** Gmail, Google Docs and banking all need an account; see MANUAL-CHECKS.md.
 - **Strong anti-bot pages.** Cloudflare Turnstile and reCAPTCHA were unreachable from the sandbox. Trusted mode is expected to fare much better there than synthetic mode.
-- **A real Claude agent session.** Everything was driven by scripted MCP calls, not by Claude deciding what to do.
+- **The Alt+Shift+K shortcut and the in-page Stop pill.** The safety suite pauses through the toolbar popup, which uses the same code path; the shortcut and pill need a person (MANUAL-CHECKS.md).
+- **Firefox 140 ESR.** CI is set up to test it, but that job hasn't run yet.
+- **A full agent evaluation after the post-0.3.0 changes** (see above).

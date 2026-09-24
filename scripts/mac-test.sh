@@ -44,6 +44,7 @@ if [ "${1:-}" = "only" ]; then
 fi
 run node test/e2e.mjs
 run env KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
+run node test/e2e-safety.mjs
 run node test/e2e-permissions.mjs
 run node test/e2e-store.mjs
 run node test/e2e-resilience.mjs

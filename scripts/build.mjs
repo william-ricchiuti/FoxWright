@@ -115,6 +115,11 @@ async function buildTarget(key) {
   if (zip) {
     const zipDir = path.join(root, 'dist', 'zips');
     fs.mkdirSync(zipDir, { recursive: true });
+    // Remove zips of other versions, so an old one can't be uploaded by mistake.
+    for (const f of fs.readdirSync(zipDir)) {
+      if (f.startsWith(`kitsune-${key}-`) && f !== `kitsune-${key}-${m.version}.zip`)
+        fs.rmSync(path.join(zipDir, f));
+    }
     execFileSync(path.join(root, 'node_modules/.bin/web-ext'), ['build', '--source-dir', out, '--artifacts-dir', zipDir, '--filename', `kitsune-${key}-${m.version}.zip`, '--overwrite-dest'], { stdio: 'inherit' });
   }
   console.log(`built ${key} -> ${path.relative(root, out)}`);

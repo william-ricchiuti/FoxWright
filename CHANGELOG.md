@@ -33,6 +33,12 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - `kitsune-firefox uninstall` also removes the Claude Code and Claude Desktop entries and `~/.kitsune`. `setup` also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when they're installed. New `kitsune-firefox --version`.
 - `scripts/version.mjs` checks and bumps the version in all three places.
 
+**Docs and project**
+- README: install from source until the store listing and npm package are live, per-OS commands, a fairer comparison table (now including Playwright MCP), and plainer wording about the agent evaluation.
+- New SECURITY.md (private reporting), CONTRIBUTING.md, issue and pull-request templates, AMO listing text and screenshots (`docs/amo/`, made by `npm run screenshots`), and a release workflow that builds the zips, creates the GitHub release and, once secrets are set, signs the full build and publishes to npm.
+- PRIVACY.md covers GIF recordings, file uploads, in-tab buffers and the real-input connection.
+- `docs/ROADMAP.md` tracks the review items.
+
 **Tests**
 - New `test/e2e-safety.mjs` presses the real buttons in the permission window and the toolbar popup (Deny, Allow this session, Always allow and revoke, Pause and Resume, including Pause while typing and while a permission window is open, and upload approval).
 - On Linux, tests no longer touch your own Kitsune install: they set up the helper in a temporary home folder and use a free debugging port and a temporary GIF folder.
