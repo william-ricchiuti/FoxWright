@@ -93,7 +93,7 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 
 1. ~~Push to GitHub and check that CI passes~~ (done 2026-11-08, PR #1). The release workflow hasn't run yet.
 2. ~~Run the full agent evaluation~~ (done 2026-11-08: 17/17 in both modes).
-3. Publish to npm, then submit to AMO: docs/RELEASE.md.
+3. ~~Publish to npm~~ (0.4.0, 2026-11-08). Submit to AMO: docs/RELEASE.md.
 4. The manual checks in docs/MANUAL-CHECKS.md, especially Windows.
 
 ## Fresh-eyes review (2026-11-08)
@@ -261,7 +261,11 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
   so the earlier runner failure was gone by 159.0.1; cause still unknown). Merged; repo made public (by William).
 - [x] Agent eval, both modes (macOS, Firefox 158.0.1, Claude Opus 5.5): **17/17 synthetic** (median 36 s, 7 calls,
   $4.05) and **17/17 trusted** (31 s, 6 calls, $3.68). Reports in docs/agent-eval-*.md.
-- [ ] Release 0.4.0 (version bump, tag, GitHub release); npm publish (needs `npm login` by William); AMO
-  submission (needs William's Firefox account). The repo has no `NPM_TOKEN` / AMO secrets yet.
+- [x] Released 0.4.0: PR #2 (CI green), tag `v0.4.0`, release workflow created the GitHub release with the store,
+  full and source zips. No signed `.xpi` yet: the repo has no `AMO_JWT_*` secrets.
+- [x] npm: `kitsune-firefox@0.4.0` published by William from a terminal (npm's browser approval; an unattended
+  publish gets `EOTP` because the account's 2FA mode is `auth-and-writes`). `npx kitsune-firefox@latest
+  --version` from an empty cache prints 0.4.0.
+- [ ] AMO submission (William's Firefox account), then put the assigned address into README step 2.
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).
