@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 (2026-11-08)
+
+**Fixes**
+- Real input (WebDriver BiDi) could stay off for a whole session. When the AI client's first call came while Kitsune was still connecting at startup, two connections raced for Firefox's single session; one was refused and the other was stranded. Connection attempts are now shared. New `test/bidi-connect.mjs` checks this against a fake Firefox, and CI runs it.
+
+**Dependencies**
+- The npm package bundles MCP SDK 1.32.2 (was 1.30.1), zod 4.6.7 (was 4.6.5; fixes a memory-exhaustion advisory when validating oversized input) and fast-uri 3.1.9. The SDK's advisories cover tasks, OAuth, bearer auth and HTTP transports, which Kitsune doesn't use (it runs the server over stdio only). `npm audit` for the package reports 0 vulnerabilities.
+- Test and build tools: web-ext 10.8.0 (fixes shell-quote) and updated lockfile entries (undici, node-forge, hono). The extension itself is unchanged apart from its version number.
+
 ## 0.4.0 (2026-11-08)
 
 Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.

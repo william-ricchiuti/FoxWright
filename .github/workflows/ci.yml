@@ -31,6 +31,8 @@ jobs:
           npm ci --prefix host
       - name: Versions agree
         run: node scripts/version.mjs check
+      - name: BiDi client (fake Firefox, no browser needed)
+        run: node test/bidi-connect.mjs
       - name: Build extension, helper and fixtures
         run: |
           npm run build
