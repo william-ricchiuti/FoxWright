@@ -122,12 +122,18 @@ async function theInternet() {
   });
   await scenario('the-internet', 'hover reveals caption (CSS :hover)', async (notes) => {
     await nav(`${B}/hovers`);
-    const r = await call('find', { query: 'user avatar image' });
-    const c = /at \((\d+), (\d+)\)/.exec(r.text);
-    expect(c, r.text);
-    await call('computer', { action: 'hover', coordinate: [+c[1], +c[2]] });
-    const o = await outline('all');
-    const visible = /name: user1/.test(o);
+    // navigate returns before images finish loading, so the avatar can still move; like an agent,
+    // look again and retry once if the first hover missed.
+    let visible = false;
+    for (let attempt = 0; attempt < 2 && !visible; attempt++) {
+      if (attempt)
+        await new Promise(res => setTimeout(res, 1000));
+      const r = await call('find', { query: 'user avatar image' });
+      const c = /at \((\d+), (\d+)\)/.exec(r.text);
+      expect(c, r.text);
+      await call('computer', { action: 'hover', coordinate: [+c[1], +c[2]] });
+      visible = /name: user1/.test(await outline('all'));
+    }
     if (!visible)
       notes.push('caption is CSS :hover-only');
     expect(visible || !TRUSTED, 'caption not shown on hover');

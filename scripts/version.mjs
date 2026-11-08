@@ -1,5 +1,6 @@
 // Kitsune's version lives in three files that must agree:
 //   package.json, host/package.json, extension/manifest.json
+// (the two package-lock.json files repeat it; `check` also compares those, `npm install` updates them)
 //
 //   node scripts/version.mjs check          exit 1 if they differ (CI runs this)
 //   node scripts/version.mjs bump 0.4.0     set all three, and start a CHANGELOG section
@@ -13,7 +14,7 @@ const read = (f) => JSON.parse(fs.readFileSync(path.join(root, f), 'utf8'));
 
 const [cmd, next] = process.argv.slice(2);
 if (cmd === 'check') {
-  const versions = Object.fromEntries(FILES.map(f => [f, read(f).version]));
+  const versions = Object.fromEntries([...FILES, 'package-lock.json', 'host/package-lock.json'].map(f => [f, read(f).version]));
   const distinct = new Set(Object.values(versions));
   if (distinct.size !== 1) {
     console.error('Version mismatch:', versions);

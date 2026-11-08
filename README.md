@@ -22,15 +22,16 @@ Kitsune is a Firefox extension plus a small helper program. The helper gives you
 
 ## Why this exists
 
-Chrome extensions can call Chrome's DevTools protocol (`chrome.debugger`). That's how Claude in Chrome gets a page outline and real mouse and keyboard input. Firefox extensions have no equivalent API ([bug 1316741](https://bugzilla.mozilla.org/show_bug.cgi?id=1316741)). The other ways to connect an AI agent to Firefox each fall short somewhere. This is how they compared when Kitsune was built (September 2026), based on each project's own code and README:
+Chrome extensions can call Chrome's DevTools protocol (`chrome.debugger`). That's how Claude in Chrome gets a page outline and real mouse and keyboard input. Firefox extensions have no equivalent API ([bug 1316741](https://bugzilla.mozilla.org/show_bug.cgi?id=1316741)). The other ways to connect an AI agent to Firefox each fall short somewhere. This is how they compare (re-checked November 2026), based on each project's own code and README:
 
 | | Your real profile (logins, extensions)? | Page outline for the AI | Input that React/Vue/editors accept | Security |
 |---|---|---|---|---|
-| Playwright MCP (with Firefox) | no: starts its own browser profile | full accessibility snapshot | real (Playwright) | local process |
-| mozilla/firefox-devtools-mcp | yes, if you start Firefox in remote-debugging mode | JS tree walk, roles from `role=` only | real (WebDriver) | debugging port open while in use |
-| Blueprint MCP (Firefox) | yes | its README says the snapshot doesn't work in Firefox | appends to `.value` (React ignores it) | local WebSocket |
-| ClaudeCodeBrowser | yes | screenshots / raw DOM | basic DOM events | HTTP server on localhost, no auth; polls twice a second |
-| browser-control-mcp | yes | read-only | none (by design) | shared secret, per-site consent |
+| Playwright MCP (with Firefox) | no: uses its own browser profile (its "attach to your browser" extension is Chrome/Edge only) | full accessibility snapshot | real (Playwright) | local process |
+| mozilla/firefox-devtools-mcp | only after restarting Firefox (or a second profile) with `--marionette --remote-debugging-port` | JS tree walk, roles from `role=` only | real (WebDriver) | debugging port open while in use |
+| Blueprint MCP (Firefox) | yes | its store listing says the snapshot isn't available in Firefox | appends to `.value` (React ignores it) | local WebSocket |
+| ClaudeCodeBrowser | yes | screenshots / raw DOM | basic DOM events | HTTP server on localhost; API key in the current code, none in the store version; polls twice a second |
+| FoxMCP | yes | run-a-script only, no page outline | none (scripts only) | local WebSocket, no caller authentication |
+| browser-control-mcp, FireMCP | yes | read-only (FireMCP can also open, close and group tabs) | none (by design) | shared secret, per-site consent |
 | **Kitsune** | **yes** | full accessibility outline (roles, names, states, values, refs), iframes included | synthetic events tuned per framework; **real input automatically** when Firefox runs with remote debugging | owner-only socket, no open port; per-site approval in an extension-owned window |
 
 If you don't need your own logged-in browser, Playwright MCP is a solid choice. Kitsune is for when the agent should work in the Firefox you already use.
@@ -62,7 +63,7 @@ These numbers are a useful signal, not a guarantee: one run per task, demo sites
 
 ## Install
 
-You need Firefox 140 or newer and Node.js 20 or newer.
+You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
 
 > **Linux:** Ubuntu's default Firefox is a Snap, and Snap/Flatpak Firefox is sandboxed and may not be able to start the helper. If the toolbar fox keeps its `!` badge, install Firefox from [Mozilla's .deb repository or tarball](https://support.mozilla.org/kb/install-firefox-linux). Setup also registers the helper with Flatpak Firefox, LibreWolf, Waterfox and Floorp when it finds them.
 
@@ -71,7 +72,7 @@ You need Firefox 140 or newer and Node.js 20 or newer.
    npx kitsune-firefox setup --claude-code --claude-desktop
    ```
    Setup copies one self-contained file to `~/.kitsune/app/` (on Windows, `%USERPROFILE%\.kitsune\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
-2. **Install the extension.** Get it from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/kitsune/), or the signed `.xpi` in [Releases](https://github.com/william-ricchiuti/Kitsune/releases). The fox in your toolbar loses its `!` badge once it finds the helper.
+2. **Install the extension.** Get it from addons.mozilla.org (listing pending review), or the signed `.xpi` in [Releases](https://github.com/william-ricchiuti/Kitsune/releases). The fox in your toolbar loses its `!` badge once it finds the helper.
 3. **Ask Claude to use it**, e.g. *"Use Kitsune to open my GitHub notifications and summarize them."*
 
 Run `npx kitsune-firefox doctor` any time to check every link in the chain. `npx kitsune-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
@@ -197,7 +198,7 @@ node test/build-fixtures.mjs
 
 # End-to-end tests against a real Firefox. FIREFOX must point at the binary to test with.
 export FIREFOX=/path/to/firefox
-node test/e2e.mjs                           # 57 tests, synthetic input
+node test/e2e.mjs                           # 58 tests, synthetic input
 KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
 node test/e2e-safety.mjs                    # presses the real permission-window and popup buttons
 node test/e2e-permissions.mjs               # approval timeouts, frame gating, uploads

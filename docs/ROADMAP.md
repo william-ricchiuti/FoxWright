@@ -87,10 +87,177 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 - 30 done: agent-eval verifiers tightened, --ask/--repeat, signup-wizard task; test/bidi-driver.mjs shared by e2e-safety and agent-eval.
 - 33, 34, 36–40 done (docs, listing, screenshots, project files, release workflow).
 - Final check of this round: e2e 57/57 both modes, safety 7/7, permissions 5/5, store 2/2, resilience 5/5, real sites 49/51 synthetic (the same two sandbox-network failures as before: DuckDuckGo, react.dev search), lint 0 errors. Also: links that open a new tab get the same URL and permission checks as navigate; doctor says when the debugging port is busy with another Kitsune session.
+- 2026-11-08 fresh-eyes review, then option 1 (fix and ship), code part: see "Fix round" at the end. e2e 58/58 both modes on Linux Firefox 152 and 159 and Mac 158.0.1; safety 7/7; real sites 51/51 synthetic, 50/51 trusted (Mac).
 
 ## Next steps (need you or a normal network)
 
-1. Push to GitHub and check that both CI workflows pass (the ESR 140 job and the Windows/macOS package jobs have never run).
+1. Push to GitHub and check that both CI workflows pass (the Firefox 152 job is new; trusted mode on GitHub's runners is the one failure not reproduced locally).
 2. Run the full agent evaluation on the Mac: `bash scripts/mac-test.sh agent` (and `agent trusted`), about $1.50–2 each.
 3. Publish to npm, then submit to AMO: docs/RELEASE.md.
 4. The manual checks in docs/MANUAL-CHECKS.md, especially Windows.
+
+## Fresh-eyes review (2026-11-08)
+
+Six weeks after the last commit, nothing published yet. Each finding says how it was checked.
+No code was changed in this review.
+
+### A. Broken or out of date
+
+1. **CI has failed on every run since 0.3.0.** `gh run list`: 8 runs from 2026-09-24 to 2026-11-03,
+   all failed; the last green run is the 0.3.0 commit (2026-09-24). Three separate causes:
+   - **Firefox 140 ESR (the manifest's minimum): 52/57.** Screenshot, zoom, a batch with a
+     screenshot and both GIF tests fail with `browser.tabs.captureTab is not a function`
+     (`src/background/tools.js:38`). It has failed the same way in every run since the ESR job was
+     added. Cause unknown: MDN's compatibility data (`node_modules/@mdn/browser-compat-data`) says
+     `captureTab` exists since Firefox 59. Either fix it (for example fall back to
+     `captureVisibleTab`) or raise `strict_min_version` and the README's "Firefox 140 or newer".
+   - **Trusted mode on Linux, Firefox 158 and 159: 55/57.** "tabs_context_mcp creates the Kitsune
+     group" and "anti-bot button" fail, meaning real input was never detected. It passed on 157.0.1
+     (run of 2026-10-12) and first failed on 158.0 (2026-10-19), still on the Ubuntu 24.04 image, so
+     the switch to Ubuntu 26.04 isn't the cause. **On this Mac, Firefox 158.0.1, trusted mode passes
+     57/57**, so it's Linux/headless-specific or fixed in 158.0.1. Not yet diagnosed.
+   - **Will break next: Firefox 159 removed `--remote-allow-system-access`** (MDN "Firefox 159 for
+     developers": replaced by the env var `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1`). `test/harness.mjs:153`
+     passes that flag for the safety suite and the agent eval's scripted user. CI never got that far
+     (it stops at the trusted step); this Mac is still on 158.0.1, so it passed here.
+2. **Mac run today** (`bash scripts/mac-test.sh`, Firefox 158.0.1, Node 22.22.3, log in
+   `test/results/mac-run.log`): e2e 57/57 both modes, safety 7/7, permissions 5/5, store 2/2,
+   resilience 5/5, idle ok. Real sites **49/51 synthetic, 48/51 trusted**:
+   - **New: the-internet "nested frames" fails in both modes.** The outline shows the inner frames
+     empty (`iframe [ref=f1e2]` with nothing under it). It passed in the 2026-09-23 run (Linux,
+     Firefox 156). Possibly item 7 (frames injected only when a tool reaches them) not reaching
+     frames inside frames, or a Firefox 158 change. Not diagnosed.
+   - **New: CSS `:hover` caption fails in trusted mode** (it's the one hover test that only trusted
+     mode is supposed to pass).
+   - react.dev search still fails in both modes, as in the 0.2.0 Mac run.
+   - `doctor` at the end reports "Firefox is not running", which is expected (the test Firefox had
+     already closed).
+3. **The README's AMO link points at someone else's add-on.** The slug `kitsune` is taken ("Kitsune
+   art", v2.0, 5 users, last updated 2023; AMO API `/api/v5/addons/addon/kitsune/`). AMO will assign
+   a different slug; update README step 2 once it's known. The npm name `kitsune-firefox` is still
+   free (`npm view` → E404).
+4. **The GitHub repo is private** (`gh repo view` → `PRIVATE`). The README's CI badge, clone command,
+   Releases link, `homepage_url` in the manifest and the SECURITY.md contact all need it public
+   before npm or AMO.
+5. **A commit this branch didn't have:** `origin/main` has `5b384a0 ci: remove weekly scheduled run`
+   (2026-11-02), so item 32's "weekly scheduled run" is no longer true.
+6. **Smaller:**
+   - The root `package-lock.json` still says version 0.1.0. `mac-test.sh`'s `npm install` rewrote it
+     to 0.3.0; that change was reverted. `scripts/version.mjs check` doesn't cover it.
+   - CI warns that `actions/checkout@v4`, `setup-node@v4` and `upload-artifact@v4` run on deprecated
+     Node 20.
+   - `web-ext lint` warns that `data_collection_permissions` needs Firefox for Android 142. That
+     doesn't matter for a desktop-only add-on.
+   - On this Mac the helper launcher (`~/.kitsune/kitsune-host`) runs
+     a Node binary inside another tool's private folder, because `setup` saves the absolute path of whatever
+     `node` it was run with (`~/.local/bin/node` links there). If that folder moves, Firefox can't
+     start the helper.
+
+### B. The other tools, re-checked
+
+Sources: each project's current README or code, the npm registry, the AMO API and Bugzilla's REST API.
+
+| Project | What changed since September |
+|---|---|
+| Playwright MCP | v0.0.84 (2026-10-31). Uses its own profile, persistent by default; its `--extension` mode (attach to your browser) is Chrome/Edge only. Table row stays, wording: "its own profile". |
+| mozilla/firefox-devtools-mcp | Now `@mozilla/firefox-devtools-mcp` 0.10.7 (2026-10-28). `--connect-existing` attaches to a Firefox that's already running, but only one started with `--marionette --remote-debugging-port`; its README says the flags are ignored if that profile is already open, so you restart Firefox or use a second profile. Outline unchanged (DOM walk, `role` attribute only); input real (BiDi). |
+| Blueprint MCP (Firefox) | AMO v1.9.22 (2026-08-10), **124** daily users (not ~106). No release since. Its store description still says the snapshot isn't available in Firefox; typing still appends to `.value`. Row stays. |
+| ClaudeCodeBrowser | Repo v1.4.0 added an API key for HTTP and WebSocket, plus allow/block lists and a read-only mode. AMO still ships 1.0.0 (no auth, 3,239 users). Still polls every 500 ms. Row: "API key (repo); AMO build has none". |
+| browser-control-mcp | v1.5.2, unchanged. |
+| FireMCP (fork of browser-control-mcp, new) | v2.2.0 (2026-10-23). Reads tabs, history, bookmarks (search only). It never clicks or types, but it *can* open, close, reorder and group tabs. |
+| **FoxMCP (new to the table; repo since 2025-09)** | AMO 1.7.0, 74 users; updated 2026-11-07. Real profile, WebSocket on :8765 with no local caller authentication (its SECURITY.md). Page interaction is "run a script" only. **It already writes bookmarks**: create, create folder, move, rename/update and delete (`extension/background.js` ~line 1600–1645, delete runs immediately with no confirmation; `bookmarks` is a required permission). |
+| fxmcp (new, 2026-10-25) | Real profile, token-protected WebSocket, clicks/typing in a content script; no bookmarks; 0 stars. |
+| Mozilla | "AI Window" is now **Smart Window** (beta, US/Canada, English). It drafts form answers from tabs you pick and watches pages, but doesn't submit forms; no MCP or way for an outside agent to drive it (blog.mozilla.org, 2026-10-27). |
+| Anthropic | Claude in Chrome is still Chrome-only (support.claude.com "Getting started with Claude in Chrome"). No Firefox announcement found. |
+| Bug 1316741 | Still NEW, P3/S3, last changed 2025-03-11; last substantive comment (2019): DevTools has "no plans to enable this API". Related bug 1840132 (`browser.debugger` via BiDi) untouched since 2023. |
+
+What this means: nobody else has an accessibility outline, real input or per-site approval on the
+user's own Firefox profile, so Kitsune's position is unchanged. Two corrections to the plan: the idea
+that no Firefox tool can change bookmarks is wrong (FoxMCP can), and demand looks small (the biggest
+comparable Firefox listings have 74–124 daily users; ClaudeCodeBrowser's 3,239 is the exception).
+Not checked: glama.ai and mcpservers.org listings directly, and the "claude-for-firefox" community
+port (NetVar1337).
+
+### C. Bookmark tools: what it would take
+
+- Firefox supports `optional_permissions: ["bookmarks"]`, so the install prompt stays the same. A
+  permission can only be requested from a user click. Kitsune already has an extension-owned window,
+  so the first bookmark call would open it with an "Allow bookmarks" button.
+- AMO's data-collection declaration would need `bookmarksInfo` added as an optional category.
+- To keep the tool list small (it's sent with every request, 14.2k characters now), use one
+  `bookmarks` tool with an `action` (`tree`, `search`, `create`, `create_folder`, `move`, `rename`,
+  `delete`) rather than seven tools.
+- Safety: deleting asks in the extension-owned window and lists what will go (folders show their
+  count). Kitsune saves a JSON copy of the deleted subtree first, because the extension API has no
+  undo. `tree` output needs a size cap and a depth/folder option (large bookmark sets run to tens of
+  thousands of URLs). Reading bookmarks shows the AI every saved URL, which is one more reason to keep
+  the permission optional.
+- What sets it apart from FoxMCP: it asks before deleting, the permission is optional, and it comes
+  with the rest of Kitsune's page tools.
+- Effort: about 1.5–2.5 days with e2e tests, plus a second AMO review if it ships after the first
+  listing.
+
+### D. Options
+
+1. **Fix CI and ship what exists.** Fix the three CI failures (A1), nested frames (A2), the
+   `-remote-allow-system-access` switch, the repo visibility, the comparison table and README link,
+   then the paid agent eval, npm publish and AMO submission. *Tradeoff:* no new features; AMO review
+   (days to weeks) starts soonest. *Effort:* 1–2 days of fixes, then the release steps in RELEASE.md.
+2. **Option 1, then bookmarks as 0.5 after the first AMO approval.** *Tradeoff:* the first review
+   covers a smaller add-on, and bookmarks then need their own review; the first version doesn't have
+   the one feature that's new. *Effort:* option 1, plus about 2 days later.
+3. **Bookmarks before the first release.** *Tradeoff:* launches with something FoxMCP doesn't do
+   safely. But it delays a release that has already waited six weeks, and it adds a permission and a
+   data category to the first, slowest review. *Effort:* about 3–4 days before submitting.
+4. **Ship (option 1), then a "Later / ideas" item instead of bookmarks.** Download handling is the
+   one people are most likely to hit (tasks that end in "download the invoice"). Element screenshots
+   are cheap because `zoom` already crops. *Tradeoff:* these widen what agents can finish, rather than
+   adding a new area; none of them is unique. *Effort:* about 1–2 days each.
+5. **Minimal release: GitHub + npm + a self-hosted signed `.xpi`, no AMO listing yet.** The release
+   workflow already signs the full build as unlisted. *Tradeoff:* usable within a day of fixing CI,
+   with no review wait. But there's no store discovery or one-click install, and updates need an
+   `update_url` (not set up). *Effort:* option 1's fixes, minus the AMO steps.
+
+**Recommendation: option 2.** CI is red for real reasons, including a Firefox 159 break the Mac
+hasn't hit yet, and that blocks every option. Shipping what exists starts the slow AMO review now.
+Bookmarks are a reasonable second release, but no longer a "nobody else can do this" feature.
+
+### E. Fix round (option 1, 2026-11-08)
+
+William chose option 1. Code and docs changes are done and tested locally; nothing is committed or pushed.
+
+- [x] **Nested frames came back empty** when read right after `navigate` (A2). Cause, from debug output: the
+  inner frames were still on their initial `about:blank`, according to both the content script and
+  `webNavigation.getFrame`; `navigate` returns once the top page is parsed. Fix: `read_page` waits up to 3 s
+  for a frame whose element has a real `src` (`src/background/tools.js` stitchFrames, `loads` flag from
+  `src/content/snapshot.ts`), retrying snapshot errors while the frame swaps documents. New e2e test with
+  slow-loading nested frames (`test/fixtures/frameset*.html`, `?delay=` in the test server): fails without
+  the fix, passes with it.
+- [x] **Firefox 159 removed `-remote-allow-system-access`** (A1). Reproduced on Firefox 159: the safety suite
+  couldn't open Kitsune's pages ("not allowed in this context"). `test/harness.mjs` now also sets
+  `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1`. Safety 7/7 on 152, 158 and 159.
+- [x] **Firefox 140 ESR screenshots** (A1). Reproduced in Linux (Firefox 140 doesn't run on macOS 27: it hangs
+  with sandbox errors). On 140, MV3 extensions get no `tabs.captureTab`; `captureVisibleTab` is listed but
+  empty, and with `activeTab` added it says "Missing activeTab permission", which only a user click grants. So
+  there's no fix inside the extension. Tested 141, 145, 149, 150, 151: same failure; **152 and 153 ESR pass
+  58/58**. Minimum raised to **Firefox 152** (manifest, README, setup message, CONTRIBUTING, test/README, CI
+  matrix `[latest, "152.0"]`). Mozilla's product-details feed lists 153.6.0esr as the current ESR; 140 ESR is
+  no longer listed.
+- [~] **Trusted mode on GitHub's Linux runners** (A1). Not reproduced: it passes in ARM Linux (152, 158, 159),
+  in an x86_64 container (159, emulated), back-to-back after the synthetic suite, and on the Mac (158.0.1,
+  159). The CI artifact shows the helper never connected ("Input mode: synthetic"). The first e2e test now
+  checks the debugging port and says whether it accepts connections, and `tabs_context_mcp` reports the
+  connection error when something answers on the port but real input can't start (it also names the port in
+  use instead of always 9222). The next CI run will say which.
+- [x] **CSS hover in trusted mode** (A2): same timing as the frames (images still loading after `navigate`).
+  The test now looks again and retries once, like an agent would. 20/20 trusted twice.
+- [x] Root `package-lock.json` version refreshed; `scripts/version.mjs check` now compares both lockfiles too.
+- [x] GitHub Actions `checkout`, `setup-node`, `upload-artifact` v4 → v7 (Node 24).
+- [x] README: comparison table re-checked (Playwright wording, devtools-mcp restart requirement, Blueprint's
+  store listing, ClaudeCodeBrowser's API key, FoxMCP added, FireMCP added beside browser-control-mcp after
+  checking its README: shared secret, per-site consent); AMO link removed until AMO assigns the address
+  (RELEASE.md step added); 58 tests. CHANGELOG and TESTING.md updated.
+- [ ] Still to do, each needing your OK: commit; push and watch CI; make the repo public; the paid agent eval
+  (`bash scripts/mac-test.sh agent`, about $1.50–2, and `agent trusted`); npm publish; AMO submission.
+
+Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).

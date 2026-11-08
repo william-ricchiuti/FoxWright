@@ -2,6 +2,7 @@
 //   node test/e2e.mjs            synthetic-input mode
 //   KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs   trusted (WebDriver BiDi) mode
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { start } from './harness.mjs';
@@ -70,6 +71,16 @@ async function main() {
     const r = await h.call('tabs_context_mcp', { createIfEmpty: true });
     tabId = parseInt(/tabId (\d+)/.exec(r.text)[1], 10);
     expect(tabId > 0, r.text);
+    if (TRUSTED && !r.text.includes('Input mode: trusted')) {
+      // Say why, so a CI failure shows whether Firefox ever opened its debugging port.
+      const port = Number(/:(\d+)\//.exec(h.bidiUrl)?.[1]);
+      const probe = await new Promise((resolve) => {
+        const s = net.connect(port, '127.0.0.1');
+        s.once('connect', () => { s.destroy(); resolve(`port ${port} accepts connections`); });
+        s.once('error', (e) => resolve(`port ${port}: ${e.code || e.message}`));
+      });
+      expect(false, `${r.text}\n[diagnostic] ${probe}`);
+    }
     expect(r.text.includes(TRUSTED ? 'Input mode: trusted' : 'Input mode: synthetic'), r.text);
   });
 
@@ -506,6 +517,14 @@ async function main() {
     const ref = /\[ref=([^\]]+)\]/.exec(line)[1];
     await call('computer', { action: 'left_click', ref });
     await pageHas('Shadow clicks: 1');
+  });
+
+  await test('read_page waits for frames inside frames that are still loading', async () => {
+    await nav('/basic.html'); // same tab already has a page, as when an agent moves on to a new site
+    await nav('/frameset.html');
+    const outline = (await call('read_page', { filter: 'all', max_chars: 200000 })).text;
+    for (const w of ['LEFT LEAF', 'RIGHT LEAF', 'Frame button'])
+      expect(outline.includes(w), `${w} missing from the outline:\n${outline.slice(0, 1200)}`);
   });
 
   await test('dialogs: confirm answered Cancel, then OK after handle_dialog; page cannot forge reports', async () => {

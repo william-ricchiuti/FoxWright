@@ -48,7 +48,8 @@ The npm package `kitsune-firefox` is the helper plus MCP server that `npx kitsun
 2. On AMO: *Submit a New Add-on* (first time) or *Upload New Version*, choose **On this site** and **Firefox (desktop) only**, and upload the store zip.
 3. When asked for source code, upload the source zip.
 4. Paste the reviewer notes from [AMO-SUBMISSION.md](AMO-SUBMISSION.md), and (first time) the listing text and screenshots from [amo/LISTING.md](amo/LISTING.md).
-5. Expect a manual review, because of `nativeMessaging` + `<all_urls>`. That can take days to a few weeks.
+5. First time only: AMO picks the add-on's address (`kitsune` is taken by another add-on). Put the real link into README step 2 of Install.
+6. Expect a manual review, because of `nativeMessaging` + `<all_urls>`. That can take days to a few weeks.
 
 The full build (with `javascript_tool`) is not listed on AMO; AMO-SUBMISSION.md explains why. The release workflow signs it as "unlisted" and attaches the `.xpi` to the GitHub release.
 

@@ -46,10 +46,18 @@ function serve(port) {
       res.writeHead(404);
       return res.end('not found');
     }
-    res.writeHead(200, { 'content-type': types[path.extname(p).slice(1)] || 'application/octet-stream' });
-    if (p.endsWith('.html')) // fixtures refer to each other by port
-      return res.end(fs.readFileSync(p, 'utf8').replaceAll(':8765', `:${P1}`).replaceAll(':8766', `:${P2}`));
-    fs.createReadStream(p).pipe(res);
+    const send = () => {
+      res.writeHead(200, { 'content-type': types[path.extname(p).slice(1)] || 'application/octet-stream' });
+      if (p.endsWith('.html')) // fixtures refer to each other by port
+        return res.end(fs.readFileSync(p, 'utf8').replaceAll(':8765', `:${P1}`).replaceAll(':8766', `:${P2}`));
+      fs.createReadStream(p).pipe(res);
+    };
+    // ?delay=ms holds the response, e.g. so a frame is still loading when its parent page is ready.
+    const delay = Math.min(5000, parseInt(u.searchParams.get('delay') || '0', 10) || 0);
+    if (delay)
+      setTimeout(send, delay);
+    else
+      send();
   });
   return new Promise(r => server.listen(port, '127.0.0.1', () => r(server)));
 }
@@ -149,8 +157,12 @@ export async function start({ build = 'full', trusted = false, testDriver = fals
     args.push('--headless');
   if (bidiPort)
     args.push(`--remote-debugging-port=${bidiPort}`);
-  if (testDriver)
-    args.push('-remote-allow-system-access'); // lets the test script read and press buttons in extension pages
+  if (testDriver) {
+    // Lets the test script read and press buttons in extension pages. Firefox 159 removed the
+    // flag in favour of the environment variable; older versions (140 ESR) only know the flag.
+    args.push('-remote-allow-system-access');
+    process.env.MOZ_REMOTE_ALLOW_SYSTEM_ACCESS = '1';
+  }
   const runOpts = {
     sourceDir: path.join(root, 'dist', build),
     firefox,
