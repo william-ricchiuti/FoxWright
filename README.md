@@ -205,6 +205,7 @@ node test/e2e-permissions.mjs               # approval timeouts, frame gating, u
 node test/e2e-store.mjs                     # AMO build smoke test
 node test/e2e-resilience.mjs                # concurrent clients, latency, helper crash, Firefox restart
 node test/e2e-idle.mjs                      # still answers after the event page's idle timeout (75 s)
+node test/bidi-connect.mjs                  # real-input client vs a fake one-session Firefox (no browser)
 node test/bench-actions.mjs                 # latency of common tool calls
 node test/realsites.mjs                     # 51 tasks on real websites (needs internet)
 node test/agent-eval.mjs [--trusted|--ask]  # a real Claude Code agent does 17 tasks (needs the claude CLI; about $4 with Opus 5.5)

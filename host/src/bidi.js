@@ -45,6 +45,7 @@ export class Bidi {
     this.ws = null;
     this.ready = false;
     this.lastFail = 0;
+    this.opening = null; // the connection attempt in progress, shared by concurrent callers
     this.nextId = 1;
     this.pending = new Map();
     this.contexts = new Map(); // tabId -> BiDi browsing context id
@@ -58,16 +59,25 @@ export class Bidi {
       return true;
     if (Date.now() - this.lastFail < 5000) // retry soon: Firefox may still be starting up
       return false;
-    try {
-      await this.open();
-      this.onChange(true);
-      return true;
-    } catch (e) {
-      this.lastFail = Date.now();
-      this.lastError = String(e?.message || e);
-      this.onChange(false);
-      return false;
+    // One attempt at a time. Firefox allows a single session, and the startup probe often overlaps
+    // the first tool call: a second session.new would be refused and strand the first session.
+    if (!this.opening) {
+      this.opening = (async () => {
+        try {
+          await this.open();
+          this.onChange(true);
+          return true;
+        } catch (e) {
+          this.lastFail = Date.now();
+          this.lastError = String(e?.message || e);
+          this.onChange(false);
+          return false;
+        } finally {
+          this.opening = null;
+        }
+      })();
     }
+    return this.opening;
   }
 
   open() {

@@ -1,7 +1,7 @@
 {
   "name": "kitsune-workspace",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Kitsune: let AI agents (Claude, via MCP) drive your real Firefox.",
   "license": "Apache-2.0",
   "type": "module",
@@ -23,7 +23,7 @@
     "version:check": "node scripts/version.mjs check"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "esbuild": "0.28.2",
     "prosemirror-example-setup": "^1.2.3",
     "prosemirror-model": "^1.25.12",
@@ -32,6 +32,6 @@
     "prosemirror-view": "^1.42.5",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "web-ext": "10.7.0"
+    "web-ext": "10.8.0"
   }
 }

@@ -269,6 +269,10 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
 - [x] AMO submission (2026-11-08, listed, desktop only, with the source zip). Waiting for Mozilla's review.
 - [x] Public repo: description, topics, npm link; private vulnerability reporting (SECURITY.md links to it), secret
   scanning + push protection, Dependabot security updates; merged branches deleted, auto-delete on.
+- [x] 0.4.1: the intermittent CI trusted-mode failure was a real race (the startup BiDi probe and the first tool
+  call both called `session.new`; the diagnostic added in the fix round printed "Maximum number of active sessions").
+  Fixed in `host/src/bidi.js` with a shared connection attempt; `test/bidi-connect.mjs` reproduces it (fails before,
+  passes after). MCP SDK 1.32.2, zod 4.6.7, web-ext 10.8.0; Dependabot and `npm audit` for the package clean.
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).
