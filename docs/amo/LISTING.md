@@ -32,8 +32,10 @@ Source code, documentation and test results: https://github.com/william-ricchiut
 
 ## Categories
 
-- Developer Tools
-- Other
+- Web Development
+- Tabs
+
+(AMO's current list; it has no "Developer Tools". Used for the 0.4.0 submission.)
 
 ## Tags
 

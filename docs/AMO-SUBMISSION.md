@@ -2,10 +2,10 @@
 
 ## Listed build (`dist/store`, id `kitsune@william-ricchiuti.com`)
 
-1. `npm ci && npm run build && npx web-ext lint --source-dir dist/store` (expect 0 errors; one Android min-version warning is fine, the add-on is desktop-only).
+1. `npm ci && npm run build && npx web-ext lint --source-dir dist/store` (expect 0 errors and 0 warnings).
 2. `npm run package`. This produces `dist/zips/kitsune-store-<version>.zip`.
 3. `bash scripts/make-source-zip.sh`. This produces `dist/zips/kitsune-source-<version>.zip` for the "source code" upload, because the content and background scripts are bundled with esbuild. The zip includes `BUILDING.txt` with exact steps and tool versions; rebuilding from it gives a byte-identical `dist/store` (checked 2026-09-23).
-4. Submit on AMO under **Firefox desktop only**. Categories: *Developer Tools*, *Other*. Link the privacy policy (`PRIVACY.md`).
+4. Submit on AMO under **On this site** and **Firefox desktop only**; answer **Yes** to "Do you need to submit source code?". Categories: *Web Development*, *Tabs*. Link the privacy policy (`PRIVACY.md`).
 
 ### Notes for the reviewer (paste into "Notes to Reviewer")
 

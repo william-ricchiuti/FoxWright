@@ -72,12 +72,12 @@ You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
    npx kitsune-firefox setup --claude-code --claude-desktop
    ```
    Setup copies one self-contained file to `~/.kitsune/app/` (on Windows, `%USERPROFILE%\.kitsune\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
-2. **Install the extension.** Get it from addons.mozilla.org (listing pending review), or the signed `.xpi` in [Releases](https://github.com/william-ricchiuti/Kitsune/releases). The fox in your toolbar loses its `!` badge once it finds the helper.
+2. **Install the extension.** It's in review on addons.mozilla.org (submitted 2026-11-08); the link goes here once it's approved. Until then, build it and load it yourself: see [Install from source](#before-the-store-listing-is-live-install-from-source) below. (The helper in step 1 is already on npm.) The fox in your toolbar loses its `!` badge once it finds the helper.
 3. **Ask Claude to use it**, e.g. *"Use Kitsune to open my GitHub notifications and summarize them."*
 
 Run `npx kitsune-firefox doctor` any time to check every link in the chain. `npx kitsune-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
 
-### Before the store listing and npm package are live: install from source
+### Before the store listing is live: install from source
 
 ```sh
 git clone https://github.com/william-ricchiuti/Kitsune.git && cd Kitsune
