@@ -8,7 +8,7 @@ The code side is automated. What's left needs your accounts. `X.Y.Z` below is th
 2. Run the checks that CI can't:
    ```sh
    export FIREFOX=/path/to/firefox
-   node test/agent-eval.mjs            # a real agent, about $1.50–2 of Claude usage; also --trusted, --ask
+   node test/agent-eval.mjs            # a real agent, about $4 of Claude usage with Opus 5.5; also --trusted, --ask
    bash scripts/mac-test.sh quick      # on the Mac
    ```
    and the items in [MANUAL-CHECKS.md](MANUAL-CHECKS.md) that the change touches.

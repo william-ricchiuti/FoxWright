@@ -12,7 +12,7 @@ These tests run a real Firefox (via `web-ext run`, headless by default) with the
 | `e2e-idle.mjs` | Still answers after the event page's idle timeout (takes about 75 s). |
 | `bench-actions.mjs` | Median latency of common tool calls. |
 | `realsites.mjs` | 51 tasks on real websites (needs internet access). |
-| `agent-eval.mjs` + `agent-tasks.mjs` | A real Claude Code agent does 17 tasks; independent checks. Needs the `claude` CLI and costs about $1.50–2 per run. Options: `--trusted`, `--ask`, `--repeat N`, `--only REGEX`. |
+| `agent-eval.mjs` + `agent-tasks.mjs` | A real Claude Code agent does 17 tasks; independent checks. Needs the `claude` CLI and costs about $4 per run with Opus 5.5 (less with a cheaper --model). Options: `--trusted`, `--ask`, `--repeat N`, `--only REGEX`. |
 | `measure-outline.mjs` | Outline sizes on real sites. |
 
 Helpers: `harness.mjs` (fixture servers, Firefox, MCP client), `bidi-driver.mjs` (acts as the person at the computer), `build-fixtures.mjs` (bundles the React and ProseMirror fixtures).

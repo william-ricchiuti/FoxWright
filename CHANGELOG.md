@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-08)
 
 Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 

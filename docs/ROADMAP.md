@@ -91,8 +91,8 @@ Newest last. One line per commit so an interrupted session can pick up where it 
 
 ## Next steps (need you or a normal network)
 
-1. Push to GitHub and check that both CI workflows pass (the Firefox 152 job is new; trusted mode on GitHub's runners is the one failure not reproduced locally).
-2. Run the full agent evaluation on the Mac: `bash scripts/mac-test.sh agent` (and `agent trusted`), about $1.50–2 each.
+1. ~~Push to GitHub and check that CI passes~~ (done 2026-11-08, PR #1). The release workflow hasn't run yet.
+2. ~~Run the full agent evaluation~~ (done 2026-11-08: 17/17 in both modes).
 3. Publish to npm, then submit to AMO: docs/RELEASE.md.
 4. The manual checks in docs/MANUAL-CHECKS.md, especially Windows.
 
@@ -243,7 +243,7 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
   58/58**. Minimum raised to **Firefox 152** (manifest, README, setup message, CONTRIBUTING, test/README, CI
   matrix `[latest, "152.0"]`). Mozilla's product-details feed lists 153.6.0esr as the current ESR; 140 ESR is
   no longer listed.
-- [~] **Trusted mode on GitHub's Linux runners** (A1). Not reproduced: it passes in ARM Linux (152, 158, 159),
+- [x] **Trusted mode on GitHub's Linux runners** (A1). Passed in the PR's CI on Firefox 159.0.1. Before that, not reproduced: it passes in ARM Linux (152, 158, 159),
   in an x86_64 container (159, emulated), back-to-back after the synthetic suite, and on the Mac (158.0.1,
   159). The CI artifact shows the helper never connected ("Input mode: synthetic"). The first e2e test now
   checks the debugging port and says whether it accepts connections, and `tabs_context_mcp` reports the
@@ -257,7 +257,11 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
   store listing, ClaudeCodeBrowser's API key, FoxMCP added, FireMCP added beside browser-control-mcp after
   checking its README: shared secret, per-site consent); AMO link removed until AMO assigns the address
   (RELEASE.md step added); 58 tests. CHANGELOG and TESTING.md updated.
-- [ ] Still to do, each needing your OK: commit; push and watch CI; make the repo public; the paid agent eval
-  (`bash scripts/mac-test.sh agent`, about $1.50–2, and `agent trusted`); npm publish; AMO submission.
+- [x] Committed, PR #1: CI green on every job (Firefox 152 and 159.0.1, trusted 58/58 on GitHub's runners too,
+  so the earlier runner failure was gone by 159.0.1; cause still unknown). Merged; repo made public (by William).
+- [x] Agent eval, both modes (macOS, Firefox 158.0.1, Claude Opus 5.5): **17/17 synthetic** (median 36 s, 7 calls,
+  $4.05) and **17/17 trusted** (31 s, 6 calls, $3.68). Reports in docs/agent-eval-*.md.
+- [ ] Release 0.4.0 (version bump, tag, GitHub release); npm publish (needs `npm login` by William); AMO
+  submission (needs William's Firefox account). The repo has no `NPM_TOKEN` / AMO secrets yet.
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).

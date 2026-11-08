@@ -4,7 +4,7 @@
 #   bash scripts/mac-test.sh            # everything (~10 min)
 #   bash scripts/mac-test.sh quick      # local suites only (~3 min)
 #   bash scripts/mac-test.sh only NAME  # just the real-site tasks matching NAME, both input modes
-#   bash scripts/mac-test.sh agent [trusted]  # real Claude Code agent completes 16 tasks (uses your Claude usage, ~$1.50)
+#   bash scripts/mac-test.sh agent [trusted]  # real Claude Code agent completes 17 tasks (uses your Claude usage, ~$4 with Opus 5.5)
 set -u
 cd "$(dirname "$0")/.."
 LOG="test/results/mac-run.log"

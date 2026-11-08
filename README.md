@@ -48,18 +48,18 @@ How Kitsune fills the gaps:
 
 ## Does it actually work?
 
-Claude Code was given 16 everyday browser tasks on public demo sites and allowed to use only Kitsune's tools. Each result was then checked in the browser by an independent verifier, not taken from the agent's word. The tasks were logins, a full shop checkout, React forms, custom dropdowns, drag-and-drop, a JavaScript confirm dialog, drawing on a canvas, a rich-text editor, file upload, research across two tabs, and looking facts up on Wikipedia, Hacker News and gov.uk.
+Claude Code was given 17 everyday browser tasks and allowed to use only Kitsune's tools. Each result was then checked in the browser by an independent verifier, not taken from the agent's word. The tasks were logins, a full shop checkout, React forms, custom dropdowns, drag-and-drop, a JavaScript confirm dialog, drawing on a canvas, a rich-text editor, file upload, research across two tabs, a site's own search, looking facts up on Wikipedia, Hacker News and gov.uk, and a local three-step sign-up form with validation errors.
 
-Results for version 0.3.0, one run per task, with every site pre-approved:
+Results for the current code (November 2026, macOS, Firefox 158, Claude Opus 5.5), one run per task, with every site pre-approved:
 
-| Input mode | Tasks completed | Median time | Median tool calls | Cost for all 16 |
+| Input mode | Tasks completed | Median time | Median tool calls | Cost for all 17 |
 |---|---|---|---|---|
-| Synthetic (default) | **16/16** | 17 s | 7 | $1.57 |
-| Trusted (remote debugging) | **16/16** | 15 s | 7 | $1.58 |
+| Synthetic (default) | **17/17** | 36 s | 7 | $4.05 |
+| Trusted (remote debugging) | **17/17** | 31 s | 6 | $3.68 |
 
-The first version scored 14/16 at $2.57. The agent's own transcripts drove the fixes: multi-step batching, text search within a page, a `form_input` that handles custom dropdowns, word selection on double-click, and more forgiving arguments. Full reports: [synthetic](docs/agent-eval-synthetic.md), [trusted](docs/agent-eval-trusted.md).
+Version 0.3.0 scored 16/16 on the first 16 tasks with looser checks ($1.57 and $1.58; the model wasn't recorded then). The very first version scored 14/16. The agent's own transcripts drove the fixes: multi-step batching, text search within a page, a `form_input` that handles custom dropdowns, word selection on double-click, and more forgiving arguments. Full reports: [synthetic](docs/agent-eval-synthetic.md), [trusted](docs/agent-eval-trusted.md).
 
-These numbers are a useful signal, not a guarantee: one run per task, demo sites rather than your logged-in accounts, and no permission prompts. Since 0.3.0 the checks are stricter (for example, the editor task now also checks that only "Kitsune" is bold), there's a 17th, local multi-step sign-up task, and the evaluation can run with permission prompts on (`--ask`) and repeat tasks (`--repeat N`). Run it yourself with `node test/agent-eval.mjs` (it needs the `claude` CLI and costs about $1.50–2 of usage).
+These numbers are a useful signal, not a guarantee: one run per task, demo sites rather than your logged-in accounts, and no permission prompts. The checks are strict (for example, the editor task checks that only "Kitsune" is bold, and the search task that the agent really used the site's search). The evaluation can also run with permission prompts on (`--ask`) and repeat tasks (`--repeat N`). Run it yourself with `node test/agent-eval.mjs`. It needs the `claude` CLI; the cost depends on the model (about $4 per run with Opus 5.5, which on a Claude subscription counts against its usage limits).
 
 ## Install
 
@@ -207,7 +207,7 @@ node test/e2e-resilience.mjs                # concurrent clients, latency, helpe
 node test/e2e-idle.mjs                      # still answers after the event page's idle timeout (75 s)
 node test/bench-actions.mjs                 # latency of common tool calls
 node test/realsites.mjs                     # 51 tasks on real websites (needs internet)
-node test/agent-eval.mjs [--trusted|--ask]  # a real Claude Code agent does 17 tasks (needs the claude CLI; about $1.50–2)
+node test/agent-eval.mjs [--trusted|--ask]  # a real Claude Code agent does 17 tasks (needs the claude CLI; about $4 with Opus 5.5)
 bash scripts/mac-test.sh [quick|agent]      # the main suites on macOS, against a throwaway copy of your Firefox
 npx web-ext lint --source-dir dist/store
 node scripts/version.mjs check              # the three version numbers agree

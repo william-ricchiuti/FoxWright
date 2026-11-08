@@ -10,7 +10,7 @@
 //
 // Needs the `claude` CLI (logged in). Uses the same throwaway-Firefox harness as the other
 // tests. Writes test/results/agent-eval-<mode>.{json,md} and one transcript per task.
-// Exits 1 if any task failed. Each full run costs roughly $1.50–2 of Claude usage.
+// Exits 1 if any task failed. Each full run costs roughly $4 of Claude usage with Opus 5.5 (2026-11-08); less with a cheaper --model.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
