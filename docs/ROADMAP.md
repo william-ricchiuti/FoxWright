@@ -266,6 +266,9 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
 - [x] npm: `kitsune-firefox@0.4.0` published by William from a terminal (npm's browser approval; an unattended
   publish gets `EOTP` because the account's 2FA mode is `auth-and-writes`). `npx kitsune-firefox@latest
   --version` from an empty cache prints 0.4.0.
-- [ ] AMO submission (William's Firefox account), then put the assigned address into README step 2.
+- [x] AMO submission (2026-11-08, listed, desktop only, with the source zip). Waiting for Mozilla's review.
+- [x] Public repo: description, topics, npm link; private vulnerability reporting (SECURITY.md links to it), secret
+  scanning + push protection, Dependabot security updates; merged branches deleted, auto-delete on.
+- [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).
