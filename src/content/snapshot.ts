@@ -142,10 +142,13 @@ function hoistOverlays(nodes: any[]): any[] {
 
 export type SnapshotResult = {
   yaml: string;
-  // iframe ref -> frameId, so the background can stitch child-frame outlines in.
-  iframes: { ref: string; frameId: number }[];
+  // iframe ref -> frameId, so the background can stitch child-frame outlines in. `loads` is true
+  // when the frame element points at a real page (src set, no srcdoc), so an about:blank document
+  // in it is the placeholder before that page arrives, not the frame's content.
+  iframes: { ref: string; frameId: number; loads?: boolean }[];
   title: string;
   url: string;
+  readyState: DocumentReadyState;
   viewport: { width: number; height: number; scrollX: number; scrollY: number; scrollHeight: number };
 };
 
@@ -192,11 +195,14 @@ export function takeSnapshot(args: SnapshotArgs): SnapshotResult | { frameRedire
     yaml = `- note: open popups/dialogs are listed first; the rest of the page follows\n${renderAriaSnapshotAsYaml(top)}\n${yaml}`;
   }
 
-  const iframes: { ref: string; frameId: number }[] = [];
+  const iframes: { ref: string; frameId: number; loads?: boolean }[] = [];
   for (const ref of snapshot.iframeRefs) {
     const el = snapshot.info.get(ref)?.element;
-    if (el)
-      iframes.push({ ref, frameId: frameIdOf(el) });
+    if (el) {
+      const src = (el.getAttribute('src') || '').trim();
+      const loads = !!src && !el.hasAttribute('srcdoc') && !/^(about|javascript):/i.test(src);
+      iframes.push({ ref, frameId: frameIdOf(el), ...(loads ? { loads } : {}) });
+    }
   }
 
   const se = document.scrollingElement || document.documentElement;
@@ -205,6 +211,7 @@ export function takeSnapshot(args: SnapshotArgs): SnapshotResult | { frameRedire
     iframes,
     title: document.title,
     url: location.href,
+    readyState: document.readyState,
     viewport: {
       width: window.innerWidth,
       height: window.innerHeight,

@@ -20,7 +20,7 @@ Helpers: `harness.mjs` (fixture servers, Firefox, MCP client), `bidi-driver.mjs`
 Before running:
 
 - Build with `npm run build` and `node test/build-fixtures.mjs`.
-- Set `FIREFOX` to a Firefox 140+ binary (there's no default).
+- Set `FIREFOX` to a Firefox 152+ binary (there's no default).
 - On Linux the harness sets up the helper in a temporary home folder, so your own `~/.kitsune` and native-messaging registration aren't touched (set `KITSUNE_E2E_ISOLATE=0` to use them instead). On macOS the tests use your real `~/.kitsune`; `scripts/mac-test.sh` handles this and uses a throwaway copy of Firefox.
 - To see the browser, set `KITSUNE_E2E_HEADFUL=1` (under Xvfb on a server).
 - Behind a TLS-intercepting proxy (e.g. a CI sandbox), set `KITSUNE_E2E_PROXY=host:port` and `KITSUNE_E2E_PROXY_CA=/path/to/proxy-ca.crt` for the real-site suites.

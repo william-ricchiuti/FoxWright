@@ -13,11 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # latest, and the oldest version the manifest allows (strict_min_version 140)
-        firefox: [latest, 140.0esr]
+        # latest, and the oldest version the manifest allows (strict_min_version 152; earlier versions give MV3 extensions no tabs.captureTab)
+        firefox: [latest, "152.0"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -54,7 +54,7 @@ jobs:
       - name: Event page idle timeout
         if: matrix.firefox == 'latest'
         run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e-idle.mjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results-${{ matrix.firefox }}
@@ -69,8 +69,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Build and pack the helper

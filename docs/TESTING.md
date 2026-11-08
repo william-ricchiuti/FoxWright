@@ -1,6 +1,6 @@
 # Test report: Kitsune
 
-_Latest run: the post-0.3.0 review work (unreleased), 2026-09-23, Firefox 156.0.1 on Linux (headless) and Node 22. Earlier sections are marked with the version they were measured on._
+_Latest run: the 2026-11-08 fixes (unreleased). Linux (Docker, headless) with Firefox 152.0, the oldest supported, and 159.0, the latest; macOS 27 with Firefox 158.0.1; Node 22. Earlier sections are marked with the version they were measured on._
 
 Every test drives Kitsune the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
@@ -11,14 +11,16 @@ Every test drives Kitsune the way an AI client does: an MCP client calls the too
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
-| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **57/57** | **57/57** |
-| `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval) | **7/7** | n/a |
+| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors and slow-loading nested frames, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **58/58** (152, 159, Mac 158) | **58/58** (152, 159, Mac 158) |
+| `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval) | **7/7** (152, 159, Mac 158) | n/a |
 | `e2e-permissions.mjs`: approval timeouts, frame gating, uploads | 5/5 | n/a |
 | `e2e-resilience.mjs`: concurrency, latency, crash/restart recovery | 5/5 | n/a |
 | `e2e-store.mjs`: the addons.mozilla.org build | 2/2 | n/a |
-| `e2e-idle.mjs`: works after the event page's idle timeout | pass | n/a |
-| `realsites.mjs`: 51 tasks on 25 real websites | **49/51** | 49/51 (0.2.0; not re-run) |
-| `web-ext lint` (store and full builds) | 0 errors | n/a |
+| `e2e-idle.mjs`: works after the event page's idle timeout | pass (Mac) | n/a |
+| `realsites.mjs`: 51 tasks on 25 real websites (Mac, home network) | **51/51** | **50/51** (react.dev search) |
+| `web-ext lint` (store and full builds) | 0 errors, 0 warnings | n/a |
+
+Firefox 140–151 are no longer supported: they give Manifest V3 extensions neither `tabs.captureTab` nor a usable `captureVisibleTab`, so screenshots, zoom and GIF recording fail (53/58). 152 is the first version that passes; 153 ESR passes too.
 
 ### Speed (`test/bench-actions.mjs`, local fixture, median of 15)
 
@@ -145,5 +147,6 @@ Click latency includes about 300 ms spent watching for a navigation the click mi
 - **Logged-in sites.** Gmail, Google Docs and banking all need an account; see MANUAL-CHECKS.md.
 - **Strong anti-bot pages.** Cloudflare Turnstile and reCAPTCHA were unreachable from the sandbox. Trusted mode is expected to fare much better there than synthetic mode.
 - **The Alt+Shift+K shortcut and the in-page Stop pill.** The safety suite pauses through the toolbar popup, which uses the same code path; the shortcut and pill need a person (MANUAL-CHECKS.md).
-- **Firefox 140 ESR.** CI is set up to test it, but that job hasn't run yet.
+- **CI on GitHub after these fixes.** Locally the CI suites pass on Linux (ARM, Docker) with Firefox 152 and 159. GitHub's x86_64 runners failed trusted mode from Firefox 158 on, which couldn't be reproduced here (an x86_64 container detected trusted mode fine); the first test now prints why if it happens again.
+- **react.dev search** (trusted mode, Mac): the search popup showed no `useState` result. It also failed in the 0.2.0 Mac run.
 - **A full agent evaluation after the post-0.3.0 changes** (see above).

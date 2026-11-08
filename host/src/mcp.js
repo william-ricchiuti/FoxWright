@@ -339,7 +339,11 @@ export async function runMcp() {
       // Only mention the input mode when it's new to this session, to keep repeated calls short.
       if (trusted !== lastReportedMode) {
         lastReportedMode = trusted;
-        r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : 'Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=9222 for real, trusted input).' });
+        const port = /:(\d+)\//.exec(bidi.url)?.[1] || '9222';
+        // A refused connection just means remote debugging is off; anything else means Firefox (or
+        // something) answered on the port but real input couldn't start, which is worth saying.
+        const why = !trusted && bidi.lastError && !/ECONNREFUSED/.test(bidi.lastError) ? ` Something answered on port ${port}, but real input couldn't start: ${bidi.lastError}.` : '';
+        r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : `Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=${port} for real, trusted input).${why}` });
       }
       const warn = await versionWarning();
       if (warn)

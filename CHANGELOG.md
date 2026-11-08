@@ -31,7 +31,11 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - Links that open in a new tab get the same checks as `navigate` (http(s) only, approved sites).
 - `doctor` says when the debugging port is already in use by a running Kitsune MCP server, instead of reporting real input as off.
 
+- `read_page` waits (up to 3 s) for frames that are still loading their page, instead of showing them empty. Pages built from nested frames came back blank when read right after `navigate`.
+- When real input is expected but can't start, `tabs_context_mcp` says why, and names the port actually in use.
+
 **Packaging**
+- Firefox 152 or newer is required (was 140). Firefox 140–151 give Manifest V3 extensions no way to screenshot a tab, so `screenshot`, `zoom` and `gif_creator` failed there. The current ESR, 153, works.
 - `kitsune-firefox uninstall` also removes the Claude Code and Claude Desktop entries and `~/.kitsune`. `setup` also registers with Flatpak Firefox, LibreWolf, Waterfox and Floorp when they're installed. New `kitsune-firefox --version`.
 - `scripts/version.mjs` checks and bumps the version in all three places.
 
@@ -42,10 +46,12 @@ Work from the 0.3.0 review; `docs/ROADMAP.md` tracks every item.
 - `docs/ROADMAP.md` tracks the review items.
 
 **Tests**
+- The safety suite and the agent evaluation's scripted user work on Firefox 159, which replaced the `-remote-allow-system-access` flag with the `MOZ_REMOTE_ALLOW_SYSTEM_ACCESS` environment variable.
+- CI uses the Node 24 versions of GitHub's actions (v7); `scripts/version.mjs check` also compares the versions in both lockfiles.
 - New `test/e2e-safety.mjs` presses the real buttons in the permission window and the toolbar popup (Deny, Allow this session, Always allow and revoke, Pause and Resume, including Pause while typing and while a permission window is open, and upload approval).
 - On Linux, tests no longer touch your own Kitsune install: they set up the helper in a temporary home folder and use a free debugging port and a temporary GIF folder.
 - The agent evaluation checks results more strictly (e.g. that exactly the right to-do is completed, that only "Kitsune" is bold, that the agent really used the site's search), adds a local multi-step sign-up task with validation errors, and can run with permission prompts on (`--ask`, answered by a scripted user) and repeat tasks (`--repeat N`, pass@1 and pass@N).
-- CI tests the oldest supported Firefox (140 ESR) as well as the latest, runs the safety and idle suites, and installs the packed npm package on Linux, Windows and macOS.
+- CI tests the oldest supported Firefox (152) as well as the latest, runs the safety and idle suites, and installs the packed npm package on Linux, Windows and macOS.
 - The npm package has no runtime dependencies (everything is bundled), so `npx` downloads one package instead of ~96.
 - Built add-ons and the npm bundle include LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt (Playwright's Apache-2.0 notice and the MIT/ISC notices of bundled packages).
 - The AMO source zip now includes `host/` and a BUILDING.txt; rebuilding from it gives a byte-identical add-on.

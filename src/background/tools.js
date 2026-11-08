@@ -254,6 +254,8 @@ function indentBlock(textBlock, indent) {
   return textBlock.split('\n').map(l => ' '.repeat(indent) + l).join('\n');
 }
 
+const FRAME_LOAD_WAIT_MS = 3000; // how long read_page waits for a frame that is still loading
+
 /**
  * Splice the outlines of child frames under their <iframe> lines. Frames are fetched in parallel
  * (each with its own timeout), then inserted in one pass over the parent's lines.
@@ -264,15 +266,35 @@ async function stitchFrames(tabId, res, args, depthLeft) {
   if (depthLeft <= 0 || !frames.length)
     return yaml;
   const inserts = new Map(); // ref -> text to insert under it
-  await Promise.all(frames.map(async ({ ref, frameId }) => {
+  await Promise.all(frames.map(async ({ ref, frameId, loads }) => {
     if (!(await isFrameAllowed(tabId, frameId))) {
       const o = await frameOriginOf(tabId, frameId).catch(() => null);
       inserts.set(ref, `- note: embedded content from ${o || 'another site'} is hidden until the user approves it (read_page with ref_id ${ref} asks them)`);
       return;
     }
     try {
-      await ensureContent(tabId, frameId);
-      const child = await sendContent(tabId, frameId, 'snapshot', { filter: args.filter, depth: args.depth, visible_only: args.visible_only }, 10000);
+      const snap = async () => {
+        await ensureContent(tabId, frameId);
+        return sendContent(tabId, frameId, 'snapshot', { filter: args.filter, depth: args.depth, visible_only: args.visible_only }, 10000);
+      };
+      // navigate returns once the top page is parsed, so a frame may still hold its initial
+      // about:blank placeholder (or be mid-parse). Give it a moment to load its real page; a
+      // snapshot request that lands while the frame swaps documents can fail, so retry those too.
+      const until = Date.now() + FRAME_LOAD_WAIT_MS;
+      let child;
+      for (;;) {
+        try {
+          child = await snap();
+        } catch (e) {
+          if (!loads || Date.now() >= until)
+            throw e;
+          await sleep(150);
+          continue;
+        }
+        if (!loads || (child.url !== 'about:blank' && child.readyState !== 'loading') || Date.now() >= until)
+          break;
+        await sleep(150);
+      }
       inserts.set(ref, await stitchFrames(tabId, child, args, depthLeft - 1));
     } catch { /* cross-origin frame we can't reach, or it navigated away */ }
   }));

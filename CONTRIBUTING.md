@@ -24,7 +24,7 @@ Load `dist/full/manifest.json` from `about:debugging#/runtime/this-firefox` and 
 ## Before opening a pull request
 
 ```sh
-export FIREFOX=/path/to/firefox          # Firefox 140 or newer
+export FIREFOX=/path/to/firefox          # Firefox 152 or newer
 node test/e2e.mjs && KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
 node test/e2e-safety.mjs && node test/e2e-permissions.mjs && node test/e2e-store.mjs
 npx web-ext lint --source-dir dist/store
