@@ -39,7 +39,7 @@ The 2 real-site failures in each mode come from the test sandbox's network, not 
 - **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Kitsune opened the search dialog and typed the query; the dialog showed "No results".
 - **DuckDuckGo**: it served a blank page to the sandbox's data-center IP in 3 of 4 runs. It passed in the one run where the page loaded.
 
-## Real-agent evaluation (Claude Code, 0.2.0 → 0.3.0)
+## Real-agent evaluation (Claude Code, 0.2.0 → now)
 
 `test/agent-eval.mjs` runs `claude -p` with only Kitsune's tools enabled. Everything else is blocked: WebFetch, Bash, file tools and Claude in Chrome. After each task, an independent verifier checks the result through Kitsune's own tools: the page state, the tabs that are open and the answer.
 
@@ -51,6 +51,8 @@ The 2 real-site failures in each mode come from the test sandbox's network, not 
 | v4 | **16/16** | 20 s | 7 | $1.46 | `form_input` handles custom comboboxes; word selection on double-click; `key` alias |
 | final, synthetic | **16/16** | 17 s | 7 | $1.57 | summary after navigating clicks; no navigation wait after non-navigating clicks |
 | final, trusted | **16/16** | 15 s | 7 | $1.58 | same |
+| 2026-11-08, synthetic (17 tasks) | **17/17** | 36 s | 7 | $4.05 | the post-0.3.0 review, the Firefox 152 fixes, stricter checks, `signup-wizard`; macOS, Firefox 158.0.1, Claude Opus 5.5 |
+| 2026-11-08, trusted (17 tasks) | **17/17** | 31 s | 6 | $3.68 | same |
 
 What the transcripts showed, and what fixed each problem:
 
@@ -63,7 +65,7 @@ What the transcripts showed, and what fixed each problem:
 
 The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-trusted.md`.
 
-**Since 0.3.0** the checks are stricter and there's a 17th, local task (`signup-wizard`: validation errors, three steps, a code that depends on every answer). A partial run in the sandbox passed `signup-wizard`, `todos`, `rich-editor` and `two-tabs` under the new checks. `docs-search` now fails in the sandbox, correctly: react.dev's search (Algolia) is blocked there, and the new check requires the agent to have actually used the search. A full run on a normal network (`node test/agent-eval.mjs`, and `--trusted`, `--ask`) is still to do.
+**Since 0.3.0** the checks are stricter and there's a 17th, local task (`signup-wizard`: validation errors, three steps, a code that depends on every answer). The full run on 2026-11-08 passed all 17 in both modes. The cost per run went from about $1.57 to about $4 with similar token counts; that run used Claude Opus 5.5, and the earlier runs didn't record their model, so the difference is probably the model's price. Not yet run: `--ask` (permission prompts answered by a scripted user) and `--repeat`.
 
 ## macOS run (0.2.0, your MacBook Pro)
 
@@ -149,4 +151,3 @@ Click latency includes about 300 ms spent watching for a navigation the click mi
 - **The Alt+Shift+K shortcut and the in-page Stop pill.** The safety suite pauses through the toolbar popup, which uses the same code path; the shortcut and pill need a person (MANUAL-CHECKS.md).
 - **CI on GitHub after these fixes.** Locally the CI suites pass on Linux (ARM, Docker) with Firefox 152 and 159. GitHub's x86_64 runners failed trusted mode from Firefox 158 on, which couldn't be reproduced here (an x86_64 container detected trusted mode fine); the first test now prints why if it happens again.
 - **react.dev search** (trusted mode, Mac): the search popup showed no `useState` result. It also failed in the 0.2.0 Mac run.
-- **A full agent evaluation after the post-0.3.0 changes** (see above).
