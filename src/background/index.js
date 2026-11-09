@@ -1,6 +1,6 @@
 // Kitsune background (event page).
 /* global browser */
-import { state, loadSettings, saveSettings, publicStatus, updateBadge } from './state.js';
+import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
 import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity } from './tabs.js';
@@ -20,8 +20,11 @@ onRequest(async (tool, args) => {
     throw new Error(`Unknown tool ${tool}`);
   if (state.paused && tool !== '_status')
     throw new Error(PAUSED_MSG);
-  if (!tool.startsWith('_'))
+  if (!tool.startsWith('_')) {
     noteAgentActivity(args?.tabId);
+    const own = cleanSummary(args?.action_summary);
+    noteAction(args?.tabId, own || describeAction(tool, args), !!own);
+  }
   let result;
   try {
     // One command at a time per tab: two agents (or parallel tool calls) acting on the same tab
@@ -38,6 +41,29 @@ onRequest(async (tool, args) => {
     throw new Error(PAUSED_MSG);
   return result;
 });
+
+/** Kitsune's own one-line description of an agent action, for the popup when the agent gave none. */
+function describeAction(tool, a = {}) {
+  const at = Array.isArray(a.coordinate) ? ` at ${a.coordinate.map(Math.round).join(', ')}` : a.ref ? ` on ${a.ref}` : '';
+  if (tool === 'computer') {
+    if (a.action === 'type')
+      return `Typed ${String(a.text ?? '').length} characters`;
+    if (a.action === 'key')
+      return `Pressed ${String(a.text ?? '').slice(0, 40)}`;
+    if (['screenshot', 'zoom', 'wait', 'scroll_to'].includes(a.action))
+      return '';
+    return `${String(a.action || '').replace(/_/g, ' ')}${at}`;
+  }
+  if (tool === 'navigate')
+    return /^(back|forward)$/.test(a.url || '') ? `Went ${a.url}` : `Opened ${String(a.url || '').replace(/^https?:\/\//, '').slice(0, 80)}`;
+  if (tool === 'form_input')
+    return `Filled ${a.ref || 'a field'}`;
+  if (tool === 'file_upload')
+    return `Uploaded ${Array.isArray(a.files) ? a.files.length : ''} file(s)`;
+  if (tool === 'javascript_tool')
+    return 'Ran JavaScript in the page';
+  return '';
+}
 
 const tabQueues = new Map(); // tabId -> promise of the last queued command
 // Read-only status probes don't need to wait behind a long action.

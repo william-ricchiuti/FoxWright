@@ -20,6 +20,22 @@ function render(s) {
   $('pause').hidden = s.paused;
   $('build').textContent = `v${s.version}${s.full ? ' · full build' : ''}`;
 
+  const recent = s.recentActions || [];
+  $('recent-card').hidden = !recent.length;
+  const rl = $('recent');
+  rl.textContent = '';
+  for (const r of recent) {
+    const li = document.createElement('li');
+    const t = document.createElement('time');
+    const ago = Math.max(0, Math.round((Date.now() - r.at) / 1000));
+    t.textContent = ago < 60 ? `${ago}s` : `${Math.round(ago / 60)}m`;
+    const span = document.createElement('span');
+    span.textContent = r.own ? `“${r.text}”` : r.text;
+    span.title = span.textContent;
+    li.append(t, span);
+    rl.appendChild(li);
+  }
+
   const ul = $('sites');
   ul.textContent = '';
   const entries = [

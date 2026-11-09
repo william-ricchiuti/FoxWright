@@ -279,7 +279,10 @@ export function noteAgentActivity(tabId) {
   if (typeof tabId === 'number')
     agentActivity.set(tabId, Date.now());
 }
-browser.tabs.onRemoved.addListener((tabId) => agentActivity.delete(tabId));
+browser.tabs.onRemoved.addListener((tabId) => {
+  agentActivity.delete(tabId);
+  state.labels.delete(tabId);
+});
 
 /**
  * Console capture + non-blocking dialogs (isolated world, src/content/hooks.ts) and pointer-capture
@@ -418,6 +421,8 @@ export async function showActivity(tabId) {
     setGroupTitle(GROUP_TITLE);
   }, 6000);
   try {
-    await browser.tabs.sendMessage(tabId, { kitsune: true, cmd: 'activity', args: { ms: 6000 } }, { frameId: 0 });
+    const l = state.labels.get(tabId);
+    const label = l && Date.now() - l.at < 10000 ? l.text : undefined;
+    await browser.tabs.sendMessage(tabId, { kitsune: true, cmd: 'activity', args: { ms: 6000, label } }, { frameId: 0 });
   } catch { /* page may not have the content script (e.g. about:blank) */ }
 }

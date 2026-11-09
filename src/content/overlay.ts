@@ -35,6 +35,8 @@ const CSS = `
 }
 .pill.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 .pill .mark { width: 18px; height: 18px; flex: none; }
+.pill .what { max-width: min(60vw, 520px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill .what b { font-weight: 600; }
 .pill button {
   all: unset; cursor: pointer; padding: 5px 12px; border-radius: 999px;
   background: #d64024; color: #fff; font-weight: 600; font-size: 12px; letter-spacing: .02em;
@@ -82,8 +84,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
-/** Show the glow + Stop pill; auto-hides after `ms` of no agent activity. */
-export function showActivity(ms = 6000) {
+/** Show the glow + Stop pill; auto-hides after `ms` of no agent activity. `label` is the agent's
+ *  description of its latest action (its own words: a convenience, not something to rely on). */
+export function showActivity(ms = 6000, label?: string) {
   if (window.top !== window)
     return; // only in the top frame
   const r = ensureRoot();
@@ -94,7 +97,7 @@ export function showActivity(ms = 6000) {
     r.appendChild(glow);
   }
   if (!pill) {
-    pill = el('div', 'pill', undefined, [foxMark(), el('span', '', 'Kitsune is driving this tab')]);
+    pill = el('div', 'pill', undefined, [foxMark(), el('span', 'what', 'Kitsune is driving this tab')]);
     const stop = el('button', '', 'Stop');
     stop.title = 'Pause Kitsune. The AI can\'t act again until you resume it from the toolbar button.';
     stop.addEventListener('click', (e) => {
@@ -105,6 +108,15 @@ export function showActivity(ms = 6000) {
     });
     pill.appendChild(stop);
     r.appendChild(pill);
+  }
+  const what = pill.querySelector('.what') as HTMLElement;
+  what.textContent = '';
+  if (label) {
+    what.append(el('b', '', 'Kitsune: '), document.createTextNode(label));
+    what.title = label;
+  } else {
+    what.textContent = 'Kitsune is driving this tab';
+    what.removeAttribute('title');
   }
   requestAnimationFrame(() => {
     glow!.classList.add('on');

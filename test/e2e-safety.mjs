@@ -168,6 +168,25 @@ await test('file upload: the user approves it in the Kitsune window', async () =
   fs.rmSync(file, { force: true });
 });
 
+await test('the popup lists what the agent did, with its own summaries cleaned up', async () => {
+  await h.call('navigate', { tabId, url: `${ORIGIN.once}/basic.html` });
+  const btn = /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId, query: 'Clicked 0 times' })).text)?.[1];
+  const name = /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId, query: 'Full name' })).text)?.[1];
+  expect(btn && name, 'fixture elements not found');
+  await h.call('computer', { tabId, action: 'left_click', ref: btn, action_summary: 'Clicks the\ncounter ‮button' });
+  await h.call('form_input', { tabId, ref: name, value: 'Ada' }); // no summary: Kitsune describes it
+  const p = await openPopup(extBase);
+  let items = [];
+  for (let i = 0; i < 50; i++) { // the popup refreshes every 1.5 s
+    items = JSON.parse(await evalIn(p, `JSON.stringify([...document.querySelectorAll('#recent li span')].map(s => s.textContent))`));
+    if (items[0] === `Filled ${name}`)
+      break;
+    await sleep(100);
+  }
+  expect(items[0] === `Filled ${name}`, `newest entry should be Kitsune's own description: ${JSON.stringify(items)}`);
+  expect(items[1] === '“Clicks the counter button”', `agent's summary should be quoted, on one line, without control characters: ${JSON.stringify(items)}`);
+});
+
 driver.close();
 await h.stop();
 const passed = results.filter(r => r.ok).length;
