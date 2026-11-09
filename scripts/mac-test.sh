@@ -48,6 +48,7 @@ run node test/e2e-safety.mjs
 run node test/e2e-permissions.mjs
 run node test/e2e-store.mjs
 run node test/e2e-resilience.mjs
+run node test/e2e-multi.mjs
 run node test/e2e-idle.mjs
 if [ "${1:-}" != "quick" ]; then
   run node test/realsites.mjs

@@ -33,6 +33,14 @@ function answer(a) {
     }
     $('once').textContent = 'Upload';
     $('always').hidden = true;
+  } else if (req.type === 'pair') {
+    document.title = 'Kitsune: use this Firefox?';
+    $('title').textContent = 'Use this Firefox for the AI agent?';
+    $('subtitle').textContent = 'An AI agent connected through Kitsune wants to pick a browser.';
+    $('body').textContent = 'Several Firefox windows or profiles are connected to Kitsune. If this is the one the agent should work in, click Connect. This browser is named:';
+    $('once').textContent = 'Connect';
+    $('deny').textContent = 'Not this one';
+    $('always').hidden = true;
   } else {
     $('body').textContent = req.type === 'frame'
       ? 'The AI agent wants to read and interact with an embedded frame from:'

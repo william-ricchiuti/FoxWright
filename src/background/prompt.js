@@ -12,7 +12,7 @@ export function isPromptSender(sender) {
 }
 
 /**
- * Ask the human. req = { type: 'site' | 'frame' | 'upload', origin, tabTitle?, files? }.
+ * Ask the human. req = { type: 'site' | 'frame' | 'upload' | 'pair', origin, tabTitle?, files? }.
  * Resolves 'once' | 'always' | 'deny' | 'dismissed' | 'timeout'.
  */
 export function askUser(req) {
@@ -24,7 +24,7 @@ export function askUser(req) {
     const entry = { req, resolve, windowId: null, timer: null };
     pending.set(id, entry);
     entry.timer = setTimeout(() => finish(id, 'timeout'), state.promptTimeoutMs);
-    browser.windows.create({ url: `${PROMPT_URL()}?id=${id}`, type: 'popup', width: 500, height: req.type === 'upload' ? 420 : 360, focused: true })
+    browser.windows.create({ url: `${PROMPT_URL()}?id=${id}`, type: 'popup', width: 500, height: req.type === 'upload' ? 420 : req.type === 'pair' ? 330 : 360, focused: true })
       .then((w) => {
         entry.windowId = w.id;
         if (!pending.has(id))
@@ -81,5 +81,16 @@ export function denyAllPrompts() {
     if (e.windowId != null)
       browser.windows.remove(e.windowId).catch(() => {});
     finish(id, 'deny');
+  }
+}
+
+/** Another browser was chosen (or the agent gave up): close this browser's "use this Firefox?" windows. */
+export function cancelPairPrompts() {
+  for (const [id, e] of [...pending]) {
+    if (e.req.type !== 'pair')
+      continue;
+    if (e.windowId != null)
+      browser.windows.remove(e.windowId).catch(() => {});
+    finish(id, 'dismissed');
   }
 }

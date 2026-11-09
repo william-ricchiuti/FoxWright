@@ -57,3 +57,4 @@ footer a { color: inherit; }
 #recent li:first-child { border-top: 0; }
 #recent time { flex: none; width: 28px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 #recent span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bname { width: 130px; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); text-align: right; }
