@@ -280,6 +280,9 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
 - [x] **Bug: Cmd/Alt/Ctrl+arrow keys do nothing in synthetic mode** (fixed in 0.4.2: `modifiedCaretKey` in input.ts, e2e test with 20 cases) (`src/content/input.ts` key defaults ignore the
   modifier; `cmd+left` should go to the line start, `alt/ctrl+left` one word, `cmd+up` / `ctrl+home` to the start).
   Found from DeepSeek's transcripts; confirmed on `basic.html` in contenteditable and text inputs.
+- [x] 0.4.2 released (PR #10): GitHub release, npm (`npx kitsune-firefox@latest --version` prints 0.4.2), and
+  uploaded to AMO as a new version (William, 2026-11-08) with the source zip. AMO review of 0.4.0/0.4.2 pending;
+  AMO emails the developer account's address with the result.
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).

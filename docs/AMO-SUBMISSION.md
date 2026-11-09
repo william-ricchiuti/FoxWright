@@ -5,30 +5,46 @@
 1. `npm ci && npm run build && npx web-ext lint --source-dir dist/store` (expect 0 errors and 0 warnings).
 2. `npm run package`. This produces `dist/zips/kitsune-store-<version>.zip`.
 3. `bash scripts/make-source-zip.sh`. This produces `dist/zips/kitsune-source-<version>.zip` for the "source code" upload, because the content and background scripts are bundled with esbuild. The zip includes `BUILDING.txt` with exact steps and tool versions; rebuilding from it gives a byte-identical `dist/store` (checked 2026-09-23).
-4. Submit on AMO under **On this site** and **Firefox desktop only**; answer **Yes** to "Do you need to submit source code?". Categories: *Web Development*, *Tabs*. Link the privacy policy (`PRIVACY.md`).
+4. Submit on AMO under **On this site** and **Firefox desktop only**; answer **Yes** to "Do you need to submit source code?". Categories: *Web Development*, *Tabs*. Link the privacy policy (`PRIVACY.md`). For a later version: the add-on's page → *Upload New Version*, the store zip, then the source zip.
 
 ### Notes for the reviewer (paste into "Notes to Reviewer")
 
-> Kitsune lets a user-installed local AI agent (for example Claude Code, over the Model Context Protocol) operate tabs in a dedicated "Kitsune" tab group, the same way "Claude in Chrome" does on Chrome. Page content is sent only through `runtime.connectNative('kitsune')` to a helper program the user installs themselves (`npx kitsune-firefox setup`, source in `host/`). The add-on does nothing until that helper is installed and an agent connects.
->
-> Permissions:
-> - `nativeMessaging`: the only data channel, to the local helper.
-> - `<all_urls>` + `scripting`: inject the content script into agent tabs on demand, and only after the user approves the site in an extension-owned popup window (`prompt/prompt.html`).
-> - `tabs` / `tabGroups`: keep agent tabs in their own group. The agent may only act on tabs in that group.
-> - `webNavigation`: frame origins (per-frame permission checks), knowing when a page the agent opened has loaded, and re-injecting the console recorder on navigation.
-> - `webRequest`: non-blocking; records request URLs/status for agent tabs only (`read_network_requests`).
-> - `storage`: site approvals. `alarms`: reconnect to the helper if it wasn't running.
->
-> No remote code: this listed build contains no way to run code strings. The `javascript_tool` exists only in a separate, self-distributed build and is compiled out here.
->
-> Scripts injected into pages (all packaged, all only in agent tabs on sites the user approved, one frame at a time):
-> - `content/content.js`: the page outline and input simulation.
-> - `content/hooks.js` (isolated world): records console output for `read_console_messages`, and while the agent is working in the tab replaces blocking alert/confirm/prompt with non-blocking versions, using `exportFunction`, so the page never freezes under automation. Its state stays in the isolated world, out of the page's reach; when the user is using the tab themselves, the page's real dialogs are shown.
-> - `content/page-hooks.js` (MAIN world): only emulates pointer capture during Kitsune-generated gestures (Firefox rejects `setPointerCapture` for synthetic pointers).
->
-> Password field values are never sent to the agent (shown as "(password, N characters)"). The vendored Playwright files (`vendor/playwright`, Apache-2.0, modifications listed in `NOTICE`) compute accessibility roles/names. `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.txt` are included in the add-on.
->
-> To test: install the helper with `npx kitsune-firefox setup` (or from the source zip: `npm ci --prefix host && npm run build --prefix host && node host/dist/kitsune.mjs setup`), then connect an MCP client, e.g. `claude mcp add kitsune -- node ~/.kitsune/app/kitsune.mjs mcp`, and ask it to read a page. The first time the agent opens a site, Kitsune's permission window appears. The end-to-end tests in `test/` show every tool working (`test/e2e-safety.mjs` covers the permission window and the pause controls).
+AMO limits this field to about 3,000 characters; the text below is about 2,450. For an update, start with one paragraph saying what changed in the add-on since the last reviewed version (check with `git diff --stat vOLD vNEW -- src extension vendor`), e.g. "New in 0.4.2: only content/content.js changed. ... No new permissions."
+
+```
+Kitsune lets a user-installed local AI agent (e.g. Claude Code, via MCP) operate tabs in a dedicated "Kitsune" tab group, like "Claude in Chrome" does on Chrome. Page content goes only through runtime.connectNative('kitsune') to a helper the user installs themselves (npx kitsune-firefox setup, source in host/). The add-on does nothing until that helper is installed and an agent connects.
+
+Permissions:
+- nativeMessaging: the only data channel, to the local helper.
+- <all_urls> + scripting: inject the content script into agent tabs on demand, only after the user approves the site in an extension-owned popup window (prompt/prompt.html).
+- tabs / tabGroups: keep agent tabs in their own group; the agent may only act on tabs in it.
+- webNavigation: frame origins (per-frame permission checks), page-load detection, re-injecting the console recorder.
+- webRequest: non-blocking; request URLs/status for agent tabs only (read_network_requests).
+- storage: site approvals. alarms: reconnect to the helper.
+
+No remote code: this listed build cannot run code strings. javascript_tool exists only in a separate, self-distributed build and is compiled out here.
+
+Injected scripts (all packaged, only in agent tabs on approved sites, one frame at a time):
+- content/content.js: page outline and input simulation.
+- content/hooks.js (isolated world): console capture, and non-blocking alert/confirm/prompt while the agent works in the tab (exportFunction); real dialogs when the user uses the tab.
+- content/page-hooks.js (MAIN world): only emulates pointer capture during Kitsune's own gestures (Firefox rejects setPointerCapture for synthetic pointers).
+
+Password values are never sent to the agent (shown as "(password, N characters)"). Vendored Playwright files (vendor/playwright, Apache-2.0, changes listed in NOTICE) compute accessibility roles/names. LICENSE, NOTICE and THIRD-PARTY-NOTICES.txt are included.
+
+Build: scripts are bundled with esbuild. The source zip has BUILDING.txt with exact steps and tool versions; rebuilding gives a byte-identical add-on.
+
+To test: npx kitsune-firefox setup (or from the source zip: npm ci --prefix host && npm run build --prefix host && node host/dist/kitsune.mjs setup), connect an MCP client (claude mcp add kitsune -- node ~/.kitsune/app/kitsune.mjs mcp) and ask it to read a page. Kitsune's permission window appears the first time the agent opens a site. test/e2e-safety.mjs covers the permission window and pause controls.
+```
+
+### Version notes ("release notes" shown to users)
+
+Write them from the CHANGELOG section, in user terms, for the add-on only (not the helper). 0.4.2's:
+
+```
+- Keyboard shortcuts for moving around text now work when the agent uses them: Cmd+Left/Right (start/end of line), Alt or Ctrl+Left/Right (one word), Ctrl+Home/End and Cmd+Up/Down (start/end of the text), and the same with Shift to select. Before, they did nothing, so agents had trouble selecting a word to format it.
+- Requires Firefox 152 or newer (153 ESR works).
+- The free helper program (npx kitsune-firefox setup) is now on npm; version 0.4.2 also fixes a case where real mouse and keyboard input could stay off for a whole session.
+```
 
 ### Data-collection consent
 
@@ -50,5 +66,7 @@ The store build covers everything else.
 ## npm package (`host/`)
 
 ```sh
-cd host && npm ci && npm run build && npm publish   # package name: kitsune-firefox
+cd host && npm ci && npm run build && npm publish --access public   # package name: kitsune-firefox
 ```
+
+Run it yourself in a terminal: the account's two-factor setting (`auth-and-writes`) shows a browser approval link for each publish. Run without a terminal (an agent, a script), it fails with `EOTP` instead.
