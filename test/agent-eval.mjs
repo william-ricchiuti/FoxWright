@@ -1,7 +1,15 @@
 // Real-agent evaluation: Claude Code (headless) completes everyday browser tasks using
 // only Kitsune's tools, and an independent verifier checks the result in the browser.
 //
-//   node test/agent-eval.mjs [--trusted | --ask] [--only REGEX] [--model NAME] [--max-turns N] [--repeat N]
+//   node test/agent-eval.mjs [--agent claude|codex|opencode] [--trusted | --ask] [--only REGEX] [--model NAME] [--max-turns N] [--repeat N]
+//
+//   --agent    which agent CLI runs the tasks (default claude). codex = OpenAI's Codex CLI
+//              (`codex exec`), opencode = OpenCode (`opencode run`, any provider, e.g.
+//              --model deepseek/deepseek-v4-pro). Both are locked down so only Kitsune's tools
+//              can reach the web: Codex without its shell, browser, computer use, apps and web
+//              search (its code mode has no network APIs) (read-only sandbox, your config.toml ignored); OpenCode with a
+//              temporary config (your opencode.json and plugins ignored) denying bash, edit,
+//              webfetch, websearch, task and skill. --max-turns applies to Claude only.
 //
 //   --trusted  real input through WebDriver BiDi
 //   --ask      Kitsune asks before every new site, as it does for real users; a scripted "user"
@@ -35,7 +43,14 @@ const MODEL = opt('--model');
 const MAX_TURNS = opt('--max-turns', '40');
 const REPEAT = Number(opt('--repeat', '1'));
 const CLAUDE = opt('--claude', 'claude');
-const MODE = (TRUSTED ? 'trusted' : 'synthetic') + (ASK ? '-ask' : '');
+const AGENT = opt('--agent', 'claude');
+if (!['claude', 'codex', 'opencode'].includes(AGENT)) {
+  console.error('--agent must be claude, codex or opencode.');
+  process.exit(2);
+}
+const AGENT_NAME = { claude: 'Claude Code', codex: 'Codex CLI', opencode: 'OpenCode' }[AGENT];
+// Reports and transcripts keep their old names for Claude, so earlier results stay comparable.
+const MODE = (AGENT === 'claude' ? '' : `${AGENT}-`) + (TRUSTED ? 'trusted' : 'synthetic') + (ASK ? '-ask' : '');
 const outDir = path.join(root, 'test', 'results');
 const transcriptDir = path.join(outDir, 'agent');
 fs.mkdirSync(transcriptDir, { recursive: true });
@@ -46,17 +61,19 @@ const BLOCKED = ['Bash', 'WebFetch', 'WebSearch', 'Read', 'Write', 'Edit', 'Mult
 
 let help = '';
 try {
-  help = execFileSync(CLAUDE, ['--help'], { encoding: 'utf8' });
+  help = execFileSync(AGENT === 'claude' ? CLAUDE : AGENT, ['--help'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 } catch (e) {
-  console.error(`Can't run the Claude Code CLI (${CLAUDE}). Install it and log in first.`);
+  console.error(`Can't run the ${AGENT_NAME} CLI (${AGENT === 'claude' ? CLAUDE : AGENT}). Install it and log in first.`);
   process.exit(1);
 }
 const STRICT = help.includes('--strict-mcp-config');
 
 const mcpConfig = path.join(os.tmpdir(), `kitsune-agent-eval-${process.pid}.json`);
 // Written after the harness starts (below), so the MCP server can point at the harness's Kitsune folder.
+let mcpServer = null; // { command, args, env } for the agents that take it directly
 function writeMcpConfig(h) {
   const env = { KITSUNE_HOME: path.join(h.home, '.kitsune'), ...(h.bidiUrl ? { KITSUNE_BIDI_URL: h.bidiUrl } : {}) };
+  mcpServer = { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], env };
   fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { kitsune: { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], env } } }));
 }
 const uploadFile = path.join(os.tmpdir(), 'kitsune-agent-upload.txt');
@@ -145,8 +162,148 @@ function runClaude(prompt, transcriptPath) {
   });
 }
 
+const BROWSER_HINT = 'Do the task in the web browser using the Kitsune tools. Do not answer from memory.';
+const newMetrics = () => ({ calls: [], toolCalls: {}, toolErrors: 0, resultChars: {}, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, seen: new Set(), idToTool: {}, final: null });
+function countResult(m, tool, parts) {
+  const r = m.resultChars[tool] || (m.resultChars[tool] = { chars: 0, images: 0 });
+  for (const p of parts) {
+    if (p.type === 'text')
+      r.chars += (p.text || '').length;
+    else if (p.type === 'image')
+      r.images++;
+  }
+}
+function recordCall(m, name, input, isError, parts) {
+  name = String(name).replace(/^(mcp__)?kitsune(__|_|\.)/, '');
+  m.toolCalls[name] = (m.toolCalls[name] || 0) + 1;
+  m.calls.push({ name, input: input || {} });
+  if (isError)
+    m.toolErrors++;
+  countResult(m, name, parts);
+}
+
+/** Spawn an agent CLI, write its JSONL to the transcript and feed each event to onEvent(ev, m). */
+function spawnAgent(cmd, args, opts, transcriptPath, onEvent) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const child = spawn(cmd, args, { ...opts, stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = fs.createWriteStream(transcriptPath);
+    let buf = '', stderr = '';
+    const m = newMetrics();
+    const onLine = (line) => {
+      let ev;
+      try {
+        ev = JSON.parse(line);
+      } catch {
+        return;
+      }
+      onEvent(ev, m);
+    };
+    child.stdout.on('data', (d) => {
+      out.write(d);
+      buf += d;
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        onLine(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+      }
+    });
+    child.stderr.on('data', (d) => {
+      stderr += d;
+    });
+    const timer = setTimeout(() => child.kill('SIGTERM'), 8 * 60 * 1000);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (buf.trim())
+        onLine(buf);
+      out.end();
+      resolve({ code, ms: Date.now() - t0, stderr, m });
+    });
+  });
+}
+
+const tomlStr = (v) => JSON.stringify(String(v)); // TOML basic strings use JSON-compatible escapes
+function runCodex(prompt, transcriptPath) {
+  const s = mcpServer;
+  const envTable = '{' + Object.entries(s.env).map(([k, v]) => `${k}=${tomlStr(v)}`).join(', ') + '}';
+  // code_mode_host stays on: Codex calls MCP tools through it, and its JavaScript has no fetch,
+  // XMLHttpRequest, WebSocket, require or imports (checked 2026-11-08, codex-cli 0.161.0).
+  const off = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'computer_use', 'apps', 'in_app_browser', 'image_generation', 'skill_search', 'tool_suggest'];
+  const args = ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only',
+    '-c', 'web_search="disabled"', ...off.flatMap(f => ['--disable', f]),
+    '-c', `mcp_servers.kitsune.command=${tomlStr(s.command)}`,
+    '-c', `mcp_servers.kitsune.args=[${s.args.map(tomlStr).join(', ')}]`,
+    '-c', `mcp_servers.kitsune.env=${envTable}`,
+    '-c', 'mcp_servers.kitsune.startup_timeout_sec=30',
+    '-c', 'mcp_servers.kitsune.tool_timeout_sec=180',
+    '-c', 'mcp_servers.kitsune.default_tools_approval_mode="approve"', // headless: nobody can approve calls (Kitsune's own permission windows still apply)
+    '-C', os.tmpdir()];
+  if (MODEL)
+    args.push('-m', MODEL);
+  args.push(`${BROWSER_HINT}\n\n${prompt}`);
+  let lastMessage = '';
+  return spawnAgent('codex', args, { cwd: os.tmpdir() }, transcriptPath, (ev, m) => {
+    const it = ev.item;
+    if (ev.type === 'item.completed' && it) {
+      if (it.type === 'agent_message')
+        lastMessage = it.text || '';
+      else if (it.type === 'mcp_tool_call' && it.server === 'kitsune') {
+        const content = it.result?.content || [];
+        recordCall(m, it.tool || it.name, it.arguments, it.status === 'failed' || !!it.error || !!it.result?.isError || !!it.result?.is_error, content);
+      }
+    } else if (ev.type === 'turn.completed' && ev.usage) {
+      m.usage.input += (ev.usage.input_tokens || 0) - (ev.usage.cached_input_tokens || 0);
+      m.usage.cacheRead += ev.usage.cached_input_tokens || 0;
+      m.usage.output += (ev.usage.output_tokens || 0) + (ev.usage.reasoning_output_tokens || 0);
+    }
+    m.final = { result: lastMessage };
+  });
+}
+
+function runOpencode(prompt, transcriptPath) {
+  // A throwaway config folder: the user's opencode.json, AGENTS.md and plugins are not loaded.
+  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-opencode-'));
+  fs.mkdirSync(path.join(xdg, 'opencode'));
+  const deny = ['bash', 'edit', 'write', 'patch', 'webfetch', 'websearch', 'codesearch', 'task', 'skill'];
+  fs.writeFileSync(path.join(xdg, 'opencode', 'opencode.json'), JSON.stringify({
+    $schema: 'https://opencode.ai/config.json',
+    mcp: { kitsune: { type: 'local', command: [mcpServer.command, ...mcpServer.args], environment: mcpServer.env, enabled: true, timeout: 30000 } },
+    permission: { bash: 'deny', edit: 'deny', webfetch: 'deny', websearch: 'deny', codesearch: 'deny', external_directory: 'deny' },
+    tools: Object.fromEntries(deny.map(t => [t, false])),
+  }));
+  const args = ['run', '--pure', '--format', 'json', '--title', `kitsune-eval ${path.basename(transcriptPath, '.jsonl')}`];
+  if (MODEL)
+    args.push('-m', MODEL);
+  args.push(`${BROWSER_HINT}\n\n${prompt}`);
+  const texts = new Map(); // part id -> text (parts can be re-sent as they grow)
+  let cost = 0;
+  const p = spawnAgent('opencode', args, { cwd: os.tmpdir(), env: { ...process.env, XDG_CONFIG_HOME: xdg } }, transcriptPath, (ev, m) => {
+    const part = ev.part || {};
+    if (part.type === 'tool') {
+      const st = part.state || {};
+      if ((st.status === 'completed' || st.status === 'error') && !m.seen.has(part.id || part.callID)) {
+        m.seen.add(part.id || part.callID);
+        recordCall(m, part.tool, st.input, st.status === 'error', [{ type: 'text', text: String(st.output ?? st.error ?? '') }]);
+      }
+    } else if (part.type === 'text') {
+      texts.set(part.id || texts.size, part.text || '');
+    } else if (part.type === 'step-finish') {
+      const t = part.tokens || {};
+      m.usage.input += t.input || 0;
+      m.usage.output += (t.output || 0) + (t.reasoning || 0);
+      m.usage.cacheRead += t.cache?.read || 0;
+      m.usage.cacheWrite += t.cache?.write || 0;
+      cost += part.cost || 0;
+    }
+    m.final = { result: [...texts.values()].pop() || '', total_cost_usd: cost };
+  });
+  return p.finally(() => fs.rmSync(xdg, { recursive: true, force: true }));
+}
+
+const runAgent = (prompt, transcriptPath) => (AGENT === 'codex' ? runCodex : AGENT === 'opencode' ? runOpencode : runClaude)(prompt, transcriptPath);
+
 async function main() {
-  console.log(`Kitsune agent evaluation: Claude Code + Kitsune (${MODE} input)${MODEL ? `, model ${MODEL}` : ''}${STRICT ? '' : ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]'}`);
+  console.log(`Kitsune agent evaluation: ${AGENT_NAME} + Kitsune (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)${MODEL ? `, model ${MODEL}` : ''}${AGENT === 'claude' && !STRICT ? ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]' : ''}`);
   // In trusted mode Firefox gets a debugging port for Claude's Kitsune MCP server; the harness's
   // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
   const h = await start({ testDriver: TRUSTED || ASK, policy: ASK ? { mode: 'ask', confirmUploads: true } : undefined });
@@ -172,7 +329,7 @@ async function main() {
       const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.KITSUNE_P1}`);
       const transcript = path.join(transcriptDir, `${MODE}-${task.id}${REPEAT > 1 ? `-${rep + 1}` : ''}.jsonl`);
       process.stdout.write(`  … ${task.id}`);
-      const run = await runClaude(prompt, transcript);
+      const run = await runAgent(prompt, transcript);
       const answer = String(run.m.final?.result ?? '');
       const tabs = await groupTabs();
       const active = tabs.find(t => t.active) || tabs[tabs.length - 1];
@@ -241,9 +398,9 @@ async function main() {
     }
   const totalCost = rows.reduce((s, r) => s + (r.cost || 0), 0);
   const md = [
-    `# Agent evaluation: Claude Code + Kitsune (${MODE} input)`,
+    `# Agent evaluation: ${AGENT_NAME} + Kitsune (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)`,
     '',
-    `${new Date().toISOString()} · ${os.platform()} ${os.arch()}${MODEL ? ` · model ${MODEL}` : ''} · max turns ${MAX_TURNS}`,
+    `${new Date().toISOString()} · ${os.platform()} ${os.arch()}${MODEL ? ` · model ${MODEL}` : ''}${AGENT === 'claude' ? ` · max turns ${MAX_TURNS}` : ''}`,
     '',
     REPEAT > 1 ? `Each task ran ${REPEAT} times. pass@1: **${Math.round(100 * passed / rows.length)}%** (${passed}/${rows.length} runs). pass@${REPEAT}: ${passAtN}/${taskIds.length} tasks. Passed every time: ${allPass}/${taskIds.length} tasks.\n` : '',
     `**${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,

@@ -75,6 +75,7 @@ Status: `[x]` done · `[~]` partly done (see note) · `[ ]` not started
 - Download handling
 - Element/region screenshots
 - LibreWolf, Waterfox, Floorp support
+- Say what's selected after a key press that changes the selection (agents select text blind with shift+arrows today)
 
 ## Work log
 
@@ -273,6 +274,12 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
   call both called `session.new`; the diagnostic added in the fix round printed "Maximum number of active sessions").
   Fixed in `host/src/bidi.js` with a shared connection attempt; `test/bidi-connect.mjs` reproduces it (fails before,
   passes after). MCP SDK 1.32.2, zod 4.6.7, web-ext 10.8.0; Dependabot and `npm audit` for the package clean.
+- [x] Cross-model agent eval (`--agent codex|opencode`): GPT via Codex 17/17, DeepSeek v4-pro 17/17 ($0.09; 16/17 in
+  an earlier run), DeepSeek v4.1 flash (free) 17/17. Fixed the `rich-editor` check, which skipped the bold test when
+  the editor is in a cross-origin frame. Details in TESTING.md, "Other models".
+- [ ] **Bug: Cmd/Alt/Ctrl+arrow keys do nothing in synthetic mode** (`src/content/input.ts` key defaults ignore the
+  modifier; `cmd+left` should go to the line start, `alt/ctrl+left` one word, `cmd+up` / `ctrl+home` to the start).
+  Found from DeepSeek's transcripts; confirmed on `basic.html` in contenteditable and text inputs. Not fixed yet.
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).
