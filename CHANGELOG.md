@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2 (2026-11-08)
+
+**Fixes**
+- Cmd/Alt/Ctrl + arrow keys, and Ctrl+Home/End, did nothing in the default (synthetic) input mode: the caret stayed where it was. They now work as on a real keyboard, in text fields, text areas and rich-text editors: Cmd+Left/Right to the start/end of the line, Alt or Ctrl+Left/Right by a word, Cmd+Up/Down and Ctrl+Home/End to the start/end of the text, and with Shift they extend the selection. Agents use these to select a word before formatting it (found in DeepSeek's transcripts from the cross-model evaluation). New e2e test with 20 cases; real-input mode was already fine.
+
 ## 0.4.1 (2026-11-08)
 
 **Fixes**

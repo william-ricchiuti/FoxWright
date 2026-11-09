@@ -11,7 +11,7 @@ Every test drives Kitsune the way an AI client does: an MCP client calls the too
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
-| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors and slow-loading nested frames, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **58/58** (152, 159, Mac 158) | **58/58** (152, 159, Mac 158) |
+| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors and slow-loading nested frames, Cmd/Alt/Ctrl+arrow caret keys, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **59/59** (152, 159, Mac 159) | **59/59** (152, 159, Mac 159) |
 | `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval) | **7/7** (152, 159, Mac 158) | n/a |
 | `e2e-permissions.mjs`: approval timeouts, frame gating, uploads | 5/5 | n/a |
 | `e2e-resilience.mjs`: concurrency, latency, crash/restart recovery | 5/5 | n/a |
@@ -79,7 +79,7 @@ The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-
 What the transcripts showed:
 
 - **A loose check.** The Quill playground now runs its editor in a cross-origin frame, so the `rich-editor` check's page script couldn't read it and fell back to "the words appear somewhere", never checking the bold. DeepSeek v4-pro's first run passed that way while its editor showed an empty `strong` (bold toggled with nothing selected). The fallback now reads the editor paragraph from the outline and requires exactly "Kitsune" bold, then "was here." (`quillOutlineOk` in `test/agent-tasks.mjs`). Claude's and GPT's transcripts show the correct result, and a rerun of that task with the fixed check passed for all four models.
-- **A Kitsune bug: Cmd/Alt/Ctrl+arrow do nothing in synthetic mode.** DeepSeek pressed `cmd+left` to get to the start of the line before selecting "Kitsune". In synthetic mode `cmd+left`, `alt+left` and `ctrl+left` leave the caret where it was, in contenteditable and text inputs alike (`Home` works). Confirmed with a direct test on `basic.html`. Trusted mode isn't affected (Firefox handles the keys). See ROADMAP.
+- **A Kitsune bug: Cmd/Alt/Ctrl+arrow do nothing in synthetic mode.** DeepSeek pressed `cmd+left` to get to the start of the line before selecting "Kitsune". In synthetic mode `cmd+left`, `alt+left` and `ctrl+left` leave the caret where it was, in contenteditable and text inputs alike (`Home` works). Confirmed with a direct test on `basic.html`. Trusted mode isn't affected (Firefox handles the keys). Fixed in 0.4.2.
 - **javascript_tool used only to look.** Both DeepSeek models called `javascript_tool` (full build) on the canvas and editor tasks, but only to measure the canvas or list iframes; the drawing and the bold were done with clicks and keys.
 - **Codex needs its approval switch.** Headless Codex refuses MCP tool calls unless the server is pre-approved (`default_tools_approval_mode="approve"`); Kitsune's own permission windows are unaffected.
 
