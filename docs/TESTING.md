@@ -65,6 +65,25 @@ What the transcripts showed, and what fixed each problem:
 
 The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-trusted.md`.
 
+### Other models (2026-11-08)
+
+`--agent codex` runs the tasks with OpenAI's Codex CLI and `--agent opencode` with OpenCode (any provider). Both were locked down so Kitsune was their only way to the web. That was checked first by asking each to fetch example.com without Kitsune: Codex had no shell, browser, computer use, apps or web search (its code-mode JavaScript has no `fetch`, `XMLHttpRequest`, `WebSocket` or `require`), and OpenCode ran with a temporary config denying bash, edit, webfetch, websearch, task and skill. Your own `config.toml` / `opencode.json` aren't loaded or changed.
+
+| Agent and model | Passed | Median time | Median tool calls | Tool errors | Tokens | Cost |
+|---|---|---|---|---|---|---|
+| Claude Code, Opus 5.5 (synthetic / trusted) | 17/17 · 17/17 | 36 s · 31 s | 7 · 6 | 0 · 0 | 4.5M · 4.3M | $4.05 · $3.68 |
+| Codex CLI, `gpt-6-astra` | 17/17 | 27 s | 7 | 0 | 2.5M | ChatGPT plan |
+| OpenCode, DeepSeek v4-pro | 17/17 (16/17 in an earlier run) | 19 s | 6 | 2 | 1.4M | $0.09 |
+| OpenCode, DeepSeek v4.1 flash (free) | 17/17 | 19 s | 6 | 2 | 1.4M | $0 |
+
+What the transcripts showed:
+
+- **A loose check.** The Quill playground now runs its editor in a cross-origin frame, so the `rich-editor` check's page script couldn't read it and fell back to "the words appear somewhere", never checking the bold. DeepSeek v4-pro's first run passed that way while its editor showed an empty `strong` (bold toggled with nothing selected). The fallback now reads the editor paragraph from the outline and requires exactly "Kitsune" bold, then "was here." (`quillOutlineOk` in `test/agent-tasks.mjs`). Claude's and GPT's transcripts show the correct result, and a rerun of that task with the fixed check passed for all four models.
+- **A Kitsune bug: Cmd/Alt/Ctrl+arrow do nothing in synthetic mode.** DeepSeek pressed `cmd+left` to get to the start of the line before selecting "Kitsune". In synthetic mode `cmd+left`, `alt+left` and `ctrl+left` leave the caret where it was, in contenteditable and text inputs alike (`Home` works). Confirmed with a direct test on `basic.html`. Trusted mode isn't affected (Firefox handles the keys). See ROADMAP.
+- **javascript_tool used only to look.** Both DeepSeek models called `javascript_tool` (full build) on the canvas and editor tasks, but only to measure the canvas or list iframes; the drawing and the bold were done with clicks and keys.
+- **Codex needs its approval switch.** Headless Codex refuses MCP tool calls unless the server is pre-approved (`default_tools_approval_mode="approve"`); Kitsune's own permission windows are unaffected.
+
+
 **Since 0.3.0** the checks are stricter and there's a 17th, local task (`signup-wizard`: validation errors, three steps, a code that depends on every answer). The full run on 2026-11-08 passed all 17 in both modes. The cost per run went from about $1.57 to about $4 with similar token counts; that run used Claude Opus 5.5, and the earlier runs didn't record their model, so the difference is probably the model's price. Not yet run: `--ask` (permission prompts answered by a scripted user) and `--repeat`.
 
 ## macOS run (0.2.0, your MacBook Pro)

@@ -57,6 +57,16 @@ Results for the current code (November 2026, macOS, Firefox 158, Claude Opus 5.5
 | Synthetic (default) | **17/17** | 36 s | 7 | $4.05 |
 | Trusted (remote debugging) | **17/17** | 31 s | 6 | $3.68 |
 
+The same 17 tasks with other models and agents (default input mode, November 2026, same checks):
+
+| Agent and model | Tasks completed | Median time | Median tool calls | Cost for all 17 |
+|---|---|---|---|---|
+| Codex CLI, GPT (`gpt-6-astra`) | **17/17** | 27 s | 7 | ChatGPT plan usage |
+| OpenCode, DeepSeek v4-pro | **17/17** | 19 s | 6 | $0.09 |
+| OpenCode, DeepSeek v4.1 flash (free) | **17/17** | 19 s | 6 | $0 |
+
+So Kitsune's tools aren't tied to Claude: models that weren't trained on Claude in Chrome's tool names used them without changes. Each agent could reach the web only through Kitsune (shell, web fetch/search and built-in browsers off). DeepSeek v4-pro failed the rich-text task once in an earlier run, which is the kind of variance one run per task can hide. Reports: [GPT](docs/agent-eval-gpt.md), [DeepSeek v4-pro](docs/agent-eval-deepseek-v4-pro.md), [DeepSeek flash](docs/agent-eval-deepseek-flash.md). Run them with `node test/agent-eval.mjs --agent codex` or `--agent opencode --model provider/model`.
+
 Version 0.3.0 scored 16/16 on the first 16 tasks with looser checks ($1.57 and $1.58; the model wasn't recorded then). The very first version scored 14/16. The agent's own transcripts drove the fixes: multi-step batching, text search within a page, a `form_input` that handles custom dropdowns, word selection on double-click, and more forgiving arguments. Full reports: [synthetic](docs/agent-eval-synthetic.md), [trusted](docs/agent-eval-trusted.md).
 
 These numbers are a useful signal, not a guarantee: one run per task, demo sites rather than your logged-in accounts, and no permission prompts. The checks are strict (for example, the editor task checks that only "Kitsune" is bold, and the search task that the agent really used the site's search). The evaluation can also run with permission prompts on (`--ask`) and repeat tasks (`--repeat N`). Run it yourself with `node test/agent-eval.mjs`. It needs the `claude` CLI; the cost depends on the model (about $4 per run with Opus 5.5, which on a Claude subscription counts against its usage limits).

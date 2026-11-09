@@ -19,6 +19,35 @@ async function jsJson(c, code, urlRe) {
   }
 }
 
+/**
+ * The rich-editor check from Kitsune's outline: the editor paragraph must read exactly
+ * "Kitsune was here." with only "Kitsune" bold, e.g.
+ *   - paragraph [ref=f1e36]:
+ *     - strong [ref=f1e37]: Kitsune
+ *     - text: was here.
+ * (An empty "- strong" line is bold toggled at the caret with nothing selected: not a pass.)
+ */
+export function quillOutlineOk(outline) {
+  const lines = outline.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*- paragraph\b/.test(lines[i]))
+      continue;
+    const indent = lines[i].match(/^\s*/)[0].length;
+    const kids = [];
+    for (let j = i + 1; j < lines.length && lines[j].match(/^\s*/)[0].length > indent; j++)
+      kids.push(lines[j].trim());
+    const parts = kids.map(k => /^- (strong|text)(?: \[[^\]]*\])*(?:: (.*))?$/.exec(k)).filter(Boolean);
+    if (parts.length !== kids.length)
+      continue; // something else in this paragraph (links, images, other formatting)
+    const text = parts.map(p => (p[2] || '').replace(/^"|"$/g, '').trim()).filter(Boolean).join(' ');
+    if (text !== 'Kitsune was here.')
+      continue;
+    const bold = parts.filter(p => p[1] === 'strong').map(p => (p[2] || '').trim());
+    return bold.length === 1 && bold[0] === 'Kitsune';
+  }
+  return false;
+}
+
 const has = (s, ...needles) => needles.every(n => (n instanceof RegExp ? n.test(s) : s.toLowerCase().includes(String(n).toLowerCase())));
 
 export const TASKS = [
@@ -112,8 +141,8 @@ export const TASKS = [
         for (const f of document.querySelectorAll('iframe')) { try { ed = ed || find(f.contentDocument); } catch {} }
         return ed ? JSON.stringify({ text: ed.innerText.trim(), bold: [...ed.querySelectorAll('strong, b')].map(b => b.textContent.trim()) }) : 'null';
       })()`, /quilljs/);
-      if (!r) // editor not reachable from the page (cross-origin frame): fall back to the outline
-        return /Kitsune/.test(await c.outline('all')) && /was here/.test(await c.outline('all'));
+      if (!r) // editor not reachable from the page (the playground runs it in a cross-origin frame): use the outline
+        return quillOutlineOk(await c.outline('all'));
       return r.text === 'Kitsune was here.' && r.bold.join(' ') === 'Kitsune';
     },
   },
