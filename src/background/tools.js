@@ -772,7 +772,17 @@ export const tools = {
     }
     if (!p)
       return { data: null };
-    return { data: { x: p.x, y: p.y, target: p.target, draggable: !!p.draggable, frameId: frameIdFromPrefix(tab.id, p.prefix) } };
+    const frameId = frameIdFromPrefix(tab.id, p.prefix);
+    // Also in screenshot pixels (top-level viewport), e.g. to mark a ref click in a GIF frame.
+    let shot;
+    try {
+      const o = frameId ? await frameOrigin(tab.id, frameId) : { x: 0, y: 0 };
+      const vp = await viewportOf(tab);
+      const s = scaleFor(vp.width, vp.height);
+      if (o)
+        shot = [Math.round((p.x + o.x) * s), Math.round((p.y + o.y) * s)];
+    } catch { /* not needed for input */ }
+    return { data: { x: p.x, y: p.y, target: p.target, draggable: !!p.draggable, frameId, shot } };
   },
 
   async _focus(args) {
@@ -802,6 +812,98 @@ export const tools = {
       await browser.scripting.executeScript({ target: { tabId: args.tabId, frameIds: [args.frameId || 0] }, func: () => { document.documentElement.removeAttribute('data-kitsune-probe'); } });
     } catch { /* ignore */ }
     return { data: true };
+  },
+
+  /**
+   * Draw a GIF frame's overlays with a canvas (real fonts, any language): click ring, drag arrow,
+   * action label, progress bar, watermark. In: a recorded JPEG frame (base64) and what to draw, in
+   * the frame's own pixels. Out: a JPEG scaled to `width`. Used by gif_creator export.
+   */
+  async _annotate_frame(args) {
+    const bytes = Uint8Array.from(atob(String(args.jpeg || '')), c => c.charCodeAt(0));
+    const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }));
+    const s = Math.min(1, (Number(args.width) || 800) / bmp.width);
+    const w = Math.round(bmp.width * s), h = Math.round(bmp.height * s);
+    const c = new OffscreenCanvas(w, h);
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const RED = '#d64024';
+    if (Array.isArray(args.drag) && args.drag.length === 4) {
+      const [x0, y0, x1, y1] = args.drag.map(v => v * s);
+      g.strokeStyle = RED;
+      g.fillStyle = RED;
+      g.lineWidth = 3;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x1, y1);
+      g.stroke();
+      const a = Math.atan2(y1 - y0, x1 - x0), len = 12;
+      g.beginPath();
+      g.moveTo(x1, y1);
+      g.lineTo(x1 - len * Math.cos(a - 0.45), y1 - len * Math.sin(a - 0.45));
+      g.lineTo(x1 - len * Math.cos(a + 0.45), y1 - len * Math.sin(a + 0.45));
+      g.closePath();
+      g.fill();
+    }
+    if (Array.isArray(args.click) && args.click.length === 2) {
+      const [x, y] = args.click.map(v => v * s);
+      g.lineWidth = 3;
+      g.strokeStyle = '#fff';
+      g.beginPath();
+      g.arc(x, y, 13, 0, Math.PI * 2);
+      g.stroke();
+      g.strokeStyle = RED;
+      g.beginPath();
+      g.arc(x, y, 11, 0, Math.PI * 2);
+      g.stroke();
+      g.fillStyle = RED;
+      g.beginPath();
+      g.arc(x, y, 2.5, 0, Math.PI * 2);
+      g.fill();
+    }
+    const font = '600 13px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+    if (typeof args.label === 'string' && args.label.trim()) {
+      g.font = font;
+      const max = w - 24;
+      let t = args.label.trim();
+      while (t.length > 1 && g.measureText(t).width > max - 16)
+        t = t.slice(0, -2) + '…';
+      const tw = g.measureText(t).width;
+      g.fillStyle = 'rgba(20, 16, 14, 0.82)';
+      g.beginPath();
+      if (g.roundRect)
+        g.roundRect(10, 10, tw + 16, 24, 6);
+      else
+        g.rect(10, 10, tw + 16, 24);
+      g.fill();
+      g.fillStyle = '#fff';
+      g.textBaseline = 'middle';
+      g.fillText(t, 18, 22);
+    }
+    if (typeof args.progress === 'number') {
+      g.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      g.fillRect(0, h - 4, w, 4);
+      g.fillStyle = RED;
+      g.fillRect(0, h - 4, Math.round(w * Math.min(1, Math.max(0, args.progress))), 4);
+    }
+    if (args.watermark) {
+      g.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+      const t = '狐 Kitsune';
+      const tw = g.measureText(t).width;
+      g.fillStyle = 'rgba(20, 16, 14, 0.55)';
+      g.fillRect(w - tw - 18, h - 26, tw + 12, 18);
+      g.fillStyle = '#fff';
+      g.textBaseline = 'middle';
+      g.fillText(t, w - tw - 12, h - 17);
+    }
+    const blob = await c.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000)
+      bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return { data: btoa(bin) };
   },
 
   async _after(args) {

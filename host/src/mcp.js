@@ -111,16 +111,44 @@ const jsonish = (schema) => z.preprocess((v) => {
 }, schema);
 const numish = (schema) => z.preprocess((v) => (typeof v === 'string' && /^\s*-?\d+(\.\d+)?\s*$/.test(v) ? Number(v) : v), schema);
 /** If a GIF recording is running for this tab, grab a frame after an action. */
-async function recordFrame(tab, click) {
+async function recordFrame(tab, click, extra = {}) {
   if (typeof tab !== 'number' || !isRecording(tab))
     return;
   try {
     const r = await helper.call('computer', { tabId: tab, action: 'screenshot' }, 20000);
     const img = r?.content?.find(c => c.type === 'image');
     if (img)
-      addFrame(tab, img.data, click);
+      addFrame(tab, img.data, click, extra);
   } catch { /* recording is best-effort */ }
 }
+
+/** Where a ref click lands, in screenshot pixels, so the GIF frame can mark it (only while recording). */
+async function refShot(a) {
+  if (!a.ref || Array.isArray(a.coordinate) || typeof a.tabId !== 'number' || !isRecording(a.tabId) || !/click|hover/.test(a.action || ''))
+    return undefined;
+  try {
+    return (await helper.call('_point', { tabId: a.tabId, ref: a.ref }, 10000))?.data?.shot;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The GIF label for a computer action: the agent's action_summary, else a neutral description
+ *  (never the typed text, which may be private). */
+function frameLabel(a) {
+  const own = typeof a.action_summary === 'string' ? a.action_summary.replace(/\s+/g, ' ').trim().slice(0, 120) : '';
+  if (own)
+    return own;
+  if (a.action === 'type')
+    return `Typed ${String(a.text ?? '').length} characters`;
+  if (a.action === 'key')
+    return `Pressed ${String(a.text ?? '').slice(0, 40)}`;
+  return String(a.action || '').replace(/_/g, ' ');
+}
+const frameExtra = (a) => ({
+  label: frameLabel(a),
+  drag: a.action === 'left_click_drag' && Array.isArray(a.start_coordinate) && Array.isArray(a.coordinate) ? [...a.start_coordinate, ...a.coordinate] : undefined,
+});
 
 /** When an action navigated the page, append what's on the new page (saves a read_page call). */
 async function withNavSummary(r, tab) {
@@ -377,7 +405,7 @@ export async function runMcp() {
       const summary = await onScreenSummary(lastTab);
       if (summary)
         r.content.push({ type: 'text', text: summary });
-      await recordFrame(lastTab);
+      await recordFrame(lastTab, undefined, { label: /^(back|forward)$/.test(a.url) ? `Went ${a.url}` : `Opened ${String(a.url).replace(/^https?:\/\//, '').slice(0, 80)}` });
     }
     return r;
   });
@@ -416,7 +444,12 @@ export async function runMcp() {
       tabId,
       action_summary: actionSummary,
     },
-  }, async (a) => call('form_input', a));
+  }, async (a) => {
+    const r = await call('form_input', a);
+    if (!r.isError)
+      await recordFrame(a.tabId, undefined, { label: typeof a.action_summary === 'string' && a.action_summary.trim() ? a.action_summary.replace(/\s+/g, ' ').trim().slice(0, 120) : `Filled ${a.ref}` });
+    return r;
+  });
 
   server.registerTool('computer', {
     description: `Use mouse and keyboard on a Kitsune tab, or take screenshots.
@@ -452,10 +485,11 @@ Actions:
     const a = { ...a0, scroll_amount: clamp(a0.scroll_amount, 1, 30), repeat: clamp(a0.repeat, 1, 100), duration: typeof a0.duration === 'number' ? Math.min(10, Math.max(0, a0.duration)) : undefined };
     if (typeof a.tabId !== 'number')
       a.tabId = await defaultTab();
+    const clickAt = Array.isArray(a.coordinate) ? a.coordinate : await refShot(a); // before the click: the element may go away
     try {
       const trusted = await trustedComputer(a);
       if (trusted) {
-        await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? a.coordinate : undefined);
+        await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? clickAt : undefined, frameExtra(a));
         return withNavSummary(trusted, a.tabId);
       }
     } catch (e) {
@@ -463,7 +497,7 @@ Actions:
     }
     const r = await call('computer', a, a.action === 'wait' ? 20000 : 180000);
     if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
-      await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? a.coordinate : undefined);
+      await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? clickAt : undefined, frameExtra(a));
     return withNavSummary(r, a.tabId);
   });
 
@@ -562,11 +596,21 @@ Actions:
   });
 
   server.registerTool('gif_creator', {
-    description: 'Record what you do in a tab as an animated GIF, e.g. to show the user how a task was done. start_recording, then act normally (a frame is captured after every navigate/computer action, with clicks marked), then stop_recording and export. export saves the GIF to the user\'s Downloads folder and returns the path.',
+    description: 'Record what you do in a tab as an animated GIF, e.g. to show the user how a task was done. start_recording, then act normally (a frame is captured after every navigate/computer/form_input action), then stop_recording and export. export saves the GIF to the user\'s Downloads folder and returns the path; with coordinate it also drops the GIF onto that spot on the page (e.g. an upload area), after the user confirms. Frames show click circles, drag arrows, each action\'s label (your action_summary), a progress bar and a small watermark; options turns these off.',
     inputSchema: {
       action: z.enum(['start_recording', 'stop_recording', 'export', 'clear']),
       tabId,
       filename: z.string().optional().describe('File name for export (saved in Downloads).'),
+      options: jsonish(z.object({
+        showClickIndicators: z.boolean().optional(),
+        showDragPaths: z.boolean().optional(),
+        showActionLabels: z.boolean().optional(),
+        showProgressBar: z.boolean().optional(),
+        showWatermark: z.boolean().optional(),
+        quality: numish(z.number()).optional().describe('1 (best) to 30 (smallest file). Default 10.'),
+      })).optional().describe('For export: what to draw on the frames (all default true) and quality.'),
+      coordinate: coord.optional().describe('For export: also drop the GIF onto this screenshot coordinate (a drop zone); the user confirms the upload.'),
+      download: z.boolean().optional().describe('Accepted for compatibility: export always saves the GIF to Downloads.'),
     },
   }, async (a) => {
     const tab = typeof a.tabId === 'number' ? a.tabId : await defaultTab();
@@ -588,8 +632,14 @@ Actions:
       }
       if (isRecording(tab))
         stopRecording(tab);
-      const out = exportGif(tab, { filename: a.filename });
-      return { content: [{ type: 'text', text: `Saved ${out.frames}-frame GIF (${Math.round(out.bytes / 1024)} KB) to ${out.file}` }] };
+      const annotate = async (jpegB64, spec) => (await helper.call('_annotate_frame', { jpeg: jpegB64, ...spec }, 20000))?.data;
+      const out = await exportGif(tab, { filename: a.filename, options: a.options, annotate });
+      const saved = `Saved ${out.frames}-frame GIF (${Math.round(out.bytes / 1024)} KB) to ${out.file}${out.annotated ? '' : ' (only click circles drawn: update the Kitsune extension for labels, arrows and the progress bar)'}`;
+      if (!a.coordinate)
+        return { content: [{ type: 'text', text: saved }] };
+      const up = await handlers.file_upload({ tabId: tab, coordinate: a.coordinate, paths: [out.file] });
+      const upText = (up.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+      return { content: [{ type: 'text', text: `${saved}\n${upText}` }], ...(up.isError ? { isError: true } : {}) };
     } catch (e) {
       return errorResult(e);
     }

@@ -464,6 +464,25 @@ async function main() {
     fs.rmSync(file, { force: true });
   });
 
+  await test('gif_creator export options: labels and overlays drawn by the extension, or turned off', async () => {
+    await call('gif_creator', { action: 'start_recording' });
+    await nav('/react.html');
+    const { ref } = await refFor('Count', 'button');
+    await call('computer', { action: 'left_click', ref, action_summary: 'Clicks the Count button' });
+    await call('computer', { action: 'left_click_drag', start_coordinate: [60, 60], coordinate: [260, 160] });
+    await call('gif_creator', { action: 'stop_recording' });
+    const full = await call('gif_creator', { action: 'export', filename: 'e2e-full.gif' });
+    const plain = await call('gif_creator', { action: 'export', filename: 'e2e-plain.gif', options: { showClickIndicators: false, showDragPaths: false, showActionLabels: false, showProgressBar: false, showWatermark: false, quality: 30 } });
+    const fileOf = (r) => /to (\S+\.gif)/.exec(r.text)?.[1];
+    expect(fileOf(full) && fileOf(plain), `${full.text}\n${plain.text}`);
+    expect(!/only click circles/.test(full.text), `overlays should be drawn by the extension: ${full.text}`);
+    const [a, b] = [fs.statSync(fileOf(full)).size, fs.statSync(fileOf(plain)).size];
+    expect(a > b, `the full GIF (labels, arrows, 186 colors) should be bigger than the plain one (32 colors): ${a} vs ${b} bytes`);
+    for (const r of [full, plain])
+      fs.rmSync(fileOf(r), { force: true });
+    await call('gif_creator', { action: 'clear' });
+  });
+
   await test('gif_creator export ignores directories in the file name', async () => {
     await call('gif_creator', { action: 'start_recording' });
     await call('computer', { action: 'left_click', coordinate: [100, 100] });
