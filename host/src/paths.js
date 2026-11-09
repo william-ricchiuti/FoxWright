@@ -44,6 +44,18 @@ export function socketPath() {
   return path.join(kitsuneDir(), 'kitsune.sock');
 }
 
+/** Where each connected Firefox (one helper per profile) registers itself. */
+export function browsersDir() {
+  return path.join(kitsuneDir(), 'browsers');
+}
+
+/** This helper's own socket, next to the shared one, so a second Firefox profile can connect too. */
+export function browserSocketPath(pid = process.pid) {
+  if (process.platform === 'win32')
+    return `${socketPath()}-${pid}`;
+  return path.join(browsersDir(), `${pid}.sock`);
+}
+
 export function nativeManifestDir() {
   const home = os.homedir();
   if (process.env.KITSUNE_NATIVE_MANIFEST_DIR)

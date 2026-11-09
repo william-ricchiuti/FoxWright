@@ -10,7 +10,7 @@
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import { socketPath, kitsuneDir, logPath } from './paths.js';
+import { socketPath, kitsuneDir, logPath, browsersDir, browserSocketPath } from './paths.js';
 
 const MAX_TO_EXTENSION = 1024 * 1024; // Firefox limit for host -> extension messages
 const CHUNK_BYTES = 600 * 1024;
@@ -85,6 +85,8 @@ const pending = new Map(); // global request id -> { clientId, id }
 let nextClient = 1;
 let nextId = 1;
 let extensionInfo = null;
+let browserInfo = { browserId: '', name: 'Firefox' }; // from the extension's hello
+let ownListening = false;
 let serverError = null;
 let bidiAvailable = false; // true if any connected MCP server has trusted input
 const VERSION = typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0';
@@ -113,7 +115,7 @@ function onClientMessage(clientId, msg) {
     pending.set(gid, { clientId, id: msg.id });
     writeToExtension({ type: 'request', id: gid, tool: msg.tool, args: msg.args || {} });
   } else if (msg.type === 'status') {
-    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clients.size, pid: process.pid });
+    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clients.size, pid: process.pid, browser: { ...browserInfo, primary: ownsSocket } });
   } else if (msg.type === 'bidi') {
     // Per client: Firefox allows one BiDi session, so a second MCP server may not have one
     // while the first still does.
@@ -125,9 +127,16 @@ function onClientMessage(clientId, msg) {
 }
 
 function onExtensionMessage(msg) {
+  if (msg.type === 'name') {
+    browserInfo.name = cleanName(msg.name) || browserInfo.name;
+    writeRegistry();
+    return;
+  }
   if (msg.type === 'hello') {
     extensionInfo = { version: msg.version, full: !!msg.full };
-    log('extension connected', extensionInfo);
+    browserInfo = { browserId: /^[a-f0-9]{12}$/.test(msg.browserId || '') ? msg.browserId : '', name: cleanName(msg.name) || 'Firefox' };
+    writeRegistry();
+    log('extension connected', extensionInfo, browserInfo);
     writeToExtension({ type: 'hello-ack', error: serverError });
     broadcastClientCount();
     return;
@@ -159,45 +168,90 @@ function prepareSocketDir() {
   }
 }
 
+const cleanName = (s) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '');
+
+/** ~/.kitsune/browsers/<pid>.json: lets MCP servers list the connected Firefox profiles. */
+function registryFile() {
+  return path.join(browsersDir(), `${process.pid}.json`);
+}
+function writeRegistry() {
+  if (!ownListening)
+    return;
+  try {
+    fs.writeFileSync(registryFile(), JSON.stringify({ pid: process.pid, socket: browserSocketPath(), browserId: browserInfo.browserId, name: browserInfo.name, version: VERSION, started: startedAt }), { mode: 0o600 });
+  } catch (e) {
+    log('could not write the browser registry', String(e));
+  }
+}
+const startedAt = Date.now();
+
+/** Every helper also listens on its own socket, so several Firefox profiles can be connected at once. */
+function listenOwn() {
+  fs.mkdirSync(browsersDir(), { recursive: true, mode: 0o700 }); // the registry lives here on every OS
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(browsersDir(), 0o700);
+    } catch { /* ignore */ }
+  }
+  const own = browserSocketPath();
+  try {
+    fs.unlinkSync(own); // a crashed helper with the same pid left it behind
+  } catch { /* none */ }
+  const server = net.createServer(onClientSocket);
+  server.on('error', (err) => log(`could not listen on ${own}: ${err.message}`));
+  server.listen(own, () => {
+    if (process.platform !== 'win32') {
+      try {
+        fs.chmodSync(own, 0o600);
+      } catch { /* ignore */ }
+    }
+    ownListening = true;
+    writeRegistry();
+    log(`also listening on ${own}`);
+  });
+}
+
+function onClientSocket(socket) {
+  const clientId = nextClient++;
+  clients.set(clientId, { socket });
+  log(`client ${clientId} connected`);
+  broadcastClientCount();
+  let buf = '';
+  socket.setEncoding('utf8');
+  socket.on('data', (d) => {
+    buf += d;
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      if (!line.trim())
+        continue;
+      try {
+        onClientMessage(clientId, JSON.parse(line));
+      } catch (e) {
+        log('bad client message', String(e));
+      }
+    }
+  });
+  const bye = () => {
+    if (!clients.has(clientId))
+      return;
+    clients.delete(clientId);
+    for (const [gid, p] of pending)
+      if (p.clientId === clientId)
+        pending.delete(gid);
+    log(`client ${clientId} disconnected`);
+    broadcastClientCount();
+    updateBidi();
+  };
+  socket.on('close', bye);
+  socket.on('error', bye);
+}
+
 function listen() {
   const sp = socketPath();
   prepareSocketDir();
-  const server = net.createServer((socket) => {
-    const clientId = nextClient++;
-    clients.set(clientId, { socket });
-    log(`client ${clientId} connected`);
-    broadcastClientCount();
-    let buf = '';
-    socket.setEncoding('utf8');
-    socket.on('data', (d) => {
-      buf += d;
-      let nl;
-      while ((nl = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line.trim())
-          continue;
-        try {
-          onClientMessage(clientId, JSON.parse(line));
-        } catch (e) {
-          log('bad client message', String(e));
-        }
-      }
-    });
-    const bye = () => {
-      if (!clients.has(clientId))
-        return;
-      clients.delete(clientId);
-      for (const [gid, p] of pending)
-        if (p.clientId === clientId)
-          pending.delete(gid);
-      log(`client ${clientId} disconnected`);
-      broadcastClientCount();
-      updateBidi();
-    };
-    socket.on('close', bye);
-    socket.on('error', bye);
-  });
+  const server = net.createServer(onClientSocket);
 
   let attempts = 0;
   server.on('error', (err) => {
@@ -208,11 +262,10 @@ function listen() {
       probe.on('connect', () => {
         probe.destroy();
         attempts++;
-        if (attempts === 8) {
-          serverError = 'Another Firefox window/profile is already connected to Kitsune. Only one can be connected at a time.';
-          log(serverError);
-          writeToExtension({ type: 'hello-ack', error: serverError });
-        }
+        // Usually another Firefox profile owns the shared socket. That's fine: this helper is
+        // reachable on its own socket (listenOwn), and takes over the shared one when it's free.
+        if (attempts === 8)
+          log('another Firefox profile has the shared socket; this one is available as an additional browser');
         setTimeout(() => server.listen(sp, onListening), Math.min(5000, 250 * attempts));
       });
       probe.on('error', () => {
@@ -252,6 +305,11 @@ function shutdown() {
       fs.unlinkSync(socketPath());
     } catch { /* ignore */ }
   }
+  for (const f of [registryFile(), process.platform !== 'win32' ? browserSocketPath() : null].filter(Boolean)) {
+    try {
+      fs.unlinkSync(f);
+    } catch { /* ignore */ }
+  }
   process.exit(0);
 }
 export function runHost() {
@@ -260,6 +318,7 @@ export function runHost() {
   process.on('SIGINT', shutdown);
   readExtension();
   listen();
+  listenOwn();
   // Keep the extension's event page busy so Firefox never idles it out while we're connected.
   setInterval(() => writeToExtension({ type: 'ping' }), 20000).unref();
 }

@@ -10,7 +10,12 @@ function render(s) {
   $('paused').hidden = !s.paused;
   $('setup').hidden = s.connected;
   $('err').textContent = s.lastError ? `(${s.lastError})` : '';
-  for (const r of document.querySelectorAll('input[name=mode]')) {
+  $('bname').addEventListener('change', () => act({ kind: 'setName', name: $('bname').value }));
+$('bname').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter')
+    $('bname').blur();
+});
+for (const r of document.querySelectorAll('input[name=mode]')) {
     r.checked = r.value === s.mode;
     r.disabled = !!s.managedMode;
   }
@@ -18,6 +23,8 @@ function render(s) {
   $('input-mode').className = 'tag' + (s.bidi ? ' trusted' : '');
   $('tabs').textContent = String(s.groupTabs);
   $('pause').hidden = s.paused;
+  if (document.activeElement !== $('bname'))
+    $('bname').value = s.browserName || '';
   $('build').textContent = `v${s.version}${s.full ? ' · full build' : ''}`;
 
   const recent = s.recentActions || [];

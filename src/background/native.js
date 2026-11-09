@@ -55,7 +55,7 @@ export function connect() {
     updateBadge();
     scheduleRetry();
   });
-  p.postMessage({ type: 'hello', version: VERSION, full: FULL });
+  p.postMessage({ type: 'hello', version: VERSION, full: FULL, browserId: state.browserId, name: state.browserName });
 }
 
 export function reconnectNow() {

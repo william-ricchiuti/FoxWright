@@ -24,6 +24,9 @@ export const state = {
   managedAllowed: [],
   promptTimeoutMs: 120000,
   confirmUploads: true,
+  // which Firefox this is, when several are connected to Kitsune (stored per profile)
+  browserId: '',
+  browserName: 'Firefox',
   // what the agent did lately (shown in the popup and the in-page pill); memory only
   recentActions: [], // [{ at, tabId, text, own }] newest first, at most 12
   labels: new Map(), // tabId -> { text, at }: the latest action summary, for the in-page pill
@@ -49,7 +52,11 @@ export function noteAction(tabId, text, own) {
 }
 
 export async function loadSettings() {
-  const local = await browser.storage.local.get({ mode: 'ask', allowed: [] });
+  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], browserId: '', browserName: '' });
+  state.browserId = /^[a-f0-9]{12}$/.test(local.browserId) ? local.browserId : [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
+  state.browserName = cleanName(local.browserName) || 'Firefox';
+  if (state.browserId !== local.browserId)
+    await browser.storage.local.set({ browserId: state.browserId });
   state.mode = local.mode === 'all' ? 'all' : 'ask';
   state.allowed = Array.isArray(local.allowed) ? local.allowed : [];
   // Administrators (and test profiles) can preset site access with an enterprise policy:
@@ -75,8 +82,13 @@ export async function loadSettings() {
   } catch { /* storage.session unavailable */ }
 }
 
+/** A browser name as the user typed it: one line, at most 40 characters. */
+export function cleanName(s) {
+  return typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
+}
+
 export async function saveSettings() {
-  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed });
+  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed, browserName: state.browserName });
   try {
     await browser.storage.session.set({ sessionAllowed: state.sessionAllowed, paused: state.paused, groupId: state.groupId });
   } catch { /* ignore */ }
@@ -99,6 +111,8 @@ export function publicStatus() {
     groupTabs: state.groupTabIds.size,
     lastActivity: state.lastActivity,
     recentActions: state.recentActions.slice(0, 8),
+    browserId: state.browserId,
+    browserName: state.browserName,
   };
 }
 

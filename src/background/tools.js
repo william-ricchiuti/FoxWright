@@ -3,7 +3,7 @@
 /* global browser */
 import { state, publicStatus } from './state.js';
 import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks } from './tabs.js';
-import { askUser } from './prompt.js';
+import { askUser, cancelPairPrompts } from './prompt.js';
 import { netLog } from './netlog.js';
 
 const text = (t) => ({ content: [{ type: 'text', text: t }] });
@@ -904,6 +904,17 @@ export const tools = {
     for (let i = 0; i < buf.length; i += 0x8000)
       bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
     return { data: btoa(bin) };
+  },
+
+  /** switch_browser: ask the user whether the agent should use this Firefox. */
+  async _pair() {
+    const a = await askUser({ type: 'pair', origin: state.browserName });
+    return { data: a === 'once' };
+  },
+
+  async _pair_cancel() {
+    cancelPairPrompts();
+    return { data: true };
   },
 
   async _after(args) {

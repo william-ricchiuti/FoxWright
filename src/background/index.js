@@ -1,6 +1,6 @@
 // Kitsune background (event page).
 /* global browser */
-import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction } from './state.js';
+import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
 import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity } from './tabs.js';
@@ -18,7 +18,7 @@ onRequest(async (tool, args) => {
   const fn = tools[tool];
   if (!fn || (!PUBLIC_TOOLS.has(tool) && !tool.startsWith('_')))
     throw new Error(`Unknown tool ${tool}`);
-  if (state.paused && tool !== '_status')
+  if (state.paused && tool !== '_status' && tool !== '_pair_cancel')
     throw new Error(PAUSED_MSG);
   if (!tool.startsWith('_')) {
     noteAgentActivity(args?.tabId);
@@ -147,6 +147,10 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
     case 'reconnect':
       reconnectNow();
       return publicStatus();
+    case 'setName':
+      state.browserName = cleanName(msg.name) || 'Firefox';
+      send({ type: 'name', name: state.browserName });
+      break;
     default:
       return undefined;
   }

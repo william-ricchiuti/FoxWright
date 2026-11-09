@@ -1,9 +1,15 @@
 // MCP-server side connection to the Kitsune helper's local socket.
 import net from 'node:net';
 import { socketPath } from './paths.js';
+import { socketFor } from './browsers.js';
 
 export class HelperClient {
-  constructor() {
+  /** path: a specific helper socket. browserId: follow that Firefox profile (by its registry
+   *  entry, so it survives restarts). Neither: the shared socket (the first Firefox connected). */
+  constructor({ path, browserId, browserName } = {}) {
+    this.path = path || null;
+    this.browserId = browserId || null;
+    this.browserName = browserName || null;
     this.socket = null;
     this.connecting = null;
     this.pending = new Map();
@@ -21,13 +27,21 @@ export class HelperClient {
       return Promise.resolve();
     if (this.connecting)
       return this.connecting;
+    let target = this.path || socketPath();
+    if (this.browserId) {
+      target = socketFor(this.browserId);
+      if (!target)
+        return Promise.reject(new Error(`The Firefox you selected${this.browserName ? ` ("${this.browserName}")` : ''} isn't connected to Kitsune right now. Ask the user to open it, or call list_connected_browsers and select another.`));
+    }
     this.connecting = new Promise((resolve, reject) => {
-      const s = net.connect(socketPath());
+      const s = net.connect(target);
       let buf = '';
       s.setEncoding('utf8');
       s.once('connect', () => {
         this.socket = s;
         this.connecting = null;
+        if (this.onConnect)
+          setTimeout(() => this.onConnect(), 0);
         // A new helper (extension reload, Firefox restart) doesn't know this client's trusted-input state yet.
         if (this.bidiState !== null)
           s.write(JSON.stringify({ type: 'bidi', available: this.bidiState }) + '\n');
@@ -102,6 +116,20 @@ export class HelperClient {
 
   status() {
     return this.send({ type: 'status' }, 5000);
+  }
+
+  /** Switch to another browser (see the constructor). Open requests on the old one fail. */
+  use({ path, browserId, browserName } = {}) {
+    this.path = path || null;
+    this.browserId = browserId || null;
+    this.browserName = browserName || null;
+    this.close();
+  }
+
+  close() {
+    if (this.socket && !this.socket.destroyed)
+      this.socket.destroy();
+    this.socket = null;
   }
 
   notifyBidi(available) {

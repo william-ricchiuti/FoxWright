@@ -53,6 +53,7 @@ jobs:
           node test/e2e-permissions.mjs
           node test/e2e-store.mjs
           node test/e2e-resilience.mjs
+          node test/e2e-multi.mjs
       - name: Event page idle timeout
         if: matrix.firefox == 'latest'
         run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e-idle.mjs

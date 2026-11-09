@@ -110,22 +110,27 @@ export function writePolicies(firefoxBin, policy) {
  * On Linux the run is isolated from your own Kitsune install: HOME points at a temporary folder,
  * where the dev build is set up (native-messaging manifest, ~/.kitsune), and GIFs go to a temp
  * folder. Set KITSUNE_E2E_ISOLATE=0 to use your real install instead (macOS always does).
+ *
+ * alongside: a harness from an earlier start(). Starts a second Firefox (its own temporary profile)
+ * that shares that one's Kitsune folder and fixture servers, like a second Firefox profile on the
+ * same computer. Resolves once the second browser has registered in ~/.kitsune/browsers.
  */
-export async function start({ build = 'full', trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false } } = {}) {
+export async function start({ build = 'full', trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null } = {}) {
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
     throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
   writePolicies(firefox, policy);
 
-  const isolate = process.platform === 'linux' && process.env.KITSUNE_E2E_ISOLATE !== '0';
-  let home = os.homedir();
-  const env = { ...process.env };
+  const isolate = !alongside && process.platform === 'linux' && process.env.KITSUNE_E2E_ISOLATE !== '0';
+  let home = alongside ? alongside.home : os.homedir();
+  const env = { ...(alongside ? alongside.env : process.env) };
   if (isolate) {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-home-'));
     env.HOME = home;
     execFileSync(process.execPath, [path.join(root, 'host/dist/kitsune.mjs'), 'setup'], { env, stdio: 'ignore' });
   }
-  env.KITSUNE_GIF_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-gifs-'));
+  if (!alongside)
+    env.KITSUNE_GIF_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-gifs-'));
   const bidiPort = trusted || testDriver ? await freePort(0) : null;
   if (bidiPort)
     env.KITSUNE_BIDI_PORT = String(bidiPort);
@@ -147,10 +152,20 @@ export async function start({ build = 'full', trusted = false, testDriver = fals
       'security.OCSP.enabled': 0, 'network.captive-portal-service.enabled': false, 'network.connectivity-service.enabled': false,
     });
   }
-  const s1 = await serve(P1);
-  const s2 = await serve(P2);
+  const s1 = alongside ? null : await serve(P1);
+  const s2 = alongside ? null : await serve(P2);
   const sock = path.join(home, '.kitsune', 'kitsune.sock');
-  fs.rmSync(sock, { force: true });
+  const registry = path.join(home, '.kitsune', 'browsers');
+  const registered = () => {
+    try {
+      return fs.readdirSync(registry).filter(n => n.endsWith('.json'));
+    } catch {
+      return [];
+    }
+  };
+  const before = new Set(registered());
+  if (!alongside)
+    fs.rmSync(sock, { force: true });
 
   const args = [];
   if (!process.env.KITSUNE_E2E_HEADFUL)
@@ -194,7 +209,16 @@ export async function start({ build = 'full', trusted = false, testDriver = fals
     }
   };
   let runner = await runFirefox();
-  await waitForSocket(sock);
+  if (alongside) {
+    // The shared socket belongs to the first browser; wait for this one's own registry entry.
+    const t0 = Date.now();
+    while (!registered().some(n => !before.has(n))) {
+      if (Date.now() - t0 > 30000)
+        throw new Error('The second Firefox never registered in ~/.kitsune/browsers.');
+      await new Promise(r => setTimeout(r, 200));
+    }
+  } else
+    await waitForSocket(sock);
 
   const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], stderr: 'inherit', env });
   const client = new Client({ name: 'kitsune-e2e', version: '0' });
@@ -214,8 +238,8 @@ export async function start({ build = 'full', trusted = false, testDriver = fals
     try {
       await runner.exit();
     } catch { /* ignore */ }
-    s1.close();
-    s2.close();
+    s1?.close();
+    s2?.close();
   }
   async function stopFirefoxOnly() {
     await runner.exit();
@@ -225,5 +249,5 @@ export async function start({ build = 'full', trusted = false, testDriver = fals
     runner = await runFirefox();
     await waitForSocket(sock);
   }
-  return { call, stop, client, stopFirefoxOnly, restartFirefox, home, sock, gifDir: env.KITSUNE_GIF_DIR, bidiUrl: bidiPort ? `ws://127.0.0.1:${bidiPort}/session` : null };
+  return { call, stop, client, stopFirefoxOnly, restartFirefox, home, env, sock, gifDir: env.KITSUNE_GIF_DIR, bidiUrl: bidiPort ? `ws://127.0.0.1:${bidiPort}/session` : null };
 }

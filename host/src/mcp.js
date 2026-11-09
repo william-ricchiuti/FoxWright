@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { HelperClient } from './client.js';
+import { connectedBrowsers } from './browsers.js';
 import { Bidi } from './bidi.js';
 import { startRecording, stopRecording, clearRecording, isRecording, addFrame, exportGif, frameCount } from './gif.js';
 
@@ -28,6 +29,22 @@ Safety: never enter passwords, payment details or other secrets unless the user 
 
 const helper = new HelperClient();
 const bidi = new Bidi();
+// Which Firefox the shared socket led to: if that browser closes and another profile takes the
+// shared socket over, say so instead of silently carrying on in a different profile.
+let knownBrowser = null; // { browserId, name }
+let browserNote = '';
+helper.onConnect = async () => {
+  try {
+    const b = (await helper.status())?.browser;
+    if (!b?.browserId)
+      return;
+    if (knownBrowser && knownBrowser.browserId !== b.browserId && !helper.browserId) {
+      browserNote = `Note: the Firefox Kitsune was using ("${knownBrowser.name}") closed; now connected to "${b.name}", a different browser profile. Tab IDs changed: call tabs_context_mcp.`;
+      lastTab = null;
+    }
+    knownBrowser = { browserId: b.browserId, name: b.name };
+  } catch { /* status is best-effort */ }
+};
 bidi.onChange = (ok) => helper.notifyBidi(ok);
 
 function errorResult(e) {
@@ -77,6 +94,10 @@ async function call(tool, args, timeoutMs) {
       args.tabId = await defaultTab();
     const r0 = await helper.call(tool, args, timeoutMs);
     const r = r0 && Array.isArray(r0.content) ? r0 : { content: [{ type: 'text', text: typeof r0 === 'string' ? r0 : JSON.stringify(r0) }] };
+    if (browserNote) {
+      r.content.unshift({ type: 'text', text: browserNote });
+      browserNote = '';
+    }
     noteTab(tool, args, r);
     return r;
   } catch (e) {
@@ -408,6 +429,62 @@ export async function runMcp() {
     description: 'Close a tab in the Kitsune tab group.',
     inputSchema: { tabId },
   }, async (a) => call('tabs_close_mcp', a));
+
+  // ---------- several Firefox profiles ----------
+  const inUse = (e) => (helper.browserId ? helper.browserId === e.browserId : !helper.path && e.primary);
+  const useBrowser = (e) => {
+    helper.use({ browserId: e.browserId, browserName: e.name });
+    knownBrowser = { browserId: e.browserId, name: e.name };
+    lastTab = null;
+    lastReportedMode = null;
+  };
+
+  server.registerTool('list_connected_browsers', {
+    description: 'List the Firefox browsers (profiles) connected to Kitsune right now, with their deviceId and name. Kitsune uses the first one connected unless you pick another with select_browser. Use this when the user wants a specific browser (e.g. their work profile).',
+    inputSchema: {},
+  }, async () => {
+    const list = await connectedBrowsers();
+    if (!list.length)
+      return errorResult('No Firefox is connected to Kitsune. Ask the user to open Firefox with the Kitsune extension (npx kitsune-firefox doctor checks the setup).');
+    const lines = list.map(e => `- deviceId ${e.browserId}: "${e.name}" (Kitsune ${e.version || '?'}, platform ${process.platform}, onThisComputer: true${e.clients ? `, ${e.clients} other agent${e.clients > 1 ? 's' : ''} connected` : ''})${inUse(e) ? ' [inUse]' : ''}`);
+    return { content: [{ type: 'text', text: `Connected Firefox browsers (${list.length}):\n${lines.join('\n')}${list.length > 1 ? '\nThe user can rename a browser in the Kitsune toolbar popup.' : ''}` }] };
+  });
+
+  server.registerTool('select_browser', {
+    description: 'Use a specific connected Firefox (deviceId from list_connected_browsers) for all further actions in this session.',
+    inputSchema: { deviceId: z.string().describe('deviceId from list_connected_browsers.') },
+  }, async (a) => {
+    const e = (await connectedBrowsers()).find(x => x.browserId === a.deviceId);
+    if (!e)
+      return errorResult(`No connected browser has deviceId ${a.deviceId}. Call list_connected_browsers.`);
+    useBrowser(e);
+    return { content: [{ type: 'text', text: `Now using "${e.name}" (deviceId ${e.browserId}). Call tabs_context_mcp to see its Kitsune tabs.` }] };
+  });
+
+  server.registerTool('switch_browser', {
+    description: 'Let the user pick the browser: every connected Firefox shows a "Use this Firefox?" window, and Kitsune switches to the one where the user clicks Connect (waits up to 2 minutes). Prefer select_browser when you already know the deviceId.',
+    inputSchema: {},
+  }, async () => {
+    const list = await connectedBrowsers();
+    if (!list.length)
+      return errorResult('No Firefox is connected to Kitsune.');
+    const asks = list.map(e => ({ e, c: new HelperClient({ path: e.socket }) }));
+    const winner = await new Promise((resolve) => {
+      let left = asks.length;
+      for (const { e, c } of asks) {
+        c.call('_pair', {}, 130000).then(r => (r?.data ? resolve(e) : null)).catch(() => null).finally(() => {
+          if (--left === 0)
+            resolve(null);
+        });
+      }
+    });
+    await Promise.all(asks.map(({ c }) => c.call('_pair_cancel', {}, 5000).catch(() => {})));
+    asks.forEach(({ c }) => c.close());
+    if (!winner)
+      return errorResult('The user didn\'t pick a browser (no one clicked Connect within 2 minutes, or they chose "Not this one" everywhere). Kitsune keeps using the current one.');
+    useBrowser(winner);
+    return { content: [{ type: 'text', text: `The user picked "${winner.name}" (deviceId ${winner.browserId}). Call tabs_context_mcp to see its Kitsune tabs.` }] };
+  });
 
   server.registerTool('navigate', {
     description: 'Load a URL in a Kitsune tab, or go "back"/"forward" in its history. Waits for the page to load. If tabId is omitted, the first tab in the Kitsune group is used (created if needed).',
