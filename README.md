@@ -150,12 +150,13 @@ Without it, Kitsune works on most sites. The things that need real input are lis
   Stopping interrupts work already in progress: open permission windows are denied, typing and drags stop at the next keystroke or step, and the agent is told you stopped it.
 
   While the agent is working, the tab group title changes to **Kitsune ● working** and the page gets an orange glow. The in-page pill and glow are only a convenience, because a hostile page could hide or imitate them. The toolbar and the keyboard shortcut are the controls the page can't touch.
+- **See what the agent is doing.** The in-page pill shows the agent's description of its latest action ("Kitsune: Sends the reply to pat@example.com"), and the toolbar popup lists its recent actions: in quotes when they're the agent's own words, otherwise Kitsune's plain description ("Opened example.com", "Typed 12 characters"). The agent's words are a convenience, not a guarantee: a manipulated agent could describe an action wrongly.
 - **No open ports.** The helper talks to AI clients through a Unix socket in `~/.kitsune` that only your user can open (directory mode 0700, socket 0600). On Windows it uses a named pipe with an unguessable name. Nothing listens on TCP unless you turn on real input yourself.
 - **Prompt injection is still possible.** Web pages can contain text written to manipulate an AI. Kitsune's permission windows limit the damage, but review what your agent is about to do on sensitive sites.
 
 ## Tools
 
-Kitsune's tools are compatible with Claude in Chrome's core tools: same names, same arguments. Differences: Kitsune adds `handle_dialog`, and doesn't have Claude in Chrome's `upload_image`, `shortcuts_list` / `shortcuts_execute` or `switch_browser`.
+Kitsune's tools are compatible with Claude in Chrome's: same names, same arguments, including `action_summary`, `upload_image` and choosing between browsers. Kitsune adds `handle_dialog`, `visible_only` for `read_page`, and `query`/`offset` for `get_page_text`.
 
 | Tool | What it does |
 |---|---|
@@ -164,12 +165,14 @@ Kitsune's tools are compatible with Claude in Chrome's core tools: same names, s
 | `navigate` | Go to a URL, or `back` / `forward`. |
 | `read_page` | Accessibility outline with refs. Open popups and dialogs are listed first. Options: `filter: "interactive"`, `visible_only` (just what's on screen), `depth`, `ref_id` (a subtree, or the inside of an iframe), `max_chars`. |
 | `find` | Find elements by description ("search box", "add to cart button"). |
-| `computer` | `screenshot`, `zoom`, `left_click`, `right_click`, `double_click`, `triple_click`, `hover`, `type`, `key`, `scroll`, `scroll_to`, `left_click_drag`, `wait`. Coordinates, or refs for clicks. |
+| `computer` | `screenshot`, `zoom`, `left_click`, `right_click`, `double_click`, `triple_click`, `hover`, `type`, `key`, `scroll`, `scroll_to`, `left_click_drag`, `wait`. Coordinates, or refs for clicks. `action_summary` describes the action for you (see Safety model). |
 | `form_input` | Set text fields, selects, checkboxes, radios, date/range inputs and rich-text editors by ref. On custom dropdowns and autocompletes (MUI, react-select, Radix…) it opens the list, types, and clicks the matching option. |
 | `get_page_text` | Readable text of the main content, 20k characters at a time (`offset` for more). With `query`, it returns only the passages about that topic. |
-| `gif_creator` | Record the session as an animated GIF with clicks marked (`start_recording` → act → `stop_recording` → `export`, which saves to Downloads). |
+| `gif_creator` | Record the session as an animated GIF (`start_recording` → act → `stop_recording` → `export`, which saves to Downloads). Frames show click circles, drag arrows, each action's label, a progress bar and a small watermark; `options` turns these off and sets `quality`. With `coordinate`, export also drops the GIF onto the page (you confirm the upload). |
 | `browser_batch` | Several of the above in one call, e.g. fill three fields and click Submit. Stops at the first error. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
+| `upload_image` | Attach a screenshot the agent just took (each screenshot result has an ID) to a file input or drop zone, e.g. for a bug report. You confirm each upload. |
+| `list_connected_browsers` / `select_browser` / `switch_browser` | Work with several Firefox profiles at once (say, "Work" and "Personal"): list them, pick one by its ID, or let you pick by clicking Connect in a window that appears in each. Name each browser in its Kitsune toolbar popup. |
 | `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. While the agent is working in a tab (and for a few seconds after), dialogs don't block the page: alerts are dismissed, confirms/prompts are cancelled, and the tool result reports what the page asked. When you use the tab yourself, the page's dialogs appear normally. |
 | `read_console_messages` / `read_network_requests` | Console output and HTTP requests of an agent tab. |
 | `resize_window` | Resize the browser window. |
@@ -191,7 +194,7 @@ Without real input (remote debugging off):
 
 Also:
 
-- **One Firefox profile.** Only one Firefox profile can be connected at a time.
+- **Several Firefox profiles.** Several can be connected at once. An agent uses the first one that connected unless it picks another (`select_browser`, `switch_browser`). Real input (WebDriver BiDi) only works in the Firefox that was started with remote debugging; in the others, Kitsune uses synthetic input.
 - **Pages extensions can't touch.** Firefox blocks all extensions on `about:` pages, `addons.mozilla.org` and a few Mozilla account pages.
 - **Firefox's JSON and PDF viewers.** Pages shown in these viewers can't be read or screenshotted by extensions. For JSON loaded with GET, `get_page_text` fetches it again; otherwise Kitsune explains the problem and suggests the `devtools.jsonview.enabled` pref.
 - **Snap and Flatpak Firefox.** On Linux, the sandboxed Snap/Flatpak builds may not be able to start the helper (see [Install](#install)).
@@ -208,12 +211,13 @@ node test/build-fixtures.mjs
 
 # End-to-end tests against a real Firefox. FIREFOX must point at the binary to test with.
 export FIREFOX=/path/to/firefox
-node test/e2e.mjs                           # 59 tests, synthetic input
+node test/e2e.mjs                           # 60 tests, synthetic input
 KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
 node test/e2e-safety.mjs                    # presses the real permission-window and popup buttons
 node test/e2e-permissions.mjs               # approval timeouts, frame gating, uploads
 node test/e2e-store.mjs                     # AMO build smoke test
 node test/e2e-resilience.mjs                # concurrent clients, latency, helper crash, Firefox restart
+node test/e2e-multi.mjs                     # two Firefox profiles: list, select, switch, takeover
 node test/e2e-idle.mjs                      # still answers after the event page's idle timeout (75 s)
 node test/bidi-connect.mjs                  # real-input client vs a fake one-session Firefox (no browser)
 node test/bench-actions.mjs                 # latency of common tool calls

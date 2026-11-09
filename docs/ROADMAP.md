@@ -283,6 +283,17 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
 - [x] 0.4.2 released (PR #10): GitHub release, npm (`npx kitsune-firefox@latest --version` prints 0.4.2), and
   uploaded to AMO as a new version (William, 2026-11-08) with the source zip. AMO review of 0.4.0/0.4.2 pending;
   AMO emails the developer account's address with the result.
+### F. Claude in Chrome parity (0.5.0, 2026-11-08)
+
+From comparing Claude in Chrome's public tool definitions with Kitsune's (no reverse engineering: its code isn't used or copied).
+
+- [x] Action summaries: `action_summary` on computer/form_input, shown in the pill and the popup's action list (cleaned; the agent's words, not a guarantee). e2e-safety test.
+- [x] GIF export options, labels, drag arrows, progress bar, watermark, drop onto the page; drawn by the extension (`_annotate_frame`), click circles for ref clicks too. e2e test; frames checked by eye.
+- [x] `upload_image` with screenshot IDs (memory only, 20 / 10 minutes), through the upload confirmation. e2e-safety test.
+- [x] Several Firefox profiles: per-helper sockets and registry in ~/.kitsune/browsers, `list_connected_browsers` / `select_browser` / `switch_browser`, browser names in the popup, takeover note. test/e2e-multi.mjs. Trusted input can't reach another Firefox: tabs are found by a token set through the selected browser's extension.
+- [x] Tool guidance: close the tabs you opened.
+- Found along the way: on macOS the test harness uses the installed helper (`~/.kitsune/app`), so helper changes need `node host/dist/kitsune.mjs setup` (mac-test.sh does it) before a local run.
+
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).

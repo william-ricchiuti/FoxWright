@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 (2026-11-08)
+
+Features from Claude in Chrome's public tool definitions (interface only; no code was copied).
+
+**New**
+- **Action summaries.** `computer` and `form_input` take `action_summary`, a few words on what the action does. The in-page pill shows it ("Kitsune: Sends the reply to pat@example.com") and the toolbar popup lists the agent's recent actions, quoting its own words and describing the rest ("Opened example.com", "Typed 12 characters"). Summaries are cleaned to one line without control or text-direction characters.
+- **Several Firefox profiles at once.** `list_connected_browsers`, `select_browser` and `switch_browser` (a "Use this Firefox?" window appears in every connected browser; the one where you click Connect is used). Name each browser in its toolbar popup. The first browser to connect is the default, and the next one takes over when it closes; the agent is told when that happens. Before, a second profile got "Only one can be connected at a time".
+- **`upload_image`.** Screenshot results carry an ID; `upload_image` attaches that screenshot to a file input or drop zone, after you confirm it like any upload.
+- **GIF export options.** `gif_creator` export draws each action's label, drag arrows, a progress bar and a small watermark as well as click circles (now also for clicks by ref), with `options` to turn each off and `quality` 1–30. `coordinate` drops the finished GIF onto the page. The overlays are drawn by the extension with real fonts; an older extension falls back to click circles.
+- The agent is told to close the tabs it opened when it's done.
+
+**Tests**
+- `test/e2e-multi.mjs` (two Firefoxes), new safety tests for `upload_image` and the popup's action list, and a GIF options test.
+
 ## 0.4.2 (2026-11-08)
 
 **Fixes**

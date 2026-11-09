@@ -1,6 +1,6 @@
 # Test report: Kitsune
 
-_Latest run: the 2026-11-08 fixes (unreleased). Linux (Docker, headless) with Firefox 152.0, the oldest supported, and 159.0, the latest; macOS 27 with Firefox 158.0.1; Node 22. Earlier sections are marked with the version they were measured on._
+_Latest run: 0.5.0 (unreleased), 2026-11-08, macOS 27 with Firefox 158.0.1 and Node 22. The previous run (0.4.2) also covered Linux with Firefox 152 and 159 in Docker. Earlier sections are marked with the version they were measured on._
 
 Every test drives Kitsune the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
@@ -11,13 +11,14 @@ Every test drives Kitsune the way an AI client does: an MCP client calls the too
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
-| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors and slow-loading nested frames, Cmd/Alt/Ctrl+arrow caret keys, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **59/59** (152, 159, Mac 159) | **59/59** (152, 159, Mac 159) |
-| `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval) | **7/7** (152, 159, Mac 158) | n/a |
+| `e2e.mjs`: local fixtures (forms, React, ProseMirror, iframes incl. `about:blank`/`srcdoc` editors and slow-loading nested frames, Cmd/Alt/Ctrl+arrow caret keys, closed shadow roots, password masking, dialogs, drag-and-drop, keys, console, network, tabs, parallel calls) | **60/60** (Mac 158; 59/59 on Linux 152 and 159 for 0.4.2) | **60/60** |
+| `e2e-safety.mjs`: the real permission-window and popup buttons (Deny, Allow this session, Always allow + revoke, Pause/Resume, Pause mid-typing and mid-prompt, upload approval), upload_image approval, the popup's list of agent actions | **9/9** | n/a |
 | `e2e-permissions.mjs`: approval timeouts, frame gating, uploads | 5/5 | n/a |
 | `e2e-resilience.mjs`: concurrency, latency, crash/restart recovery | 5/5 | n/a |
+| `e2e-multi.mjs`: two Firefox profiles at once (list, select, switch with a click on Connect, takeover when one closes) | **5/5** | n/a |
 | `e2e-store.mjs`: the addons.mozilla.org build | 2/2 | n/a |
 | `e2e-idle.mjs`: works after the event page's idle timeout | pass (Mac) | n/a |
-| `realsites.mjs`: 51 tasks on 25 real websites (Mac, home network) | **51/51** | **50/51** (react.dev search) |
+| `realsites.mjs`: 51 tasks on 25 real websites (Mac, home network) | **50/51** (react.dev search) | 49/51 (react.dev search; Amazon showed a CAPTCHA in trusted mode) |
 | `web-ext lint` (store and full builds) | 0 errors, 0 warnings | n/a |
 
 Firefox 140–151 are no longer supported: they give Manifest V3 extensions neither `tabs.captureTab` nor a usable `captureVisibleTab`, so screenshots, zoom and GIF recording fail (53/58). 152 is the first version that passes; 153 ESR passes too.

@@ -1,6 +1,6 @@
 # Kitsune privacy policy
 
-_Last updated: 2026-09-23 (post-0.3.0)_
+_Last updated: 2026-11-08 (0.5.0)_
 
 Kitsune has no servers and collects nothing for its developer. There is no analytics, no telemetry and no remote logging.
 
@@ -17,7 +17,9 @@ It sends that content to the Kitsune helper program on your own computer (throug
 
 - In Firefox's extension storage: your site-access choices (approved origins, the ask/allow-all setting) and the pause state.
 - In memory only, inside each agent tab: the last 1,000 console messages and the tab's recent network request URLs, so the agent can ask for them. They are gone when the tab closes or navigates to another site.
-- In `~/.kitsune/` on your computer: the helper and its local log file. The log records connection events, not page content.
+- In memory only, in the extension: short descriptions of the agent's last few actions (shown in the toolbar popup and the in-page pill). Gone when Firefox restarts.
+- In memory only, in the MCP server on your computer: the agent's last 20 screenshots, for 10 minutes, so it can attach one to a page with `upload_image` (after you confirm). Gone when the AI client closes.
+- In `~/.kitsune/` on your computer: the helper and its local log file. The log records connection events, not page content. `~/.kitsune/browsers/` lists the Firefox profiles connected right now (a random ID, the name you gave each one in the popup, and the helper's process ID); each entry is removed when that Firefox closes.
 - GIF recordings: only when the agent uses `gif_creator` and exports one. The GIF is saved to your Downloads folder (or `KITSUNE_GIF_DIR`) and goes nowhere else.
 
 **File uploads.** Files are read from your disk only when an agent asks to upload them, and only after you confirm the upload in a Kitsune window. The file is then given to the web page, as if you had picked it yourself, so the website receives it under its own privacy terms. Key and credential files are always refused.

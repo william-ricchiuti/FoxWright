@@ -9,6 +9,7 @@ These tests run a real Firefox (via `web-ext run`, headless by default) with the
 | `e2e-permissions.mjs` | Approval timeouts, concurrent-call blocking, frame gating, upload confirmation, credential-file refusal. |
 | `e2e-store.mjs` | The AMO build (no `javascript_tool`). |
 | `e2e-resilience.mjs` | Two MCP clients at once, latency, helper crash, Firefox restart. |
+| `e2e-multi.mjs` | Two Firefox profiles at once: list_connected_browsers, select_browser, switch_browser (the test clicks Connect), and the shared socket moving to the other browser when the first closes. |
 | `e2e-idle.mjs` | Still answers after the event page's idle timeout (takes about 75 s). |
 | `bidi-connect.mjs` | The real-input (WebDriver BiDi) client against a fake Firefox that allows one session: overlapping connection attempts share one session. No browser needed. |
 | `bench-actions.mjs` | Median latency of common tool calls. |
