@@ -27,7 +27,7 @@ The code side is automated. What's left needs your accounts. `X.Y.Z` below is th
 
 The npm package `kitsune-firefox` is the helper plus MCP server that `npx kitsune-firefox setup` runs.
 
-- First publish by hand, from the repository folder:
+- Publish by hand from a terminal (npm shows a link to approve in the browser; without a terminal it fails with `EOTP`):
   ```sh
   npm login
   npm run build --prefix host
