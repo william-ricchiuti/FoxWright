@@ -24,7 +24,29 @@ export const state = {
   managedAllowed: [],
   promptTimeoutMs: 120000,
   confirmUploads: true,
+  // what the agent did lately (shown in the popup and the in-page pill); memory only
+  recentActions: [], // [{ at, tabId, text, own }] newest first, at most 12
+  labels: new Map(), // tabId -> { text, at }: the latest action summary, for the in-page pill
 };
+
+const RECENT_MAX = 12;
+/** Clean up an agent-written summary: one line, no control characters, at most 120 characters. */
+export function cleanSummary(s) {
+  if (typeof s !== 'string')
+    return '';
+  const t = s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > 120 ? t.slice(0, 119) + '…' : t;
+}
+
+/** Note an agent action. `own` = the agent's own words (action_summary), else Kitsune's description. */
+export function noteAction(tabId, text, own) {
+  if (!text)
+    return;
+  state.recentActions.unshift({ at: Date.now(), tabId: typeof tabId === 'number' ? tabId : null, text, own: !!own });
+  state.recentActions.length = Math.min(state.recentActions.length, RECENT_MAX);
+  if (typeof tabId === 'number')
+    state.labels.set(tabId, { text, at: Date.now() });
+}
 
 export async function loadSettings() {
   const local = await browser.storage.local.get({ mode: 'ask', allowed: [] });
@@ -76,6 +98,7 @@ export function publicStatus() {
     sessionAllowed: [...state.sessionAllowed].sort(),
     groupTabs: state.groupTabIds.size,
     lastActivity: state.lastActivity,
+    recentActions: state.recentActions.slice(0, 8),
   };
 }
 

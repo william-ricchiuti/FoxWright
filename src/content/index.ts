@@ -102,7 +102,7 @@ const handlers: Record<string, (args: any) => any> = {
     if (a.on === false)
       hideActivity();
     else
-      showActivity(a.ms);
+      showActivity(a.ms, typeof a.label === 'string' ? a.label : undefined);
     return true;
   },
 };
