@@ -651,6 +651,81 @@ function implicitSubmit(field: HTMLElement): string {
   }
 }
 
+const isWordChar = (c: string | undefined) => !!c && /[\p{L}\p{N}_]/u.test(c);
+
+/** Where a word move from `i` lands. Backward: start of this/previous word. Forward: end of the word
+ *  (Mac, Alt+Right) or start of the next one (Windows/Linux, Ctrl+Right). */
+function wordStop(v: string, i: number, back: boolean, endOfWord: boolean): number {
+  if (back) {
+    while (i > 0 && !isWordChar(v[i - 1])) i--;
+    while (i > 0 && isWordChar(v[i - 1])) i--;
+  } else if (endOfWord) {
+    while (i < v.length && !isWordChar(v[i])) i++;
+    while (i < v.length && isWordChar(v[i])) i++;
+  } else {
+    while (i < v.length && isWordChar(v[i])) i++;
+    while (i < v.length && !isWordChar(v[i])) i++;
+  }
+  return i;
+}
+
+/**
+ * Cmd/Alt/Ctrl + arrow keys, Home and End in text: Cmd+Left/Right to the line's start/end, Alt or
+ * Ctrl+Left/Right by a word, Cmd+Up/Down and Ctrl+Home/End to the start/end of the text. With Shift
+ * the selection is extended from its anchor. Returns false for combinations it doesn't handle.
+ */
+function modifiedCaretKey(key: string, mods: Mods, t: HTMLElement | null): boolean {
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(key) || !(mods.ctrl || mods.meta || mods.alt))
+    return false;
+  const back = key === 'ArrowLeft' || key === 'ArrowUp' || key === 'Home';
+  const unit = key === 'Home' || key === 'End' ? (mods.ctrl || mods.meta ? 'doc' : 'line')
+    : key === 'ArrowLeft' || key === 'ArrowRight' ? (mods.meta ? 'line' : 'word')
+      : mods.meta ? 'doc' : null; // Alt/Ctrl+Up/Down (paragraph moves) aren't emulated
+  if (!unit)
+    return false;
+  if (isTextField(t)) {
+    try {
+      const v = t.value, start = t.selectionStart ?? 0, end = t.selectionEnd ?? 0;
+      const backward = t.selectionDirection === 'backward';
+      const anchor = backward ? end : start;
+      const from = mods.shift ? (backward ? start : end) : (back ? start : end);
+      let to: number;
+      if (unit === 'doc')
+        to = back ? 0 : v.length;
+      else if (unit === 'line') {
+        const nl = back ? v.lastIndexOf('\n', from - 1) : v.indexOf('\n', from);
+        to = back ? nl + 1 : nl < 0 ? v.length : nl;
+      } else
+        to = wordStop(v, from, back, mods.alt && !mods.ctrl);
+      if (mods.shift)
+        t.setSelectionRange(Math.min(anchor, to), Math.max(anchor, to), to < anchor ? 'backward' : 'forward');
+      else
+        t.setSelectionRange(to, to);
+    } catch { /* inputs without a text selection API */ }
+    return true;
+  }
+  if (t && isContentEditable(t)) {
+    const sel = document.getSelection() as any;
+    if (!sel)
+      return true;
+    const alter = mods.shift ? 'extend' : 'move';
+    if (unit === 'doc') {
+      let host: HTMLElement = t;
+      while (host.parentElement?.isContentEditable)
+        host = host.parentElement;
+      if (mods.shift)
+        sel.extend(host, back ? 0 : host.childNodes.length);
+      else {
+        sel.selectAllChildren(host);
+        back ? sel.collapseToStart() : sel.collapseToEnd();
+      }
+    } else if (sel.modify)
+      sel.modify(alter, back ? 'backward' : 'forward', unit === 'line' ? 'lineboundary' : 'word');
+    return true;
+  }
+  return false;
+}
+
 /** Emulate the browser default action for a key the page did not preventDefault. */
 function defaultAction(key: string, mods: Mods, target: Element | null): string | null {
   const primary = isMac ? mods.meta : mods.ctrl;
@@ -670,6 +745,8 @@ function defaultAction(key: string, mods: Mods, target: Element | null): string 
     } catch { ok = false; }
     return ok ? null : `${cmd} could not be performed by synthetic input (browser clipboard/undo access is restricted).`;
   }
+  if (modifiedCaretKey(key, mods, t))
+    return null;
   if (mods.ctrl || mods.meta || mods.alt) {
     return null;
   }

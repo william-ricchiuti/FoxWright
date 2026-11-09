@@ -277,9 +277,9 @@ William chose option 1. Code and docs changes are done and tested locally; nothi
 - [x] Cross-model agent eval (`--agent codex|opencode`): GPT via Codex 17/17, DeepSeek v4-pro 17/17 ($0.09; 16/17 in
   an earlier run), DeepSeek v4.1 flash (free) 17/17. Fixed the `rich-editor` check, which skipped the bold test when
   the editor is in a cross-origin frame. Details in TESTING.md, "Other models".
-- [ ] **Bug: Cmd/Alt/Ctrl+arrow keys do nothing in synthetic mode** (`src/content/input.ts` key defaults ignore the
+- [x] **Bug: Cmd/Alt/Ctrl+arrow keys do nothing in synthetic mode** (fixed in 0.4.2: `modifiedCaretKey` in input.ts, e2e test with 20 cases) (`src/content/input.ts` key defaults ignore the
   modifier; `cmd+left` should go to the line start, `alt/ctrl+left` one word, `cmd+up` / `ctrl+home` to the start).
-  Found from DeepSeek's transcripts; confirmed on `basic.html` in contenteditable and text inputs. Not fixed yet.
+  Found from DeepSeek's transcripts; confirmed on `basic.html` in contenteditable and text inputs.
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 
 Not changed: the helper launcher's Node path on this Mac (A6), react.dev search (also failed in 0.2.0).

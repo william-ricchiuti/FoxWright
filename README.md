@@ -208,7 +208,7 @@ node test/build-fixtures.mjs
 
 # End-to-end tests against a real Firefox. FIREFOX must point at the binary to test with.
 export FIREFOX=/path/to/firefox
-node test/e2e.mjs                           # 58 tests, synthetic input
+node test/e2e.mjs                           # 59 tests, synthetic input
 KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
 node test/e2e-safety.mjs                    # presses the real permission-window and popup buttons
 node test/e2e-permissions.mjs               # approval timeouts, frame gating, uploads

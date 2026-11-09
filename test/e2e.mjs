@@ -561,6 +561,53 @@ async function main() {
     expect(/"(a{10}b{10}|b{10}a{10})"/.test(v), `typing interleaved: ${v}`);
   });
 
+  await test('Cmd/Alt/Ctrl + arrow, Home and End move and select like a real keyboard', async () => {
+    if (TRUSTED)
+      return; // real keys follow the OS's own conventions (e.g. Cmd+Left isn't "line start" on Linux)
+    await nav('/keys.html');
+    // Put the caret at `pos` (a number, or 'end') in the element, then press keys; report what's selected.
+    const setup = (sel, pos) => js(`(() => { const el = document.querySelector('${sel}'); el.focus();
+      if (el.isContentEditable) { const t = el.firstChild; const s = getSelection(); s.collapse(t, ${JSON.stringify(pos)} === 'end' ? t.length : ${JSON.stringify(pos)}); }
+      else { const p = ${JSON.stringify(pos)} === 'end' ? el.value.length : ${JSON.stringify(pos)}; el.setSelectionRange(p, p); }
+      return 'ok'; })()`);
+    const state = (sel) => js(`(() => { const el = document.querySelector('${sel}');
+      if (el.isContentEditable) { const s = getSelection(); return JSON.stringify({ sel: s.toString(), at: s.focusOffset }); }
+      return JSON.stringify({ sel: el.value.slice(el.selectionStart, el.selectionEnd), at: el.selectionDirection === 'backward' ? el.selectionStart : el.selectionEnd }); })()`);
+    const cases = [
+      // [element, caret start, keys, expected selection, expected caret]
+      ['#ce', 'end', ['cmd+left'], '', 0],
+      ['#ce', 'end', ['cmd+left', 'shift+right'], 'K', 1],
+      ['#ce', 'end', ['cmd+left', 'shift+alt+right'], 'Kitsune', 7],
+      ['#ce', 0, ['cmd+right'], '', 17],
+      ['#ce', 'end', ['alt+left'], '', 12],
+      ['#ce', 'end', ['ctrl+left'], '', 12],
+      ['#ce', 'end', ['shift+cmd+left'], 'Kitsune was here.', 0],
+      ['#field', 'end', ['cmd+left'], '', 0],
+      ['#field', 'end', ['cmd+left', 'shift+alt+right'], 'Kitsune', 7],
+      ['#field', 'end', ['alt+left'], '', 12],
+      ['#field', 'end', ['ctrl+left'], '', 12],
+      ['#field', 0, ['ctrl+right'], '', 8],
+      ['#field', 0, ['alt+right'], '', 7],
+      ['#field', 'end', ['shift+ctrl+left'], 'here.', 12],
+      ['#field', 'end', ['ctrl+home'], '', 0],
+      ['#area', 18, ['cmd+left'], '', 11],
+      ['#area', 11, ['cmd+right'], '', 28],
+      ['#area', 18, ['cmd+up'], '', 0],
+      ['#area', 0, ['ctrl+end'], '', 38],
+      ['#area', 11, ['shift+cmd+right'], 'Kitsune was here.', 28],
+    ];
+    const bad = [];
+    for (const [sel, pos, keys, wantSel, wantAt] of cases) {
+      await setup(sel, pos);
+      for (const k of keys)
+        await call('computer', { action: 'key', text: k });
+      const got = JSON.parse(JSON.parse(await state(sel)));
+      if (got.sel !== wantSel || got.at !== wantAt)
+        bad.push(`${sel} from ${pos}, ${keys.join(' ')}: selected ${JSON.stringify(got.sel)} caret ${got.at}; expected ${JSON.stringify(wantSel)} caret ${wantAt}`);
+    }
+    expect(!bad.length, `${bad.length}/${cases.length} wrong:\n      ${bad.join('\n      ')}`);
+  });
+
   await test('tab outside the Kitsune group is refused', async () => {
     const r = await h.call('read_page', { tabId: 1 });
     expect(r.isError && /not in the Kitsune tab group|does not exist/.test(r.text), r.text);
