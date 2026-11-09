@@ -168,6 +168,31 @@ await test('file upload: the user approves it in the Kitsune window', async () =
   fs.rmSync(file, { force: true });
 });
 
+await test('upload_image: a screenshot goes into a file input after the user approves it', async () => {
+  await h.call('navigate', { tabId, url: `${ORIGIN.once}/basic.html` });
+  const bogus = await h.call('upload_image', { tabId, imageId: 'shot-999', ref: 'e1' });
+  expect(bogus.isError && /No screenshot/.test(bogus.text), 'unknown IDs must be refused: ' + bogus.text);
+  const shot = await h.call('computer', { tabId, action: 'screenshot' });
+  const id = /Screenshot ID: (shot-\d+)/.exec(shot.text)?.[1];
+  expect(id, 'screenshot result should carry an ID: ' + shot.text);
+  const ref = /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId, query: 'Avatar' })).text)?.[1];
+  const up = h.call('upload_image', { tabId, imageId: id, ref, filename: 'bug-report.png' });
+  const w = await promptWindow();
+  let shown = '';
+  for (let i = 0; i < 40 && !shown; i++) {
+    shown = await evalIn(w.context, `document.getElementById('files').textContent`);
+    if (!shown)
+      await sleep(50);
+  }
+  expect(shown.includes('bug-report.jpg') && shown.includes(id), 'the window should name the screenshot: ' + shown);
+  await answer('once');
+  const r = await up;
+  expect(!r.isError && /Uploaded as bug-report\.jpg/.test(r.text), r.text);
+  const got = await h.call('javascript_tool', { tabId, action: 'javascript_exec', text: `(() => { const f = document.getElementById('avatar').files[0]; return f ? f.name + '|' + f.type + '|' + f.size : 'none'; })()` });
+  const [name, type, size] = JSON.parse(got.text).split('|');
+  expect(name === 'bug-report.jpg' && type === 'image/jpeg' && Number(size) > 1000, 'file input got: ' + got.text);
+});
+
 await test('the popup lists what the agent did, with its own summaries cleaned up', async () => {
   await h.call('navigate', { tabId, url: `${ORIGIN.once}/basic.html` });
   const btn = /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId, query: 'Clicked 0 times' })).text)?.[1];

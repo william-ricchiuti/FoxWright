@@ -122,6 +122,22 @@ async function recordFrame(tab, click, extra = {}) {
   } catch { /* recording is best-effort */ }
 }
 
+// ---------- screenshots kept for upload_image ----------
+// Memory only, in this MCP server: the last 20 screenshots, for 10 minutes.
+const shots = new Map(); // id -> { data (JPEG base64), at, tab }
+let nextShot = 1;
+function keepShot(r, tab) {
+  const img = r?.content?.find?.(c => c.type === 'image');
+  if (!img?.data)
+    return;
+  const id = `shot-${nextShot++}`;
+  shots.set(id, { data: img.data, at: Date.now(), tab });
+  for (const [k, v] of shots)
+    if (shots.size > 20 || Date.now() - v.at > 10 * 60000)
+      shots.delete(k);
+  r.content.push({ type: 'text', text: `Screenshot ID: ${id} (upload_image can attach it to the page).` });
+}
+
 /** Where a ref click lands, in screenshot pixels, so the GIF frame can mark it (only while recording). */
 async function refShot(a) {
   if (!a.ref || Array.isArray(a.coordinate) || typeof a.tabId !== 'number' || !isRecording(a.tabId) || !/click|hover/.test(a.action || ''))
@@ -496,6 +512,8 @@ Actions:
       return errorResult(e);
     }
     const r = await call('computer', a, a.action === 'wait' ? 20000 : 180000);
+    if (!r.isError && ['screenshot', 'zoom'].includes(a.action))
+      keepShot(r, a.tabId);
     if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
       await recordFrame(a.tabId, /click|drag|hover/.test(a.action) ? clickAt : undefined, frameExtra(a));
     return withNavSummary(r, a.tabId);
@@ -593,6 +611,35 @@ Actions:
     } catch (e) {
       return errorResult(e);
     }
+  });
+
+  server.registerTool('upload_image', {
+    description: 'Attach a screenshot you took (computer screenshot or zoom; its result gives a Screenshot ID) to a file input by ref, or drop it on a drop zone at coordinate, e.g. to add a screenshot to a bug report. The user confirms the upload in a Kitsune window. Screenshot IDs are kept for 10 minutes; take a new screenshot right before uploading.',
+    inputSchema: {
+      imageId: z.string().describe('The Screenshot ID, e.g. "shot-3".'),
+      ref: z.string().optional().describe('Ref of the file input or drop zone.'),
+      coordinate: coord.optional().describe('Screenshot coordinate of a drop zone, if no ref.'),
+      tabId,
+      filename: z.string().optional().describe('File name the page sees (default "screenshot.jpg"). Screenshots are JPEG images.'),
+    },
+  }, async (a) => {
+    const shot = shots.get(a.imageId);
+    if (!shot || Date.now() - shot.at > 10 * 60000)
+      return errorResult(`No screenshot "${a.imageId}" (they're kept for 10 minutes). Take a new screenshot with computer {action: "screenshot"} and use the ID in its result.`);
+    if (!a.ref === !a.coordinate)
+      return errorResult('upload_image needs either ref (a file input or drop zone) or coordinate, not both.');
+    if (typeof a.tabId !== 'number')
+      a.tabId = await defaultTab();
+    // Only a file name, always .jpg: the page sees what it gets.
+    let name = path.basename(a.filename || 'screenshot.jpg').replace(/[^\w.-]/g, '_') || 'screenshot.jpg';
+    const renamed = !/\.jpe?g$/i.test(name);
+    if (renamed)
+      name = name.replace(/\.[^.]*$/, '') + '.jpg';
+    const kb = Math.round(shot.data.length * 3 / 4 / 1024);
+    const r = await call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files: [{ name, type: 'image/jpeg', base64: shot.data }], paths: [`${name} (screenshot ${a.imageId}, ${kb} KB)`] }, 180000);
+    if (renamed && !r.isError)
+      r.content.push({ type: 'text', text: `Uploaded as ${name}: screenshots are JPEG images.` });
+    return r;
   });
 
   server.registerTool('gif_creator', {
