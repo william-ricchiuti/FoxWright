@@ -3,7 +3,8 @@
 //
 //   FIREFOX=/path/to/firefox node scripts/amo-screenshots.mjs
 //
-// Needs ImageMagick (`convert`) to compose the windows onto a page background.
+// Needs ImageMagick (`convert`) to compose the windows onto a page background. Captions aren't drawn
+// into the images (AMO has a caption field per screenshot; the texts are in docs/amo/LISTING.md).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,6 +44,12 @@ const STUB = {
     version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version, full: false, connected: true, lastError: null,
     clients: 1, bidi: false, paused: false, mode: 'ask', managedMode: false, managedAllowed: [],
     allowed: ['https://github.com', 'https://en.wikipedia.org'], sessionAllowed: ['https://www.saucedemo.com'], groupTabs: 2,
+    browserName: 'Work',
+    recentActions: [
+      { at: Date.now() - 4000, text: 'Opens the notifications filter', own: true },
+      { at: Date.now() - 9000, text: 'Typed 12 characters', own: false },
+      { at: Date.now() - 15000, text: 'Opened github.com/notifications', own: false },
+    ],
   },
 };
 const stub = (page) => `window.close = () => {};
@@ -74,7 +81,7 @@ async function renderUi(page, width, height) {
   return file;
 }
 const promptPng = await renderUi('prompt', 500, 360);
-const popupPng = await renderUi('popup', 360, 540);
+const popupPng = await renderUi('popup', 360, 750); // tall enough for the action list and the Pause button
 
 // The real agent tab: open the fixture page, approving it in the real permission window.
 const nav = h.call('navigate', { tabId, url });
@@ -94,19 +101,17 @@ await h.call('computer', { tabId, action: 'type', text: 'zenko2026!' });
 await sleep(300);
 await shot(agentCtx, path.join(out, 'screenshot-1-agent-working.png'));
 
-// Compose a window image onto the dimmed page, with a caption.
+// Compose a window image onto the dimmed page. (`caption` is the AMO caption, kept here for reference.)
 function compose(windowPng, file, caption, gravity = 'center', offset = '+0+0') {
   execFileSync('convert', [
     plainPage, '-resize', `${W}x${H}!`, '-fill', 'rgba(20,12,8,0.45)', '-draw', `rectangle 0,0 ${W},${H}`,
     '(', windowPng, '(', '+clone', '-background', 'black', '-shadow', '60x12+0+8', ')', '+swap', '-background', 'none', '-layers', 'merge', '+repage', ')',
     '-gravity', gravity, '-geometry', offset, '-composite',
-    '-gravity', 'northwest', '-fill', 'rgba(20,12,8,0.82)', '-draw', `rectangle 0,${H - 84} ${W},${H}`,
-    '-gravity', 'south', '-fill', 'white', '-pointsize', '26', '-annotate', '+0+28', caption,
     file,
   ]);
 }
 compose(promptPng, path.join(out, 'screenshot-2-permission-window.png'), 'You approve every site in a window the page and the agent can\'t touch.');
-compose(popupPng, path.join(out, 'screenshot-3-popup.png'), 'Pause the agent, review and revoke sites, see the input mode.', 'northeast', '+40+40');
+compose(popupPng, path.join(out, 'screenshot-3-popup.png'), 'See what the agent did, pause it, review and revoke sites.', 'northeast', '+40+40');
 
 server.close();
 d.close();
