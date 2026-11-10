@@ -4,7 +4,7 @@ name: Release
 #  - build and lint both extension builds, the source zip and the npm package
 #  - create a GitHub release with the zips and the CHANGELOG section as notes
 #  - if the AMO_JWT_ISSUER / AMO_JWT_SECRET secrets are set: sign the full build (unlisted) and attach the .xpi
-#  - if the NPM_TOKEN secret is set: publish kitsune-firefox to npm
+#  - if the NPM_TOKEN secret is set: publish zenko-firefox to npm
 # The listed (store) build is still submitted by hand on addons.mozilla.org: docs/AMO-SUBMISSION.md.
 
 on:
@@ -50,7 +50,7 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "Kitsune ${GITHUB_REF_NAME#v}" --notes-file release-notes.md dist/zips/*-"${GITHUB_REF_NAME#v}".zip $(ls dist/signed/*.xpi 2>/dev/null)
+        run: gh release create "$GITHUB_REF_NAME" --title "Zenko ${GITHUB_REF_NAME#v}" --notes-file release-notes.md dist/zips/*-"${GITHUB_REF_NAME#v}".zip $(ls dist/signed/*.xpi 2>/dev/null)
       - name: Publish to npm
         if: env.NODE_AUTH_TOKEN != ''
         working-directory: host

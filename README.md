@@ -1,28 +1,30 @@
-# Kitsune 狐
+# Zenko 善狐
 
-[![CI](https://github.com/william-ricchiuti/Kitsune/actions/workflows/ci.yml/badge.svg)](https://github.com/william-ricchiuti/Kitsune/actions/workflows/ci.yml)
+[![CI](https://github.com/william-ricchiuti/Zenko/actions/workflows/ci.yml/badge.svg)](https://github.com/william-ricchiuti/Zenko/actions/workflows/ci.yml)
 
 **Let Claude (or any MCP-capable AI agent) use your real Firefox**: your tabs, your logins, your extensions. It works the same way Claude in Chrome does in Chrome.
 
-![A Claude Code agent buying a backpack on saucedemo.com through Kitsune: log in, add to cart, fill checkout details, finish](docs/demo.gif)
+*Zenko (善狐, "good fox") was called Kitsune until version 0.6.0. It's unrelated to [junyeong-nero/kitsune](https://github.com/junyeong-nero/kitsune), a different project that happens to share the old name.*
 
-*A real Claude Code session with Kitsune, sped up 1.5×. The orange glow and "Kitsune is driving this tab" pill show which tab the agent is using. The striped address bar is from the test profile's remote-debugging mode.*
+![A Claude Code agent buying a backpack on saucedemo.com through Zenko: log in, add to cart, fill checkout details, finish](docs/demo.gif)
 
-Kitsune is a Firefox extension plus a small helper program. The helper gives your AI client the same tools Claude in Chrome has (`read_page`, `find`, `computer`, `form_input`, `navigate`, …), so the agent already knows how to use them.
+*A real Claude Code session, recorded before the rename (so the pill says Kitsune), sped up 1.5×. The orange glow and the in-page pill show which tab the agent is using. The striped address bar is from the test profile's remote-debugging mode.*
+
+Zenko is a Firefox extension plus a small helper program. The helper gives your AI client the same tools Claude in Chrome has (`read_page`, `find`, `computer`, `form_input`, `navigate`, …), so the agent already knows how to use them.
 
 ```
  Claude Code / Claude Desktop / any MCP client
         │  stdio (MCP)
         ▼
- kitsune mcp ──── Unix socket (~/.kitsune, owner-only) ───► kitsune helper
+ zenko mcp ──── Unix socket (~/.zenko, owner-only) ───► zenko helper
                                                                │ Firefox native messaging
  (optional) WebDriver BiDi on :9222 for real input             ▼
-        └─────────────────────────────────────────────► Kitsune extension ──► your tabs
+        └─────────────────────────────────────────────► Zenko extension ──► your tabs
 ```
 
 ## Why this exists
 
-Chrome extensions can call Chrome's DevTools protocol (`chrome.debugger`). That's how Claude in Chrome gets a page outline and real mouse and keyboard input. Firefox extensions have no equivalent API ([bug 1316741](https://bugzilla.mozilla.org/show_bug.cgi?id=1316741)). The other ways to connect an AI agent to Firefox each fall short somewhere. This is how they compare (re-checked November 2026), based on each project's own code and README:
+Chrome extensions can call Chrome's DevTools protocol (`chrome.debugger`). That's how Claude in Chrome gets a page outline and real mouse and keyboard input. Firefox extensions have no equivalent API ([bug 1316741](https://bugzilla.mozilla.org/show_bug.cgi?id=1316741)). Several projects now connect AI agents to Firefox, each with different trade-offs. This is how they compare (re-checked November 2026), based on each project's own code and README:
 
 | | Your real profile (logins, extensions)? | Page outline for the AI | Input that React/Vue/editors accept | Security |
 |---|---|---|---|---|
@@ -32,11 +34,14 @@ Chrome extensions can call Chrome's DevTools protocol (`chrome.debugger`). That'
 | ClaudeCodeBrowser | yes | screenshots / raw DOM | basic DOM events | HTTP server on localhost; API key in the current code, none in the store version; polls twice a second |
 | FoxMCP | yes | run-a-script only, no page outline | none (scripts only) | local WebSocket, no caller authentication |
 | browser-control-mcp, FireMCP | yes | read-only (FireMCP can also open, close and group tabs) | none (by design) | shared secret, per-site consent |
-| **Kitsune** | **yes** | full accessibility outline (roles, names, states, values, refs), iframes included | synthetic events tuned per framework; **real input automatically** when Firefox runs with remote debugging | owner-only socket, no open port; per-site approval in an extension-owned window |
+| Foxhand | yes | its README: a snapshot that finds div buttons, closed shadow DOM and cross-site iframes | its README: "typing sends real key presses" | helper on localhost with a 256-bit bearer token; a visible AI cursor that says what it's doing; 45 tools incl. bookmarks, history, cookies |
+| FoxPilot | yes (also Chrome/Edge) | accessibility snapshot with stable ids | click, type, fill in an opt-in "Automation Mode" | loopback connection, per-domain consent, audit log of tool calls |
+| kitsune (junyeong-nero; Python, unrelated to this project) | yes, in background tabs; your own tabs are read-only until you approve | Playwright MCP's tool names and snapshot | not stated in its README | local bridge with a token; read / draft / act modes |
+| **Zenko** | **yes** | full accessibility outline (roles, names, states, values, refs), iframes included | synthetic events tuned per framework; **real input automatically** when Firefox runs with remote debugging | owner-only socket, no open port; per-site approval in an extension-owned window |
 
-If you don't need your own logged-in browser, Playwright MCP is a solid choice. Kitsune is for when the agent should work in the Firefox you already use.
+If you don't need your own logged-in browser, Playwright MCP is a solid choice. Among the tools that use your own Firefox, Zenko's differences are Claude in Chrome's exact tool set (skills and prompts written for it work unchanged), real input through WebDriver BiDi when you turn it on, no TCP port at all in the default mode, several Firefox profiles at once, and a published real-agent evaluation (below).
 
-How Kitsune fills the gaps:
+How Zenko fills the gaps:
 
 - **Page outline without DevTools.** It uses Microsoft Playwright's accessibility-snapshot code, vendored under Apache-2.0. That code computes WAI-ARIA roles and accessible names in plain JavaScript inside the page. `read_page` returns YAML like `- textbox "Email" [ref=e7]: ada@example.com`, and every interactive element gets a ref you can click or fill.
 - **Input that frameworks accept.**
@@ -44,11 +49,11 @@ How Kitsune fills the gaps:
   - Typing goes through `execCommand('insertText')`, so React, Vue, ProseMirror, Lexical and Slate all see normal input events.
   - Keys like Enter, Tab, Backspace and arrows get their *default actions* reproduced: form submission, focus moves, deletion, caret moves.
   - HTML5 drag-and-drop, file inputs, `<select>`, range and date inputs are handled specially.
-- **Real (trusted) input when available.** If Firefox is running with `--remote-debugging-port`, Kitsune detects it and sends clicks, keys, wheel and drags through WebDriver BiDi. Pages then see `isTrusted: true` events, including inside cross-origin iframes. If a step can't be done that way, it falls back to synthetic events, and never runs the same action twice.
+- **Real (trusted) input when available.** If Firefox is running with `--remote-debugging-port`, Zenko detects it and sends clicks, keys, wheel and drags through WebDriver BiDi. Pages then see `isTrusted: true` events, including inside cross-origin iframes. If a step can't be done that way, it falls back to synthetic events, and never runs the same action twice.
 
 ## Does it actually work?
 
-Claude Code was given 17 everyday browser tasks and allowed to use only Kitsune's tools. Each result was then checked in the browser by an independent verifier, not taken from the agent's word. The tasks were logins, a full shop checkout, React forms, custom dropdowns, drag-and-drop, a JavaScript confirm dialog, drawing on a canvas, a rich-text editor, file upload, research across two tabs, a site's own search, looking facts up on Wikipedia, Hacker News and gov.uk, and a local three-step sign-up form with validation errors.
+Claude Code was given 17 everyday browser tasks and allowed to use only Zenko's tools. Each result was then checked in the browser by an independent verifier, not taken from the agent's word. The tasks were logins, a full shop checkout, React forms, custom dropdowns, drag-and-drop, a JavaScript confirm dialog, drawing on a canvas, a rich-text editor, file upload, research across two tabs, a site's own search, looking facts up on Wikipedia, Hacker News and gov.uk, and a local three-step sign-up form with validation errors.
 
 Results for the current code (November 2026, macOS, Firefox 158, Claude Opus 5.5), one run per task, with every site pre-approved:
 
@@ -65,11 +70,11 @@ The same 17 tasks with other models and agents (default input mode, November 202
 | OpenCode, DeepSeek v4-pro | **17/17** | 19 s | 6 | $0.09 |
 | OpenCode, DeepSeek v4.1 flash (free) | **17/17** | 19 s | 6 | $0 |
 
-So Kitsune's tools aren't tied to Claude: models that weren't trained on Claude in Chrome's tool names used them without changes. Each agent could reach the web only through Kitsune (shell, web fetch/search and built-in browsers off). DeepSeek v4-pro failed the rich-text task once in an earlier run, which is the kind of variance one run per task can hide. Reports: [GPT](docs/agent-eval-gpt.md), [DeepSeek v4-pro](docs/agent-eval-deepseek-v4-pro.md), [DeepSeek flash](docs/agent-eval-deepseek-flash.md). Run them with `node test/agent-eval.mjs --agent codex` or `--agent opencode --model provider/model`.
+So Zenko's tools aren't tied to Claude: models that weren't trained on Claude in Chrome's tool names used them without changes. Each agent could reach the web only through Zenko (shell, web fetch/search and built-in browsers off). DeepSeek v4-pro failed the rich-text task once in an earlier run, which is the kind of variance one run per task can hide. Reports: [GPT](docs/agent-eval-gpt.md), [DeepSeek v4-pro](docs/agent-eval-deepseek-v4-pro.md), [DeepSeek flash](docs/agent-eval-deepseek-flash.md). Run them with `node test/agent-eval.mjs --agent codex` or `--agent opencode --model provider/model`.
 
 Version 0.3.0 scored 16/16 on the first 16 tasks with looser checks ($1.57 and $1.58; the model wasn't recorded then). The very first version scored 14/16. The agent's own transcripts drove the fixes: multi-step batching, text search within a page, a `form_input` that handles custom dropdowns, word selection on double-click, and more forgiving arguments. Full reports: [synthetic](docs/agent-eval-synthetic.md), [trusted](docs/agent-eval-trusted.md).
 
-These numbers are a useful signal, not a guarantee: one run per task, demo sites rather than your logged-in accounts, and no permission prompts. The checks are strict (for example, the editor task checks that only "Kitsune" is bold, and the search task that the agent really used the site's search). The evaluation can also run with permission prompts on (`--ask`) and repeat tasks (`--repeat N`). Run it yourself with `node test/agent-eval.mjs`. It needs the `claude` CLI; the cost depends on the model (about $4 per run with Opus 5.5, which on a Claude subscription counts against its usage limits).
+These numbers are a useful signal, not a guarantee: one run per task, demo sites rather than your logged-in accounts, and no permission prompts. The checks are strict (for example, the editor task checks that only "Zenko" is bold, and the search task that the agent really used the site's search). The evaluation can also run with permission prompts on (`--ask`) and repeat tasks (`--repeat N`). Run it yourself with `node test/agent-eval.mjs`. It needs the `claude` CLI; the cost depends on the model (about $4 per run with Opus 5.5, which on a Claude subscription counts against its usage limits).
 
 ## Install
 
@@ -79,32 +84,32 @@ You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
 
 1. **Install the helper** and register it with Firefox. Add `--claude-code` and/or `--claude-desktop` to also register the MCP server with those apps:
    ```sh
-   npx kitsune-firefox setup --claude-code --claude-desktop
+   npx zenko-firefox setup --claude-code --claude-desktop
    ```
-   Setup copies one self-contained file to `~/.kitsune/app/` (on Windows, `%USERPROFILE%\.kitsune\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
+   Setup copies one self-contained file to `~/.zenko/app/` (on Windows, `%USERPROFILE%\.zenko\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
 2. **Install the extension.** It's in review on addons.mozilla.org (submitted 2026-11-08); the link goes here once it's approved. Until then, build it and load it yourself: see [Install from source](#before-the-store-listing-is-live-install-from-source) below. (The helper in step 1 is already on npm.) The fox in your toolbar loses its `!` badge once it finds the helper.
-3. **Ask Claude to use it**, e.g. *"Use Kitsune to open my GitHub notifications and summarize them."*
+3. **Ask Claude to use it**, e.g. *"Use Zenko to open my GitHub notifications and summarize them."*
 
-Run `npx kitsune-firefox doctor` any time to check every link in the chain. `npx kitsune-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
+Run `npx zenko-firefox doctor` any time to check every link in the chain. `npx zenko-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
 
 ### Before the store listing is live: install from source
 
 ```sh
-git clone https://github.com/william-ricchiuti/Kitsune.git && cd Kitsune
+git clone https://github.com/william-ricchiuti/Zenko.git && cd Zenko
 npm ci && npm ci --prefix host
-npm run build                                  # extension → dist/store, helper → host/dist/kitsune.mjs
-node host/dist/kitsune.mjs setup --claude-code # or --claude-desktop, or neither
+npm run build                                  # extension → dist/store, helper → host/dist/zenko.mjs
+node host/dist/zenko.mjs setup --claude-code # or --claude-desktop, or neither
 ```
 
-Then load the extension: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick `dist/store/manifest.json`. A temporary add-on is removed when Firefox restarts. To keep it installed, use [Firefox Developer Edition or Nightly](https://www.mozilla.org/firefox/developer/) with `xpinstall.signatures.required` set to `false` in `about:config`, and install `dist/zips/kitsune-store-*.zip` (made by `npm run package`) from `about:addons` → ⚙ → *Install Add-on From File*.
+Then load the extension: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick `dist/store/manifest.json`. A temporary add-on is removed when Firefox restarts. To keep it installed, use [Firefox Developer Edition or Nightly](https://www.mozilla.org/firefox/developer/) with `xpinstall.signatures.required` set to `false` in `about:config`, and install `dist/zips/zenko-store-*.zip` (made by `npm run package`) from `about:addons` → ⚙ → *Install Add-on From File*.
 
 ### Using it from Claude Code without `--claude-code`
 
 ```sh
 # macOS / Linux
-claude mcp add --scope user kitsune -- node ~/.kitsune/app/kitsune.mjs mcp
+claude mcp add --scope user zenko -- node ~/.zenko/app/zenko.mjs mcp
 # Windows (PowerShell)
-claude mcp add --scope user kitsune -- node "$env:USERPROFILE\.kitsune\app\kitsune.mjs" mcp
+claude mcp add --scope user zenko -- node "$env:USERPROFILE\.zenko\app\zenko.mjs" mcp
 ```
 
 ### Optional: real input (WebDriver BiDi)
@@ -120,26 +125,26 @@ firefox --remote-debugging-port=9222
 & "C:\Program Files\Mozilla Firefox\firefox.exe" --remote-debugging-port=9222
 ```
 
-Kitsune picks it up automatically. `tabs_context_mcp` reports `Input mode: trusted`, and so does the toolbar popup.
+Zenko picks it up automatically. `tabs_context_mcp` reports `Input mode: trusted`, and so does the toolbar popup.
 
 **Before turning this on, know that:**
 
 - Any program on your computer can then control Firefox through that port, with no password. Only use it on a machine you trust, and don't leave it on all the time.
-- Kitsune sends keystrokes (which can include text you gave the agent for a form) to whatever answers on that port. It checks that the answer comes from Firefox, but another local program could still take the port first if Firefox isn't using it. To use a different port, start Firefox with `--remote-debugging-port=N` and set `KITSUNE_BIDI_PORT=N` for the MCP server.
+- Zenko sends keystrokes (which can include text you gave the agent for a form) to whatever answers on that port. It checks that the answer comes from Firefox, but another local program could still take the port first if Firefox isn't using it. To use a different port, start Firefox with `--remote-debugging-port=N` and set `ZENKO_BIDI_PORT=N` for the MCP server.
 - Firefox shows a striped address bar and a robot icon while it's on.
-- Pages can tell the browser is being automated: Firefox sets `navigator.webdriver` to `true` whenever remote debugging is on. On your Mac, Google showed its "unusual traffic" check in this mode but not in the default mode. Kitsune deliberately doesn't hide this.
+- Pages can tell the browser is being automated: Firefox sets `navigator.webdriver` to `true` whenever remote debugging is on. On your Mac, Google showed its "unusual traffic" check in this mode but not in the default mode. Zenko deliberately doesn't hide this.
 - At startup, Firefox applies a few "automation" preferences, such as turning off update checks. Set `remote.prefs.recommended` to `false` in `about:config` to stop that.
 
-Without it, Kitsune works on most sites. The things that need real input are listed under [Limitations](#limitations).
+Without it, Zenko works on most sites. The things that need real input are listed under [Limitations](#limitations).
 
 ## Safety model
 
-- **Agent tabs only.** The agent can only use tabs in the orange **Kitsune** tab group. To share an existing tab, drag it into the group. Popups and new tabs opened from agent tabs join the group automatically.
-- **You approve every site.** Before the agent opens, reads or touches a site you haven't approved, Kitsune shows you a small window owned by the extension, not by the web page. That means a page can't hide it, restyle it, or trick you into clicking it, and neither the page nor the AI can press its buttons. The choices are *Deny*, *Allow this session* and *Always allow*.
+- **Agent tabs only.** The agent can only use tabs in the orange **Zenko** tab group. To share an existing tab, drag it into the group. Popups and new tabs opened from agent tabs join the group automatically.
+- **You approve every site.** Before the agent opens, reads or touches a site you haven't approved, Zenko shows you a small window owned by the extension, not by the web page. That means a page can't hide it, restyle it, or trick you into clicking it, and neither the page nor the AI can press its buttons. The choices are *Deny*, *Allow this session* and *Always allow*.
   - This covers embedded frames from other sites too: they stay hidden from the agent until you approve that site.
   - You can review and revoke sites in the toolbar popup, or switch to "Allow all sites" if you prefer.
 - **Commands stay on the approved site.** Every command is tied to the site you approved. If the page has since navigated to another site, the content script refuses it.
-- **File uploads need your OK each time.** Kitsune shows you the file names and sizes and waits for your confirmation. Key and credential files are always refused: `~/.ssh`, `.env`, `*.pem`, cloud CLI credentials, browser profiles (saved passwords and cookies), shell history, and Claude's own settings.
+- **File uploads need your OK each time.** Zenko shows you the file names and sizes and waits for your confirmation. Key and credential files are always refused: `~/.ssh`, `.env`, `*.pem`, cloud CLI credentials, browser profiles (saved passwords and cookies), shell history, and Claude's own settings.
 - **Passwords stay hidden.** Password fields appear to the agent as `(password, N characters)`, never their contents, even when Firefox has filled in a saved login.
 - **The permission window can't be clicked by accident.** Its buttons only work after it has been on screen for a moment, so a window that pops up under your cursor mid-click can't catch that click. The default button is *Allow this session*, not *Always allow*. The page's title is shown, labelled as coming from the website.
 - **Stopping the agent.** Any of these pauses it:
@@ -149,14 +154,14 @@ Without it, Kitsune works on most sites. The things that need real input are lis
 
   Stopping interrupts work already in progress: open permission windows are denied, typing and drags stop at the next keystroke or step, and the agent is told you stopped it.
 
-  While the agent is working, the tab group title changes to **Kitsune ● working** and the page gets an orange glow. The in-page pill and glow are only a convenience, because a hostile page could hide or imitate them. The toolbar and the keyboard shortcut are the controls the page can't touch.
-- **See what the agent is doing.** The in-page pill shows the agent's description of its latest action ("Kitsune: Sends the reply to pat@example.com"), and the toolbar popup lists its recent actions: in quotes when they're the agent's own words, otherwise Kitsune's plain description ("Opened example.com", "Typed 12 characters"). The agent's words are a convenience, not a guarantee: a manipulated agent could describe an action wrongly.
-- **No open ports.** The helper talks to AI clients through a Unix socket in `~/.kitsune` that only your user can open (directory mode 0700, socket 0600). On Windows it uses a named pipe with an unguessable name. Nothing listens on TCP unless you turn on real input yourself.
-- **Prompt injection is still possible.** Web pages can contain text written to manipulate an AI. Kitsune's permission windows limit the damage, but review what your agent is about to do on sensitive sites.
+  While the agent is working, the tab group title changes to **Zenko ● working** and the page gets an orange glow. The in-page pill and glow are only a convenience, because a hostile page could hide or imitate them. The toolbar and the keyboard shortcut are the controls the page can't touch.
+- **See what the agent is doing.** The in-page pill shows the agent's description of its latest action ("Zenko: Sends the reply to pat@example.com"), and the toolbar popup lists its recent actions: in quotes when they're the agent's own words, otherwise Zenko's plain description ("Opened example.com", "Typed 12 characters"). The agent's words are a convenience, not a guarantee: a manipulated agent could describe an action wrongly.
+- **No open ports.** The helper talks to AI clients through a Unix socket in `~/.zenko` that only your user can open (directory mode 0700, socket 0600). On Windows it uses a named pipe with an unguessable name. Nothing listens on TCP unless you turn on real input yourself.
+- **Prompt injection is still possible.** Web pages can contain text written to manipulate an AI. Zenko's permission windows limit the damage, but review what your agent is about to do on sensitive sites.
 
 ## Tools
 
-Kitsune's tools are compatible with Claude in Chrome's: same names, same arguments, including `action_summary`, `upload_image` and choosing between browsers. Kitsune adds `handle_dialog`, `visible_only` for `read_page`, and `query`/`offset` for `get_page_text`.
+Zenko's tools are compatible with Claude in Chrome's: same names, same arguments, including `action_summary`, `upload_image` and choosing between browsers. Zenko adds `handle_dialog`, `visible_only` for `read_page`, and `query`/`offset` for `get_page_text`.
 
 | Tool | What it does |
 |---|---|
@@ -172,7 +177,7 @@ Kitsune's tools are compatible with Claude in Chrome's: same names, same argumen
 | `browser_batch` | Several of the above in one call, e.g. fill three fields and click Submit. Stops at the first error. |
 | `file_upload` | Attach local files to a file input or drop zone. You confirm each upload. |
 | `upload_image` | Attach a screenshot the agent just took (each screenshot result has an ID) to a file input or drop zone, e.g. for a bug report. You confirm each upload. |
-| `list_connected_browsers` / `select_browser` / `switch_browser` | Work with several Firefox profiles at once (say, "Work" and "Personal"): list them, pick one by its ID, or let you pick by clicking Connect in a window that appears in each. Name each browser in its Kitsune toolbar popup. |
+| `list_connected_browsers` / `select_browser` / `switch_browser` | Work with several Firefox profiles at once (say, "Work" and "Personal"): list them, pick one by its ID, or let you pick by clicking Connect in a window that appears in each. Name each browser in its Zenko toolbar popup. |
 | `handle_dialog` | Choose how the next JavaScript `confirm()`/`prompt()` is answered. While the agent is working in a tab (and for a few seconds after), dialogs don't block the page: alerts are dismissed, confirms/prompts are cancelled, and the tool result reports what the page asked. When you use the tab yourself, the page's dialogs appear normally. |
 | `read_console_messages` / `read_network_requests` | Console output and HTTP requests of an agent tab. |
 | `resize_window` | Resize the browser window. |
@@ -180,8 +185,8 @@ Kitsune's tools are compatible with Claude in Chrome's: same names, same argumen
 
 ### Two builds
 
-- **Kitsune** (addons.mozilla.org): everything except `javascript_tool`. Mozilla's policy doesn't allow extensions to run code strings that come from outside the add-on.
-- **Kitsune (Full)**: adds `javascript_tool`. Distribute it yourself (signed as "unlisted" on AMO, or unsigned in Firefox Developer Edition / Nightly). Pages with a strict Content-Security-Policy can still block it.
+- **Zenko** (addons.mozilla.org): everything except `javascript_tool`. Mozilla's policy doesn't allow extensions to run code strings that come from outside the add-on.
+- **Zenko (Full)**: adds `javascript_tool`. Distribute it yourself (signed as "unlisted" on AMO, or unsigned in Firefox Developer Edition / Nightly). Pages with a strict Content-Security-Policy can still block it.
 
 ## Limitations
 
@@ -194,11 +199,11 @@ Without real input (remote debugging off):
 
 Also:
 
-- **Several Firefox profiles.** Several can be connected at once. An agent uses the first one that connected unless it picks another (`select_browser`, `switch_browser`). Real input (WebDriver BiDi) only works in the Firefox that was started with remote debugging; in the others, Kitsune uses synthetic input.
+- **Several Firefox profiles.** Several can be connected at once. An agent uses the first one that connected unless it picks another (`select_browser`, `switch_browser`). Real input (WebDriver BiDi) only works in the Firefox that was started with remote debugging; in the others, Zenko uses synthetic input.
 - **Pages extensions can't touch.** Firefox blocks all extensions on `about:` pages, `addons.mozilla.org` and a few Mozilla account pages.
-- **Firefox's JSON and PDF viewers.** Pages shown in these viewers can't be read or screenshotted by extensions. For JSON loaded with GET, `get_page_text` fetches it again; otherwise Kitsune explains the problem and suggests the `devtools.jsonview.enabled` pref.
+- **Firefox's JSON and PDF viewers.** Pages shown in these viewers can't be read or screenshotted by extensions. For JSON loaded with GET, `get_page_text` fetches it again; otherwise Zenko explains the problem and suggests the `devtools.jsonview.enabled` pref.
 - **Snap and Flatpak Firefox.** On Linux, the sandboxed Snap/Flatpak builds may not be able to start the helper (see [Install](#install)).
-- **Console capture starts when Kitsune's hooks load.** Messages logged by scripts in the page's `<head>`, before that, can be missed; reload the page to capture them.
+- **Console capture starts when Zenko's hooks load.** Messages logged by scripts in the page's `<head>`, before that, can be missed; reload the page to capture them.
 - **Windows** hasn't been tested as thoroughly as macOS and Linux (see [docs/MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md)).
 - **`find`** uses word matching, not a language model, so describe elements by their visible text or role.
 
@@ -206,13 +211,13 @@ Also:
 
 ```sh
 npm ci && npm ci --prefix host
-npm run build              # extension → dist/store and dist/full, helper/MCP → host/dist/kitsune.mjs
+npm run build              # extension → dist/store and dist/full, helper/MCP → host/dist/zenko.mjs
 node test/build-fixtures.mjs
 
 # End-to-end tests against a real Firefox. FIREFOX must point at the binary to test with.
 export FIREFOX=/path/to/firefox
 node test/e2e.mjs                           # 60 tests, synthetic input
-KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
+ZENKO_E2E_TRUSTED=1 node test/e2e.mjs     # same tests with WebDriver BiDi input
 node test/e2e-safety.mjs                    # presses the real permission-window and popup buttons
 node test/e2e-permissions.mjs               # approval timeouts, frame gating, uploads
 node test/e2e-store.mjs                     # AMO build smoke test
@@ -228,9 +233,9 @@ npx web-ext lint --source-dir dist/store
 node scripts/version.mjs check              # the three version numbers agree
 ```
 
-On Linux the tests don't touch your own Kitsune install: they set up the helper in a temporary home folder. On macOS they use your real `~/.kitsune`, so run `node host/dist/kitsune.mjs setup` again afterwards if you use a released version.
+On Linux the tests don't touch your own Zenko install: they set up the helper in a temporary home folder. On macOS they use your real `~/.zenko`, so run `node host/dist/zenko.mjs setup` again afterwards if you use a released version.
 
-Results are in [docs/TESTING.md](docs/TESTING.md). What's planned next is in [docs/ROADMAP.md](docs/ROADMAP.md). The checks automation can't do are listed in [docs/MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md). The tests use `web-ext run` with a temporary profile. They configure Kitsune through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
+Results are in [docs/TESTING.md](docs/TESTING.md). What's planned next is in [docs/ROADMAP.md](docs/ROADMAP.md). The checks automation can't do are listed in [docs/MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md). The tests use `web-ext run` with a temporary profile. They configure Zenko through an enterprise policy (`policies.json` → `3rdparty.Extensions`), which administrators can also use to pre-approve sites (`allowed`, `mode`, `promptTimeoutSec`, `confirmUploads`).
 
 Layout:
 
@@ -242,6 +247,6 @@ Layout:
 
 ## Credits
 
-The accessibility-snapshot engine is from [Playwright](https://github.com/microsoft/playwright) (Apache-2.0, © Microsoft). Kitsune is not affiliated with Anthropic or Mozilla. "Claude" is a trademark of Anthropic and "Firefox" is a trademark of the Mozilla Foundation.
+The accessibility-snapshot engine is from [Playwright](https://github.com/microsoft/playwright) (Apache-2.0, © Microsoft). Zenko is not affiliated with Anthropic or Mozilla. "Claude" is a trademark of Anthropic and "Firefox" is a trademark of the Mozilla Foundation.
 
 License: Apache-2.0.

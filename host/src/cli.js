@@ -1,4 +1,4 @@
-// kitsune CLI entry point (bundled to dist/kitsune.mjs).
+// zenko CLI entry point (bundled to dist/zenko.mjs).
 import { runHost } from './host.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -8,7 +8,7 @@ const launchedByFirefox = cmd && (cmd.endsWith('.json') || cmd.includes('@'));
 
 async function main() {
   if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
-    console.log(typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0');
+    console.log(typeof __ZENKO_VERSION__ !== 'undefined' ? __ZENKO_VERSION__ : '0.0.0');
     return;
   }
   if (cmd === 'host' || launchedByFirefox) {
@@ -35,16 +35,16 @@ async function main() {
     await uninstall();
     return;
   }
-  console.log(`kitsune: let AI agents drive your real Firefox.
+  console.log(`zenko: let AI agents drive your real Firefox.
 
 Usage:
-  kitsune setup [--claude-code] [--claude-desktop] [--all]
+  zenko setup [--claude-code] [--claude-desktop] [--all]
                       Install the helper Firefox talks to, and optionally register
                       the MCP server with Claude Code / Claude Desktop.
-  kitsune doctor      Check the installation and the live connection to Firefox.
-  kitsune mcp         Run the MCP server on stdio (what your AI client launches).
-  kitsune uninstall   Remove the helper.
-  kitsune --version   Print the version.
+  zenko doctor      Check the installation and the live connection to Firefox.
+  zenko mcp         Run the MCP server on stdio (what your AI client launches).
+  zenko uninstall   Remove the helper.
+  zenko --version   Print the version.
 `);
   process.exit(cmd && cmd !== 'help' && cmd !== '--help' ? 1 : 0);
 }

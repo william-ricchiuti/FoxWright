@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Kitsune",
-  "version": "0.5.0",
+  "name": "Zenko",
+  "version": "0.6.0",
   "description": "Lets an AI agent you run (such as Claude, over MCP) read and operate Firefox tabs, with per-site permission, its own tab group, and a Stop button.",
-  "homepage_url": "https://github.com/william-ricchiuti/Kitsune",
+  "homepage_url": "https://github.com/william-ricchiuti/Zenko",
   "icons": {
-    "48": "icons/kitsune.svg",
-    "96": "icons/kitsune.svg"
+    "48": "icons/zenko.svg",
+    "96": "icons/zenko.svg"
   },
   "background": {
     "scripts": [
@@ -14,9 +14,9 @@
     ]
   },
   "action": {
-    "default_title": "Kitsune",
+    "default_title": "Zenko",
     "default_popup": "popup/popup.html",
-    "default_icon": "icons/kitsune.svg"
+    "default_icon": "icons/zenko.svg"
   },
   "permissions": [
     "nativeMessaging",
@@ -49,7 +49,7 @@
       "suggested_key": {
         "default": "Alt+Shift+K"
       },
-      "description": "Pause the AI agent (stop Kitsune)"
+      "description": "Pause the AI agent (stop Zenko)"
     }
   }
 }

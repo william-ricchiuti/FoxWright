@@ -1,5 +1,5 @@
-// The Firefox profiles connected to Kitsune right now. Each one's helper writes
-// ~/.kitsune/browsers/<pid>.json (see host.js) and listens on its own socket.
+// The Firefox profiles connected to Zenko right now. Each one's helper writes
+// ~/.zenko/browsers/<pid>.json (see host.js) and listens on its own socket.
 import fs from 'node:fs';
 import path from 'node:path';
 import { browsersDir } from './paths.js';

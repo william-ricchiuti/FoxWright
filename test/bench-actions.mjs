@@ -1,11 +1,11 @@
 // Latency of common tool calls against the local fixtures (median of N runs).
 //   node test/bench-actions.mjs            synthetic input
-//   KITSUNE_E2E_TRUSTED=1 node test/bench-actions.mjs
+//   ZENKO_E2E_TRUSTED=1 node test/bench-actions.mjs
 import { start } from './harness.mjs';
 
 const N = Number(process.env.BENCH_N || 15);
-const BASE = `http://127.0.0.1:${process.env.KITSUNE_P1}`;
-const h = await start({ trusted: !!process.env.KITSUNE_E2E_TRUSTED });
+const BASE = `http://127.0.0.1:${process.env.ZENKO_P1}`;
+const h = await start({ trusted: !!process.env.ZENKO_E2E_TRUSTED });
 const r0 = await h.call('tabs_context_mcp', { createIfEmpty: true });
 const tabId = Number(/tabId (\d+)/.exec(r0.text)[1]);
 const call = async (name, args = {}) => {

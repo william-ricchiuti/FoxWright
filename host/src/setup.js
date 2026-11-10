@@ -1,11 +1,11 @@
-// `kitsune setup`, `kitsune doctor`, `kitsune uninstall`.
+// `zenko setup`, `zenko doctor`, `zenko uninstall`.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { EXTENSION_IDS, HOST_NAME, kitsuneDir, nativeManifestDir, socketPath, logPath } from './paths.js';
+import { EXTENSION_IDS, HOST_NAME, zenkoDir, nativeManifestDir, socketPath, logPath } from './paths.js';
 
 const isWin = process.platform === 'win32';
 const REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${HOST_NAME}`;
@@ -18,20 +18,20 @@ const c = {
 };
 
 function appDir() {
-  return path.join(kitsuneDir(), 'app');
+  return path.join(zenkoDir(), 'app');
 }
 function appScript() {
-  return path.join(appDir(), 'kitsune.mjs');
+  return path.join(appDir(), 'zenko.mjs');
 }
 function wrapperPath() {
-  return path.join(kitsuneDir(), isWin ? 'kitsune-host.bat' : 'kitsune-host');
+  return path.join(zenkoDir(), isWin ? 'zenko-host.bat' : 'zenko-host');
 }
 /**
  * Native-messaging manifest folders of Firefox-based browsers that are installed besides Firefox
  * itself (they accept the same extension IDs). Only folders whose browser appears to be present.
  */
 function extraManifestDirs() {
-  if (process.env.KITSUNE_NATIVE_MANIFEST_DIR || isWin)
+  if (process.env.ZENKO_NATIVE_MANIFEST_DIR || isWin)
     return [];
   const home = os.homedir();
   const mac = process.platform === 'darwin';
@@ -76,22 +76,96 @@ function which(cmd) {
   }
 }
 
+/**
+ * Zenko was called Kitsune before 0.6.0. Remove that install: its Firefox registration, its
+ * Claude entries and its files in ~/.kitsune. Carefully, because an unrelated project (also named
+ * Kitsune: github.com/junyeong-nero/kitsune) uses ~/.kitsune and the Claude name "kitsune" too:
+ * only things that are provably ours (our extension ids, our helper path) are removed.
+ */
+export function removeOldKitsune({ quiet = false } = {}) {
+  const say = (m) => !quiet && console.log(c.ok(m));
+  const home = os.homedir();
+  const oldDir = path.join(home, '.kitsune');
+  const oldApp = path.join(oldDir, 'app', 'kitsune.mjs');
+  const ours = (text) => typeof text === 'string' && EXTENSION_IDS.some(id => text.includes(id));
+  // Firefox native-messaging registrations named "kitsune" that list our extension ids.
+  const dirs = [nativeManifestDir(), ...extraManifestDirs().map(([, d]) => d)];
+  for (const d of dirs) {
+    const f = path.join(d, 'kitsune.json');
+    try {
+      if (ours(fs.readFileSync(f, 'utf8'))) {
+        fs.rmSync(f, { force: true });
+        say(`Removed the old Kitsune registration ${f}`);
+      }
+    } catch { /* none */ }
+  }
+  if (isWin) {
+    try {
+      const out = execFileSync('reg', ['query', 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\kitsune', '/ve'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const m = /REG_SZ\s+(.+)/.exec(out);
+      if (m && ours(fs.readFileSync(m[1].trim(), 'utf8'))) {
+        execFileSync('reg', ['delete', 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\kitsune', '/f'], { stdio: 'ignore' });
+        say('Removed the old Kitsune registry entry.');
+      }
+    } catch { /* none */ }
+  }
+  // Claude Code / Desktop entries named "kitsune" that run our old helper.
+  const claude = which('claude');
+  if (claude) {
+    try {
+      const out = execFileSync(claude, ['mcp', 'get', 'kitsune'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      if (/[\\/]\.kitsune[\\/]app[\\/]kitsune\.mjs/.test(out)) {
+        execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'kitsune'], { stdio: 'ignore' });
+        say('Removed the old "kitsune" entry from Claude Code.');
+      }
+    } catch { /* not registered */ }
+  }
+  const cfgPath = claudeDesktopConfigPath();
+  try {
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    const e = cfg.mcpServers?.kitsune;
+    if (e && JSON.stringify(e.args || []).match(/[\\/]\.kitsune[\\/]app[\\/]kitsune\.mjs/)) {
+      delete cfg.mcpServers.kitsune;
+      fs.copyFileSync(cfgPath, cfgPath + '.bak');
+      fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+      say(`Removed the old "kitsune" entry from Claude Desktop (${cfgPath}).`);
+    }
+  } catch { /* no config */ }
+  // Our files in ~/.kitsune, then the folder only if nothing else is left in it.
+  if (fs.existsSync(oldApp) || fs.existsSync(path.join(oldDir, isWin ? 'kitsune-host.bat' : 'kitsune-host'))) {
+    for (const n of ['app/kitsune.mjs', 'app', 'kitsune-host', 'kitsune-host.bat', 'kitsune.sock', 'pipe-id', 'helper.log', 'helper.log.1', 'browsers']) {
+      try {
+        fs.rmSync(path.join(oldDir, n), { recursive: n === 'browsers' || n === 'app', force: true });
+      } catch { /* in use or not there */ }
+    }
+    try {
+      fs.rmdirSync(oldDir); // fails, harmlessly, if another program keeps files there
+      say(`Removed ${oldDir}`);
+    } catch {
+      say(`Removed the old Kitsune files from ${oldDir} (other files there were left alone).`);
+    }
+  }
+}
+
 export async function setup(flags) {
   const self = fileURLToPath(import.meta.url);
-  if (!/\.mjs$/.test(self) || typeof __KITSUNE_BUNDLED__ === 'undefined') {
-    console.error('Run setup from the bundled CLI (npx kitsune-firefox setup, or `npm run build` in host/ and then `node host/dist/kitsune.mjs setup`).');
+  if (!/\.mjs$/.test(self) || typeof __ZENKO_BUNDLED__ === 'undefined') {
+    console.error('Run setup from the bundled CLI (npx zenko-firefox setup, or `npm run build` in host/ and then `node host/dist/zenko.mjs setup`).');
     process.exit(1);
   }
   const major = parseInt(process.versions.node.split('.')[0], 10);
   if (major < 20) {
-    console.error(`Kitsune needs Node.js 20 or newer (found ${process.versions.node}).`);
+    console.error(`Zenko needs Node.js 20 or newer (found ${process.versions.node}).`);
     process.exit(1);
   }
+
+  // 0. Zenko used to be called Kitsune: remove that install so the two don't run side by side.
+  removeOldKitsune();
 
   // 1. Copy this single-file CLI somewhere stable (npx caches get cleaned).
   fs.mkdirSync(appDir(), { recursive: true, mode: 0o700 });
   if (!isWin)
-    fs.chmodSync(kitsuneDir(), 0o700);
+    fs.chmodSync(zenkoDir(), 0o700);
   fs.copyFileSync(self, appScript());
   console.log(c.ok(`Installed helper to ${appScript()}`));
 
@@ -108,7 +182,7 @@ export async function setup(flags) {
   fs.mkdirSync(nativeManifestDir(), { recursive: true });
   const manifest = {
     name: HOST_NAME,
-    description: 'Kitsune helper: connects the Kitsune Firefox extension to local AI agents (MCP).',
+    description: 'Zenko helper: connects the Zenko Firefox extension to local AI agents (MCP).',
     path: wrapperPath(),
     type: 'stdio',
     allowed_extensions: EXTENSION_IDS,
@@ -139,10 +213,10 @@ export async function setup(flags) {
     const claude = which('claude');
     if (claude) {
       try {
-        execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'kitsune'], { stdio: 'ignore' });
+        execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'zenko'], { stdio: 'ignore' });
       } catch { /* not there yet */ }
-      execFileSync(claude, ['mcp', 'add', '--scope', 'user', 'kitsune', '--', command, ...args], { stdio: 'inherit' });
-      console.log(c.ok('Added Kitsune to Claude Code (user scope).'));
+      execFileSync(claude, ['mcp', 'add', '--scope', 'user', 'zenko', '--', command, ...args], { stdio: 'inherit' });
+      console.log(c.ok('Added Zenko to Claude Code (user scope).'));
     } else {
       console.log(c.warn('`claude` CLI not found; skipping Claude Code.'));
     }
@@ -154,26 +228,26 @@ export async function setup(flags) {
       cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
     } catch { /* new file */ }
     cfg.mcpServers = cfg.mcpServers || {};
-    cfg.mcpServers.kitsune = { command, args };
+    cfg.mcpServers.zenko = { command, args };
     fs.mkdirSync(path.dirname(cfgPath), { recursive: true });
     if (fs.existsSync(cfgPath))
       fs.copyFileSync(cfgPath, cfgPath + '.bak');
     fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-    console.log(c.ok(`Added Kitsune to Claude Desktop (${cfgPath}). Restart Claude Desktop to load it.`));
+    console.log(c.ok(`Added Zenko to Claude Desktop (${cfgPath}). Restart Claude Desktop to load it.`));
   }
 
   console.log(`
 ${c.b('Next steps')}
-  1. Install the Kitsune extension in Firefox (152+), then restart Firefox or toggle the extension off/on.
+  1. Install the Zenko extension in Firefox (152+), then restart Firefox or toggle the extension off/on.
      The toolbar fox should lose its "!" badge once it finds this helper.
   2. Connect your AI client:
-     ${c.b('Claude Code:')}   claude mcp add --scope user kitsune -- ${cmdline}
+     ${c.b('Claude Code:')}   claude mcp add --scope user zenko -- ${cmdline}
      ${c.b('Claude Desktop / Cowork:')} add to claude_desktop_config.json → "mcpServers":
-       "kitsune": ${JSON.stringify({ command, args })}
+       "zenko": ${JSON.stringify({ command, args })}
      ${c.dim('(or re-run setup with --claude-code / --claude-desktop / --all to do this for you)')}
   3. Optional, real (trusted) clicks and typing: start Firefox with
        ${process.platform === 'darwin' ? '/Applications/Firefox.app/Contents/MacOS/firefox' : 'firefox'} --remote-debugging-port=9222
-     Kitsune detects it automatically. See README for trade-offs.
+     Zenko detects it automatically. See README for trade-offs.
 
   Check everything with: ${c.b(`${shellQuote(process.execPath)} ${shellQuote(appScript())} doctor`)}
 `);
@@ -209,9 +283,9 @@ async function probeBidi() {
   const { Bidi } = await import('./bidi.js');
   const b = new Bidi();
   if (!(await b.available())) {
-    // Firefox allows one WebDriver session: a running Kitsune MCP server may already hold it.
+    // Firefox allows one WebDriver session: a running Zenko MCP server may already hold it.
     if (/session not created|maximum|already/i.test(b.lastError || ''))
-      return `WebDriver BiDi at ${b.url} (in use, probably by a running Kitsune MCP server)`;
+      return `WebDriver BiDi at ${b.url} (in use, probably by a running Zenko MCP server)`;
     return null;
   }
   try {
@@ -228,7 +302,7 @@ export async function doctor() {
     if (!ok)
       problems++;
   };
-  console.log(c.b('Kitsune doctor\n'));
+  console.log(c.b('Zenko doctor\n'));
   line(parseInt(process.versions.node) >= 20, `Node.js ${process.versions.node} (${process.execPath})`);
   line(fs.existsSync(appScript()), `Helper installed at ${appScript()}`);
   let manifest = null;
@@ -244,7 +318,7 @@ export async function doctor() {
       if (m)
         line(fs.existsSync(m[1]), `Launcher's Node binary exists: ${m[1]}`);
     }
-    line(EXTENSION_IDS.every(id => manifest.allowed_extensions?.includes(id)), 'Manifest allows the Kitsune extension IDs');
+    line(EXTENSION_IDS.every(id => manifest.allowed_extensions?.includes(id)), 'Manifest allows the Zenko extension IDs');
   }
   if (isWin) {
     try {
@@ -256,14 +330,14 @@ export async function doctor() {
   }
   const st = await probeSocket();
   if (st.error) {
-    line(false, `Firefox connection (${socketPath()}): ${st.error === 'ENOENT' || st.error === 'ECONNREFUSED' ? 'Firefox is not running, or the Kitsune extension is not installed/enabled' : st.error}`);
+    line(false, `Firefox connection (${socketPath()}): ${st.error === 'ENOENT' || st.error === 'ECONNREFUSED' ? 'Firefox is not running, or the Zenko extension is not installed/enabled' : st.error}`);
   } else {
     line(!!st.extension, `Firefox connected: extension v${st.extension?.version || '?'}${st.extension?.full ? ' (full build)' : ''}, helper pid ${st.pid}`);
   }
   const bidi = await probeBidi();
   console.log(bidi ? c.ok(`Trusted input available: ${bidi}`) : c.dim('  Trusted input: off (optional; start Firefox with --remote-debugging-port=9222)'));
   console.log(c.dim(`  Helper log: ${logPath()}`));
-  console.log(problems ? `\n${problems} problem(s) found. Re-run \`npx kitsune-firefox setup\` to repair the installation.` : '\nAll good.');
+  console.log(problems ? `\n${problems} problem(s) found. Re-run \`npx zenko-firefox setup\` to repair the installation.` : '\nAll good.');
   process.exit(problems ? 1 : 0);
 }
 
@@ -286,26 +360,27 @@ export async function uninstall() {
   const claude = which('claude');
   if (claude) {
     try {
-      execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'kitsune'], { stdio: 'ignore' });
-      console.log(c.ok('Removed Kitsune from Claude Code.'));
+      execFileSync(claude, ['mcp', 'remove', '--scope', 'user', 'zenko'], { stdio: 'ignore' });
+      console.log(c.ok('Removed Zenko from Claude Code.'));
     } catch { /* wasn't registered */ }
   }
   const cfgPath = claudeDesktopConfigPath();
   try {
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-    if (cfg.mcpServers?.kitsune) {
-      delete cfg.mcpServers.kitsune;
+    if (cfg.mcpServers?.zenko) {
+      delete cfg.mcpServers.zenko;
       fs.copyFileSync(cfgPath, cfgPath + '.bak');
       fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-      console.log(c.ok(`Removed Kitsune from Claude Desktop (${cfgPath}).`));
+      console.log(c.ok(`Removed Zenko from Claude Desktop (${cfgPath}).`));
     }
   } catch { /* no config */ }
-  // The rest of ~/.kitsune: socket, pipe id, logs.
-  // Only a folder that is clearly Kitsune's own: KITSUNE_HOME could point anywhere.
-  const dir = kitsuneDir();
-  if (path.isAbsolute(dir) && path.basename(dir) === '.kitsune' && fs.existsSync(dir)) {
+  // The rest of ~/.zenko: socket, pipe id, logs.
+  // Only a folder that is clearly Zenko's own: ZENKO_HOME could point anywhere.
+  const dir = zenkoDir();
+  if (path.isAbsolute(dir) && path.basename(dir) === '.zenko' && fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
     console.log(c.ok(`Removed ${dir}`));
   }
-  console.log('Kitsune helper removed. Also remove the Kitsune extension from Firefox (about:addons) and from any other AI client you added it to.');
+  removeOldKitsune();
+  console.log('Zenko helper removed. Also remove the Zenko extension from Firefox (about:addons) and from any other AI client you added it to.');
 }

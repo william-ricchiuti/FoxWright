@@ -1,13 +1,13 @@
 // Real-website scenarios (needs internet). Each scenario does a user-level task
 // through the MCP tools only and checks the outcome.
 //   node test/realsites.mjs [filter]          synthetic input
-//   KITSUNE_E2E_TRUSTED=1 node test/realsites.mjs   WebDriver BiDi input
+//   ZENKO_E2E_TRUSTED=1 node test/realsites.mjs   WebDriver BiDi input
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { start } from './harness.mjs';
 
-const TRUSTED = !!process.env.KITSUNE_E2E_TRUSTED;
+const TRUSTED = !!process.env.ZENKO_E2E_TRUSTED;
 const FILTER = process.argv[2] ? new RegExp(process.argv[2], 'i') : null;
 const results = [];
 let h, tabId;
@@ -168,9 +168,9 @@ async function theInternet() {
   });
   await scenario('the-internet', 'JS prompt answered with text', async () => {
     await nav(`${B}/javascript_alerts`);
-    await call('handle_dialog', { accept: true, prompt_text: 'kitsune' });
+    await call('handle_dialog', { accept: true, prompt_text: 'zenko' });
     await click(await pick('button', /JS Prompt/));
-    await waitText(/You entered: kitsune/);
+    await waitText(/You entered: zenko/);
   });
   await scenario('the-internet', 'nested frames (4 frames)', async () => {
     await nav(`${B}/nested_frames`);
@@ -196,7 +196,7 @@ async function theInternet() {
     const after = /slider[^\n]*: "?([\d.]+)/.exec(await outline())?.[1];
     expect(parseFloat(after) === parseFloat(before) + 1, `slider ${before} -> ${after}`);
   });
-  await scenario('the-internet', 'new window opens in the Kitsune group', async () => {
+  await scenario('the-internet', 'new window opens in the Zenko group', async () => {
     await nav(`${B}/windows`);
     await click(await pick('link', /Click Here/));
     await sleep(1000);
@@ -207,8 +207,8 @@ async function theInternet() {
       await h.call('tabs_close_mcp', { tabId: +other[1] });
   });
   await scenario('the-internet', 'file upload + submit', async () => {
-    const f = path.join(os.tmpdir(), 'kitsune-real-upload.txt');
-    fs.writeFileSync(f, 'uploaded by kitsune');
+    const f = path.join(os.tmpdir(), 'zenko-real-upload.txt');
+    fs.writeFileSync(f, 'uploaded by zenko');
     await nav(`${B}/upload`);
     await call('file_upload', { paths: [f], ref: await pick('button', /Choose File|Browse|file/i) });
     await click(await pick('button', /Upload/));
@@ -343,12 +343,12 @@ async function todomvc() {
   await scenario('todomvc', 'React TodoMVC: add, complete, filter', async () => {
     await nav('https://todomvc.com/examples/react/dist/');
     await click(await pick('textbox', /What needs to be done|New Todo|todo/i));
-    for (const t of ['buy tofu', 'feed the fox', 'ship kitsune']) {
+    for (const t of ['buy tofu', 'feed the fox', 'ship zenko']) {
       await type(t);
       await key('Enter');
     }
     const o = await outline('all');
-    expect(/feed the fox/.test(o) && /ship kitsune/.test(o), o.slice(0, 1200));
+    expect(/feed the fox/.test(o) && /ship zenko/.test(o), o.slice(0, 1200));
     const boxes = [...(await outline('all')).matchAll(/checkbox[^\n]*\[ref=([^\]]+)\]/g)].map(m => m[1]);
     expect(boxes.length === 4, `expected toggle-all + 3 todo checkboxes, got ${boxes.length}`);
     await click(boxes[2]); // the "feed the fox" item
@@ -499,7 +499,7 @@ async function editorsAndWidgets() {
     await waitText(check, { source: 'outline' });
   };
   await scenario('lexical', 'type into the Lexical playground', async () => {
-    await typeInto('https://playground.lexical.dev/', 'textbox', null, 'Hello from Kitsune', /Hello from Kitsune/);
+    await typeInto('https://playground.lexical.dev/', 'textbox', null, 'Hello from Zenko', /Hello from Zenko/);
   });
   await scenario('slate', 'type into a Slate editor', async () => {
     await typeInto('https://www.slatejs.org/examples/richtext', 'textbox', null, 'Slate says hi', /Slate says hi/);
@@ -521,10 +521,10 @@ async function editorsAndWidgets() {
     expect(c, 'code line not found: ' + r.text);
     await call('computer', { action: 'left_click', coordinate: [+c[1], +c[2]] });
     await key('ctrl+a Delete');
-    await type('let kitsune = 1;');
+    await type('let zenko = 1;');
     await sleep(800);
     const v = await js('monaco.editor.getEditors()[0].getValue()');
-    expect(/let kitsune = 1;/.test(v), 'text not in editor model: ' + v.slice(0, 300));
+    expect(/let zenko = 1;/.test(v), 'text not in editor model: ' + v.slice(0, 300));
   });
   await scenario('jqueryui', 'sortable list drag (inside an iframe)', async () => {
     await nav('https://jqueryui.com/sortable/');
@@ -600,7 +600,7 @@ async function editorsAndWidgets() {
 }
 
 async function main() {
-  console.log(`Kitsune real-site tests (${TRUSTED ? 'trusted / BiDi' : 'synthetic'} input)`);
+  console.log(`Zenko real-site tests (${TRUSTED ? 'trusted / BiDi' : 'synthetic'} input)`);
   h = await start({ trusted: TRUSTED });
   const ctx = await h.call('tabs_context_mcp', { createIfEmpty: true });
   tabId = parseInt(/tabId (\d+)/.exec(ctx.text)[1], 10);

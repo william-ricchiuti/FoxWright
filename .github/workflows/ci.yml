@@ -33,6 +33,8 @@ jobs:
         run: node scripts/version.mjs check
       - name: BiDi client (fake Firefox, no browser needed)
         run: node test/bidi-connect.mjs
+      - name: Cleanup of an install from before the rename
+        run: node test/rename-cleanup.mjs
       - name: Build extension, helper and fixtures
         run: |
           npm run build
@@ -45,7 +47,7 @@ jobs:
       - name: End-to-end tests (synthetic input)
         run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e.mjs
       - name: End-to-end tests (trusted input via WebDriver BiDi)
-        run: FIREFOX="$(readlink -f "$(command -v firefox)")" KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
+        run: FIREFOX="$(readlink -f "$(command -v firefox)")" ZENKO_E2E_TRUSTED=1 node test/e2e.mjs
       - name: Safety, permission, store-build and resilience tests
         run: |
           export FIREFOX="$(readlink -f "$(command -v firefox)")"
@@ -85,11 +87,11 @@ jobs:
       - name: Install the packed tarball and run setup + doctor
         shell: bash
         run: |
-          npm install -g ./host/kitsune-firefox-*.tgz
-          kitsune-firefox --version
-          kitsune-firefox setup
+          npm install -g ./host/zenko-firefox-*.tgz
+          zenko-firefox --version
+          zenko-firefox setup
           # doctor exits non-zero because no Firefox is running with the extension here;
           # it must still run and report the installed pieces.
-          kitsune-firefox doctor | tee doctor.txt || true
+          zenko-firefox doctor | tee doctor.txt || true
           grep -qi "native" doctor.txt
-          kitsune-firefox uninstall
+          zenko-firefox uninstall

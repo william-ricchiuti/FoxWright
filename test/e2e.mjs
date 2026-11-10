@@ -1,14 +1,14 @@
-// End-to-end tests: real Firefox + Kitsune extension + MCP server.
+// End-to-end tests: real Firefox + Zenko extension + MCP server.
 //   node test/e2e.mjs            synthetic-input mode
-//   KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs   trusted (WebDriver BiDi) mode
+//   ZENKO_E2E_TRUSTED=1 node test/e2e.mjs   trusted (WebDriver BiDi) mode
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { start } from './harness.mjs';
 
-const TRUSTED = !!process.env.KITSUNE_E2E_TRUSTED;
-const BASE = `http://127.0.0.1:${process.env.KITSUNE_P1}`;
+const TRUSTED = !!process.env.ZENKO_E2E_TRUSTED;
+const BASE = `http://127.0.0.1:${process.env.ZENKO_P1}`;
 const results = [];
 let h, tabId;
 
@@ -64,10 +64,10 @@ async function nav(url) {
 }
 
 async function main() {
-  console.log(`Kitsune e2e (${TRUSTED ? 'trusted / WebDriver BiDi' : 'synthetic events'})`);
+  console.log(`Zenko e2e (${TRUSTED ? 'trusted / WebDriver BiDi' : 'synthetic events'})`);
   h = await start({ trusted: TRUSTED });
 
-  await test('tabs_context_mcp creates the Kitsune group', async () => {
+  await test('tabs_context_mcp creates the Zenko group', async () => {
     const r = await h.call('tabs_context_mcp', { createIfEmpty: true });
     tabId = parseInt(/tabId (\d+)/.exec(r.text)[1], 10);
     expect(tabId > 0, r.text);
@@ -149,13 +149,13 @@ async function main() {
   });
 
   await test('file_upload attaches a file', async () => {
-    const f = path.join(os.tmpdir(), 'kitsune-test.txt');
-    fs.writeFileSync(f, 'hello from kitsune');
+    const f = path.join(os.tmpdir(), 'zenko-test.txt');
+    fs.writeFileSync(f, 'hello from zenko');
     const { ref } = await refFor('Avatar');
     const r = await call('file_upload', { paths: [f], ref });
-    expect(r.text.includes('kitsune-test.txt'), r.text);
+    expect(r.text.includes('zenko-test.txt'), r.text);
     const v = await js('document.getElementById("avatar").files[0].name + ":" + document.getElementById("avatar").files[0].size');
-    expect(v.includes('kitsune-test.txt:18'), v);
+    expect(v.includes('zenko-test.txt:16'), v); // 'hello from zenko' is 16 bytes
   });
 
   await test('submit button click submits the form with all values', async () => {
@@ -211,14 +211,14 @@ async function main() {
   });
 
   await test('double_click selects a word, triple_click the paragraph', async () => {
-    await js('document.getElementById("result").textContent = "kitsune selects words"; window.scrollTo(0,0)');
+    await js('document.getElementById("result").textContent = "zenko selects words"; window.scrollTo(0,0)');
     const pos = JSON.parse(JSON.parse(await js('(() => { const p = document.getElementById("result"); const r = document.createRange(); r.selectNodeContents(p.firstChild); r.setStart(p.firstChild, 9); r.setEnd(p.firstChild, 16); const b = r.getBoundingClientRect(); return JSON.stringify([Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2)]); })()')));
     await call('computer', { action: 'double_click', coordinate: pos });
     const w = await js('window.getSelection().toString()');
-    expect(w.includes('selects') && !w.includes('kitsune'), 'word selection: ' + w);
+    expect(w.includes('selects') && !w.includes('zenko'), 'word selection: ' + w);
     await call('computer', { action: 'triple_click', coordinate: pos });
     const p = await js('window.getSelection().toString()');
-    expect(p.includes('kitsune selects words'), 'paragraph selection: ' + p);
+    expect(p.includes('zenko selects words'), 'paragraph selection: ' + p);
   });
 
   await test('hover fires mouseenter', async () => {
@@ -238,9 +238,9 @@ async function main() {
     const ref = /- textbox \[ref=(e\d+)\]: "?Edit me/.exec(r.text)?.[1];
     expect(ref, 'contenteditable not listed in interactive outline:\n' + r.text);
     await call('computer', { action: 'left_click', ref });
-    await call('computer', { action: 'type', text: ' kitsune' });
+    await call('computer', { action: 'type', text: ' zenko' });
     const v = await js('document.getElementById("ce").innerText');
-    expect(v.includes('Edit me: kitsune') || v.includes('Edit me:\\u00a0kitsune') || /Edit me:.kitsune/.test(v), v);
+    expect(v.includes('Edit me: zenko') || v.includes('Edit me:\\u00a0zenko') || /Edit me:.zenko/.test(v), v);
   });
 
   await test('scroll_to + click element inside a scroll container', async () => {
@@ -305,7 +305,7 @@ async function main() {
     await pageHas('Sign up');
   });
 
-  await test('target=_blank link opens a new tab inside the Kitsune group', async () => {
+  await test('target=_blank link opens a new tab inside the Zenko group', async () => {
     const { ref } = await refFor('Open page two in new tab', 'link');
     await call('computer', { action: 'left_click', ref });
     await new Promise(r => setTimeout(r, 800));
@@ -338,8 +338,8 @@ async function main() {
     await nav('/react.html');
     const { ref } = await refFor('Your name', 'textbox');
     await call('computer', { action: 'left_click', ref });
-    await call('computer', { action: 'type', text: 'Kitsune' });
-    await pageHas('Hello, Kitsune');
+    await call('computer', { action: 'type', text: 'Zenko' });
+    await pageHas('Hello, Zenko');
   });
 
   await test('React: form_input replaces value and React sees it', async () => {
@@ -403,13 +403,13 @@ async function main() {
     await pageHas(TRUSTED ? 'TRUSTED CLICK' : 'rejected: untrusted click');
   });
 
-  await test('window.open popup opens and joins the Kitsune group', async () => {
+  await test('window.open popup opens and joins the Zenko group', async () => {
     const { ref } = await refFor('Open popup', 'button');
     await call('computer', { action: 'left_click', ref });
     await pageHas('popup opened');
     await new Promise(r => setTimeout(r, 500));
     const ctx = await h.call('tabs_context_mcp', {});
-    expect(ctx.text.includes('popup=1'), 'popup tab should join the Kitsune group:\n' + ctx.text);
+    expect(ctx.text.includes('popup=1'), 'popup tab should join the Zenko group:\n' + ctx.text);
   });
 
   await test('javascript_tool returns values and reports trusted-event counts', async () => {
@@ -487,9 +487,9 @@ async function main() {
     await call('gif_creator', { action: 'start_recording' });
     await call('computer', { action: 'left_click', coordinate: [100, 100] });
     await call('gif_creator', { action: 'stop_recording' });
-    const r = await call('gif_creator', { action: 'export', filename: '../../kitsune-escape.gif' });
+    const r = await call('gif_creator', { action: 'export', filename: '../../zenko-escape.gif' });
     const file = /to (\S+\.gif)/.exec(r.text)?.[1];
-    expect(file && path.dirname(file) === h.gifDir && path.basename(file).includes('kitsune-escape'), `GIF written outside the GIF folder: ${r.text}`);
+    expect(file && path.dirname(file) === h.gifDir && path.basename(file).includes('zenko-escape'), `GIF written outside the GIF folder: ${r.text}`);
     fs.rmSync(file, { force: true });
   });
 
@@ -525,9 +525,9 @@ async function main() {
     const ref = /\[ref=([^\]]+)\]/.exec(line)[1];
     await call('computer', { action: 'left_click', ref });
     await call('computer', { action: 'key', text: 'ctrl+End' });
-    await call('computer', { action: 'type', text: ' from Kitsune' });
+    await call('computer', { action: 'type', text: ' from Zenko' });
     const v = await js(`document.getElementById('blank-editor').contentDocument.body.innerText`);
-    expect(v.includes('from Kitsune'), v);
+    expect(v.includes('from Zenko'), v);
   });
 
   await test('closed shadow root: outline sees it and click works', async () => {
@@ -550,12 +550,12 @@ async function main() {
     await nav('/frames2.html');
     const { ref } = await refFor('Delete everything', 'button');
     const r1 = await call('computer', { action: 'left_click', ref });
-    expect(/confirm\("Delete everything\?"\); Kitsune answered: Cancel/.test(r1.text), r1.text);
+    expect(/confirm\("Delete everything\?"\); Zenko answered: Cancel/.test(r1.text), r1.text);
     expect(!r1.text.includes('IGNORE PREVIOUS'), r1.text);
     await pageHas('Kept');
     await call('handle_dialog', { accept: true });
     const r2 = await call('computer', { action: 'left_click', ref });
-    expect(r2.text.includes('Kitsune answered: OK'), r2.text);
+    expect(r2.text.includes('Zenko answered: OK'), r2.text);
     await pageHas('Deleted');
   });
 
@@ -627,9 +627,9 @@ async function main() {
     expect(!bad.length, `${bad.length}/${cases.length} wrong:\n      ${bad.join('\n      ')}`);
   });
 
-  await test('tab outside the Kitsune group is refused', async () => {
+  await test('tab outside the Zenko group is refused', async () => {
     const r = await h.call('read_page', { tabId: 1 });
-    expect(r.isError && /not in the Kitsune tab group|does not exist/.test(r.text), r.text);
+    expect(r.isError && /not in the Zenko tab group|does not exist/.test(r.text), r.text);
   });
 
   await h.stop();
