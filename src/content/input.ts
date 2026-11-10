@@ -1,4 +1,4 @@
-// Synthetic input for Kitsune.
+// Synthetic input for Zenko.
 //
 // Firefox extensions cannot create trusted (isTrusted=true) mouse/keyboard events.
 // This module dispatches the same event sequences a real browser would and then
@@ -8,7 +8,7 @@
 // the MCP server uses WebDriver BiDi for real (trusted) input instead.
 
 import { resolveRef, getRefPrefix } from './snapshot';
-import { isKitsuneUi } from './overlay';
+import { isZenkoUi } from './overlay';
 
 declare const browser: any;
 
@@ -42,9 +42,9 @@ function frameIdOf(el: Element): number {
   }
 }
 
-/** Topmost page element at a viewport point, piercing open shadow roots and skipping Kitsune's own UI. */
+/** Topmost page element at a viewport point, piercing open shadow roots and skipping Zenko's own UI. */
 export function elementAt(x: number, y: number): Element | null {
-  const all = document.elementsFromPoint(x, y).filter(e => !isKitsuneUi(e));
+  const all = document.elementsFromPoint(x, y).filter(e => !isZenkoUi(e));
   let el: Element | null = all[0] || null;
   while (el && shadowOf(el)) {
     const inner = shadowOf(el)!.elementFromPoint(x, y);
@@ -130,16 +130,16 @@ let lastHover: Element | null = null;
 // Pointer-capture emulation (see page-hooks.ts): while a synthetic gesture runs, pointer
 // events go to the element that "captured" the pointer, like the browser would do.
 let captureTarget: Element | null = null;
-document.addEventListener('kitsune:pointer-capture', (e) => {
+document.addEventListener('zenko:pointer-capture', (e) => {
   captureTarget = (e.composedPath()[0] as Element) || null;
   captureTarget?.dispatchEvent(new PointerEvent('gotpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
 }, true);
-document.addEventListener('kitsune:pointer-release', () => {
+document.addEventListener('zenko:pointer-release', () => {
   captureTarget = null;
 }, true);
 
 function gesture(on: boolean) {
-  document.dispatchEvent(new CustomEvent('kitsune:synthetic-pointer', { detail: on ? 'on' : 'off' }));
+  document.dispatchEvent(new CustomEvent('zenko:synthetic-pointer', { detail: on ? 'on' : 'off' }));
   if (!on && captureTarget) {
     captureTarget.dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
     captureTarget = null;
@@ -946,7 +946,7 @@ export function setCancelled(v: boolean) {
  * ProseMirror update their model asynchronously; typing a whole string inside one task
  * would feed them stale selections. Throws once the user has pressed Stop. */
 const tick = () => new Promise<void>((resolve, reject) => {
-  const done = () => (cancelled ? reject(new Error('Stopped: the user paused Kitsune.')) : resolve());
+  const done = () => (cancelled ? reject(new Error('Stopped: the user paused Zenko.')) : resolve());
   if (document.hidden) {
     // Timers in background tabs run at most once a second, which would make typing 300 characters
     // take five minutes. A message-channel task isn't throttled and still lets microtasks run.

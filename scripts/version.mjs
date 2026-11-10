@@ -1,4 +1,4 @@
-// Kitsune's version lives in three files that must agree:
+// Zenko's version lives in three files that must agree:
 //   package.json, host/package.json, extension/manifest.json
 // (the two package-lock.json files repeat it; `check` also compares those, `npm install` updates them)
 //

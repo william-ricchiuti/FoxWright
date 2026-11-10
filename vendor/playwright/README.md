@@ -10,7 +10,7 @@ at commit `9234738fbcb7da3bd0fd2b5478f6fbcf69de3358` (2026-09-23), under the Apa
 | `isomorphic/*.ts` | `packages/isomorphic/*.ts` |
 
 They compute the WAI-ARIA role / accessible name tree of a page entirely in JavaScript
-(no CDP), which is what Kitsune's `read_page` returns. Kitsune's own entry point is
+(no CDP), which is what Zenko's `read_page` returns. Zenko's own entry point is
 `src/content/snapshot.ts`; the files are bundled into `extension/content/content.js` by
 `scripts/build.mjs` (esbuild). To update: copy the same files from a newer Playwright commit
 and update the hash above.

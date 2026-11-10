@@ -1,4 +1,4 @@
-// Several Firefox profiles connected to Kitsune at once: list_connected_browsers, select_browser,
+// Several Firefox profiles connected to Zenko at once: list_connected_browsers, select_browser,
 // switch_browser (the user clicks Connect in one browser's window), and the shared socket moving
 // to the other browser when the first one closes.
 //   FIREFOX=/path/to/firefox node test/e2e-multi.mjs
@@ -19,9 +19,9 @@ async function test(name, fn) {
   }
 }
 const expect = (c, m) => { if (!c) throw new Error(m); };
-const BASE = `http://127.0.0.1:${process.env.KITSUNE_P1}`;
+const BASE = `http://127.0.0.1:${process.env.ZENKO_P1}`;
 
-console.log('Kitsune: several Firefox profiles');
+console.log('Zenko: several Firefox profiles');
 const a = await start({}); // the first browser: owns the shared socket; `a.call` is the agent
 const b = await start({ alongside: a, testDriver: true }); // a second profile; the test can press its buttons
 const driver = await connectDriver(b.bidiUrl);

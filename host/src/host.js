@@ -1,16 +1,16 @@
-// The Kitsune helper ("native messaging host").
+// The Zenko helper ("native messaging host").
 //
-// Firefox starts this process when the Kitsune extension calls
-// runtime.connectNative('kitsune'). It relays JSON messages between:
+// Firefox starts this process when the Zenko extension calls
+// runtime.connectNative('zenko'). It relays JSON messages between:
 //   - the extension, over stdin/stdout (Firefox's native-messaging framing), and
-//   - MCP servers (one per AI client), over a Unix socket in ~/.kitsune (mode 0600)
+//   - MCP servers (one per AI client), over a Unix socket in ~/.zenko (mode 0600)
 //     or a per-user named pipe on Windows.
 // No TCP port is opened, so other users and web pages can't reach it.
 //
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import { socketPath, kitsuneDir, logPath, browsersDir, browserSocketPath } from './paths.js';
+import { socketPath, zenkoDir, logPath, browsersDir, browserSocketPath } from './paths.js';
 
 const MAX_TO_EXTENSION = 1024 * 1024; // Firefox limit for host -> extension messages
 const CHUNK_BYTES = 600 * 1024;
@@ -19,7 +19,7 @@ let logStream = null;
 function log(...args) {
   try {
     if (!logStream) {
-      fs.mkdirSync(kitsuneDir(), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(zenkoDir(), { recursive: true, mode: 0o700 });
       const p = logPath();
       try {
         if (fs.statSync(p).size > 2 * 1024 * 1024)
@@ -89,7 +89,7 @@ let browserInfo = { browserId: '', name: 'Firefox' }; // from the extension's he
 let ownListening = false;
 let serverError = null;
 let bidiAvailable = false; // true if any connected MCP server has trusted input
-const VERSION = typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0';
+const VERSION = typeof __ZENKO_VERSION__ !== 'undefined' ? __ZENKO_VERSION__ : '0.0.0';
 
 function updateBidi() {
   const any = [...clients.values()].some(c => c.bidi);
@@ -160,8 +160,8 @@ function prepareSocketDir() {
     return;
   const dir = path.dirname(socketPath());
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  // Only tighten our own folder: KITSUNE_SOCKET could point into $HOME or a shared directory.
-  if (path.resolve(dir) === path.resolve(kitsuneDir())) {
+  // Only tighten our own folder: ZENKO_SOCKET could point into $HOME or a shared directory.
+  if (path.resolve(dir) === path.resolve(zenkoDir())) {
     try {
       fs.chmodSync(dir, 0o700);
     } catch { /* ignore */ }
@@ -170,7 +170,7 @@ function prepareSocketDir() {
 
 const cleanName = (s) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '');
 
-/** ~/.kitsune/browsers/<pid>.json: lets MCP servers list the connected Firefox profiles. */
+/** ~/.zenko/browsers/<pid>.json: lets MCP servers list the connected Firefox profiles. */
 function registryFile() {
   return path.join(browsersDir(), `${process.pid}.json`);
 }

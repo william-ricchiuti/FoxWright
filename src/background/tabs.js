@@ -4,7 +4,7 @@ import { state, saveSettings } from './state.js';
 import { askUser } from './prompt.js';
 import { docTypes } from './netlog.js';
 
-const GROUP_TITLE = 'Kitsune';
+const GROUP_TITLE = 'Zenko';
 const hasGroups = () => typeof browser.tabs.group === 'function' && !!browser.tabGroups;
 const fallbackTabs = new Set(); // used only if the tab-group API is unavailable
 
@@ -25,8 +25,11 @@ async function validGroupId() {
     // user made for their own tabs is unlikely to match both, and its tabs would otherwise
     // become usable by the agent without anyone asking.
     let found = await browser.tabGroups.query({ title: GROUP_TITLE, color: 'orange' });
-    if (!found.length)
-      found = await browser.tabGroups.query({ title: 'Kitsune ● working', color: 'orange' });
+    // Also the titles from before the rename (Kitsune → Zenko, 0.6.0).
+    for (const title of ['Zenko ● working', 'Kitsune', 'Kitsune ● working']) {
+      if (!found.length)
+        found = await browser.tabGroups.query({ title, color: 'orange' });
+    }
     if (found.length) {
       state.groupId = found[0].id;
       await saveSettings();
@@ -105,7 +108,7 @@ export async function ensureGroup(createIfEmpty) {
 
 export async function requireTab(tabId) {
   if (typeof tabId !== 'number')
-    throw new Error('tabId is required. Call tabs_context_mcp first to get the IDs of tabs in the Kitsune group.');
+    throw new Error('tabId is required. Call tabs_context_mcp first to get the IDs of tabs in the Zenko group.');
   let tab;
   try {
     tab = await browser.tabs.get(tabId);
@@ -115,7 +118,7 @@ export async function requireTab(tabId) {
   if (!state.groupTabIds.has(tabId))
     await groupTabs();
   if (!state.groupTabIds.has(tabId))
-    throw new Error(`Tab ${tabId} is not in the Kitsune tab group, so the agent may not use it. Use tabs_context_mcp / tabs_create_mcp, or ask the user to drag the tab into the orange "Kitsune" group.`);
+    throw new Error(`Tab ${tabId} is not in the Zenko tab group, so the agent may not use it. Use tabs_context_mcp / tabs_create_mcp, or ask the user to drag the tab into the orange "Zenko" group.`);
   return tab;
 }
 
@@ -151,7 +154,7 @@ export function checkAccessible(tab) {
   if (u.protocol === 'about:' || u.protocol === 'moz-extension:' || u.protocol === 'view-source:' || u.protocol === 'chrome:' || u.protocol === 'resource:')
     throw new Error(`Firefox does not let extensions read or control ${url}. Navigate to a regular web page.`);
   if (RESTRICTED_HOSTS.includes(u.hostname))
-    throw new Error(`Firefox blocks all extensions on ${u.hostname} for security, so Kitsune cannot access it.`);
+    throw new Error(`Firefox blocks all extensions on ${u.hostname} for security, so Zenko cannot access it.`);
   return 'ok';
 }
 
@@ -170,9 +173,9 @@ async function askForOrigin(origin, type, tabTitle) {
     if (!state.sessionAllowed.includes(origin))
       state.sessionAllowed.push(origin);
   } else if (answer === 'deny' || answer === 'dismissed') {
-    throw new Error(`The user did not allow Kitsune to access ${origin}. Do not retry on this site unless the user asks you to.`);
+    throw new Error(`The user did not allow Zenko to access ${origin}. Do not retry on this site unless the user asks you to.`);
   } else {
-    throw new Error(`Waiting for the user to allow ${origin} timed out. Ask the user to answer the Kitsune permission window, then try again.`);
+    throw new Error(`Waiting for the user to allow ${origin} timed out. Ask the user to answer the Zenko permission window, then try again.`);
   }
   await saveSettings();
 }
@@ -302,7 +305,7 @@ export async function injectPageHooks(tabId, frameId = 0) {
       await browser.scripting.executeScript({
         target,
         func: (ms) => {
-          const h = globalThis.__kitsuneHooks;
+          const h = globalThis.__zenkoHooks;
           if (h)
             h.agentUntil = Math.max(h.agentUntil, Date.now() + ms);
         },
@@ -318,11 +321,11 @@ export async function injectPageHooks(tabId, frameId = 0) {
 
 export async function ensureContent(tabId, frameId = 0) {
   try {
-    const r = await withTimeout(browser.tabs.sendMessage(tabId, { kitsune: true, cmd: 'ping', prefix: framePrefix(tabId, frameId) }, { frameId }), 1500, 'ping');
+    const r = await withTimeout(browser.tabs.sendMessage(tabId, { zenko: true, cmd: 'ping', prefix: framePrefix(tabId, frameId) }, { frameId }), 1500, 'ping');
     if (r && r.ok)
       return;
   } catch { /* not injected yet */ }
-  // One frame at a time: embedded frames (ads, payment and login widgets) only get Kitsune's scripts
+  // One frame at a time: embedded frames (ads, payment and login widgets) only get Zenko's scripts
   // when a tool actually reaches into them, after their own site has been approved.
   const target = { tabId, frameIds: [frameId] };
   await injectPageHooks(tabId, frameId);
@@ -349,8 +352,8 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
   // origin since the permission check, the content script refuses it.
   const expectOrigin = await frameOriginOf(tabId, frameId).catch(() => null);
   if (expectOrigin && !isAllowed(expectOrigin))
-    throw new Error(`Kitsune is not allowed to access ${expectOrigin}.`);
-  const msg = { kitsune: true, cmd, args, prefix, expectOrigin };
+    throw new Error(`Zenko is not allowed to access ${expectOrigin}.`);
+  const msg = { zenko: true, cmd, args, prefix, expectOrigin };
   let r;
   try {
     r = await withTimeout(browser.tabs.sendMessage(tabId, msg, { frameId }), timeoutMs, cmd);
@@ -414,7 +417,7 @@ export async function frameOrigin(tabId, frameId) {
 export async function showActivity(tabId) {
   state.lastActivity = Date.now();
   if (!activityTimer)
-    setGroupTitle('Kitsune ● working');
+    setGroupTitle('Zenko ● working');
   clearTimeout(activityTimer);
   activityTimer = setTimeout(() => {
     activityTimer = null;
@@ -423,6 +426,6 @@ export async function showActivity(tabId) {
   try {
     const l = state.labels.get(tabId);
     const label = l && Date.now() - l.at < 10000 ? l.text : undefined;
-    await browser.tabs.sendMessage(tabId, { kitsune: true, cmd: 'activity', args: { ms: 6000, label } }, { frameId: 0 });
+    await browser.tabs.sendMessage(tabId, { zenko: true, cmd: 'activity', args: { ms: 6000, label } }, { frameId: 0 });
   } catch { /* page may not have the content script (e.g. about:blank) */ }
 }

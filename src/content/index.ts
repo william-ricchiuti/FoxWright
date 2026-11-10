@@ -1,4 +1,4 @@
-// Kitsune content script: injected on demand into tabs the agent controls.
+// Zenko content script: injected on demand into tabs the agent controls.
 import { takeSnapshot, findElements, setRefPrefix, getRefPrefix } from './snapshot';
 import * as input from './input';
 import { pageText } from './text';
@@ -42,7 +42,7 @@ function currentOrigin(): string | null {
 }
 
 function hooks(): Hooks {
-  return g.__kitsuneHooks;
+  return g.__zenkoHooks;
 }
 
 function consoleDump(clear: boolean) {
@@ -107,10 +107,10 @@ const handlers: Record<string, (args: any) => any> = {
   },
 };
 
-if (!g.__kitsuneContent) {
-  g.__kitsuneContent = true;
+if (!g.__zenkoContent) {
+  g.__zenkoContent = true;
   browser.runtime.onMessage.addListener((msg: any) => {
-    if (!msg || msg.kitsune !== true)
+    if (!msg || msg.zenko !== true)
       return undefined;
     if (typeof msg.prefix === 'string')
       setRefPrefix(msg.prefix);

@@ -1,5 +1,5 @@
-// Kitsune MCP server (stdio). Started by the AI client, e.g.
-//   claude mcp add kitsune -- npx -y kitsune-firefox mcp
+// Zenko MCP server (stdio). Started by the AI client, e.g.
+//   claude mcp add zenko -- npx -y zenko-firefox mcp
 // Tool names and arguments deliberately match Claude in Chrome's.
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -11,15 +11,15 @@ import { connectedBrowsers } from './browsers.js';
 import { Bidi } from './bidi.js';
 import { startRecording, stopRecording, clearRecording, isRecording, addFrame, exportGif, frameCount } from './gif.js';
 
-const VERSION = typeof __KITSUNE_VERSION__ !== 'undefined' ? __KITSUNE_VERSION__ : '0.0.0';
+const VERSION = typeof __ZENKO_VERSION__ !== 'undefined' ? __ZENKO_VERSION__ : '0.0.0';
 
-const INSTRUCTIONS = `Kitsune lets you operate the user's real Firefox browser (their logged-in profile).
+const INSTRUCTIONS = `Zenko lets you operate the user's real Firefox browser (their logged-in profile).
 
 Workflow:
-1. Call tabs_context_mcp (createIfEmpty: true) first to get tab IDs. You may only use tabs in the orange "Kitsune" tab group. Start a new tab with tabs_create_mcp rather than taking over the user's tabs.
+1. Call tabs_context_mcp (createIfEmpty: true) first to get tab IDs. You may only use tabs in the orange "Zenko" tab group. Start a new tab with tabs_create_mcp rather than taking over the user's tabs.
 2. Prefer read_page (accessibility outline with refs like e12) and find over screenshots. Act on elements by ref where possible: computer {action: "left_click", ref}, form_input {ref, value}. Use browser_batch to do several steps (e.g. fill a form and submit) in one call. For long pages, get_page_text with a query returns just the relevant passages.
 3. Use computer {action: "screenshot"} when the visual layout matters. Coordinates you pass use the screenshot's pixel grid.
-4. Before you open or touch a website the user hasn't approved, Kitsune shows them a permission window and the tool waits (up to 2 minutes). Tell the user to answer it. Embedded frames from other sites and file uploads need approval too. If the user denies a site or pauses Kitsune, don't retry; ask them.
+4. Before you open or touch a website the user hasn't approved, Zenko shows them a permission window and the tool waits (up to 2 minutes). Tell the user to answer it. Embedded frames from other sites and file uploads need approval too. If the user denies a site or pauses Zenko, don't retry; ask them.
 5. Refs expire when the page changes. If a ref is not found, call read_page or find again.
 6. Give computer and form_input an action_summary: a few words on what the action does on the page (e.g. "Opens the Filters menu", "Sends the reply to pat@example.com"). The user sees it while you work. Never put passwords or other secrets in it.
 7. Tabs you open are yours to clean up: close them with tabs_close_mcp when you're done, unless the user asked to see them or keep them.
@@ -39,7 +39,7 @@ helper.onConnect = async () => {
     if (!b?.browserId)
       return;
     if (knownBrowser && knownBrowser.browserId !== b.browserId && !helper.browserId) {
-      browserNote = `Note: the Firefox Kitsune was using ("${knownBrowser.name}") closed; now connected to "${b.name}", a different browser profile. Tab IDs changed: call tabs_context_mcp.`;
+      browserNote = `Note: the Firefox Zenko was using ("${knownBrowser.name}") closed; now connected to "${b.name}", a different browser profile. Tab IDs changed: call tabs_context_mcp.`;
       lastTab = null;
     }
     knownBrowser = { browserId: b.browserId, name: b.name };
@@ -53,7 +53,7 @@ function errorResult(e) {
 
 // ---------- default tab ----------
 // Agents often omit tabId. Rather than fail, use the tab this session last worked in
-// (or the first tab of the Kitsune group, creating one if needed).
+// (or the first tab of the Zenko group, creating one if needed).
 const NO_TAB_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp']);
 let lastTab = null;
 
@@ -199,7 +199,7 @@ async function withNavSummary(r, tab) {
 }
 
 const actionSummary = z.string().optional().describe('A few words on what this does on the page, e.g. "Sends the reply to pat@example.com". Shown to the user; no passwords or secrets.');
-const tabId = numish(z.number().optional()).describe('ID of a tab in the Kitsune tab group (from tabs_context_mcp). Optional: defaults to the tab you used last.');
+const tabId = numish(z.number().optional()).describe('ID of a tab in the Zenko tab group (from tabs_context_mcp). Optional: defaults to the tab you used last.');
 const coord = jsonish(z.array(numish(z.number())).length(2));
 
 // ---------- trusted (WebDriver BiDi) input path for `computer` ----------
@@ -335,7 +335,7 @@ function serialized(key, run) {
 }
 
 // ---------- version check ----------
-// `npx kitsune-firefox mcp` may run a newer release than the helper copied to ~/.kitsune/app
+// `npx zenko-firefox mcp` may run a newer release than the helper copied to ~/.zenko/app
 // or the installed extension. Say so once, instead of failing in confusing ways later.
 let lastReportedMode = null;
 let versionChecked = false;
@@ -352,7 +352,7 @@ export function describeVersionMismatch(mine, helperV, extV) {
     bad.push(`extension ${extV}`);
   if (!bad.length)
     return null;
-  return `Warning: version mismatch (MCP server ${mine}, ${bad.join(', ')}). Tell the user to run \`npx kitsune-firefox@latest setup\` and update the Kitsune extension; some tools may misbehave until then.`;
+  return `Warning: version mismatch (MCP server ${mine}, ${bad.join(', ')}). Tell the user to run \`npx zenko-firefox@latest setup\` and update the Zenko extension; some tools may misbehave until then.`;
 }
 
 async function versionWarning() {
@@ -370,7 +370,7 @@ async function versionWarning() {
 // ---------- server ----------
 
 export async function runMcp() {
-  const server = new McpServer({ name: 'kitsune', version: VERSION }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'zenko', version: VERSION }, { instructions: INSTRUCTIONS });
   const handlers = {};
   const register = server.registerTool.bind(server);
   // Each tool's arguments go through the same parsing whether the tool is called directly or as
@@ -398,8 +398,8 @@ export async function runMcp() {
   };
 
   server.registerTool('tabs_context_mcp', {
-    description: 'List the tabs in the Kitsune tab group (the only tabs you may use), with their IDs, titles and URLs. Call this first. Pass createIfEmpty: true to open a new tab if the group is empty.',
-    inputSchema: { createIfEmpty: z.boolean().optional().describe('Create a tab in the Kitsune group if it is empty.') },
+    description: 'List the tabs in the Zenko tab group (the only tabs you may use), with their IDs, titles and URLs. Call this first. Pass createIfEmpty: true to open a new tab if the group is empty.',
+    inputSchema: { createIfEmpty: z.boolean().optional().describe('Create a tab in the Zenko group if it is empty.') },
   }, async (a) => {
     const r = await call('tabs_context_mcp', a);
     if (!r.isError) {
@@ -421,12 +421,12 @@ export async function runMcp() {
   });
 
   server.registerTool('tabs_create_mcp', {
-    description: 'Open a new empty tab in the Kitsune tab group and return its ID. Tabs you open are yours to clean up: close them with tabs_close_mcp when you no longer need them, unless the user asked to keep them.',
+    description: 'Open a new empty tab in the Zenko tab group and return its ID. Tabs you open are yours to clean up: close them with tabs_close_mcp when you no longer need them, unless the user asked to keep them.',
     inputSchema: {},
   }, async () => call('tabs_create_mcp', {}));
 
   server.registerTool('tabs_close_mcp', {
-    description: 'Close a tab in the Kitsune tab group.',
+    description: 'Close a tab in the Zenko tab group.',
     inputSchema: { tabId },
   }, async (a) => call('tabs_close_mcp', a));
 
@@ -440,14 +440,14 @@ export async function runMcp() {
   };
 
   server.registerTool('list_connected_browsers', {
-    description: 'List the Firefox browsers (profiles) connected to Kitsune right now, with their deviceId and name. Kitsune uses the first one connected unless you pick another with select_browser. Use this when the user wants a specific browser (e.g. their work profile).',
+    description: 'List the Firefox browsers (profiles) connected to Zenko right now, with their deviceId and name. Zenko uses the first one connected unless you pick another with select_browser. Use this when the user wants a specific browser (e.g. their work profile).',
     inputSchema: {},
   }, async () => {
     const list = await connectedBrowsers();
     if (!list.length)
-      return errorResult('No Firefox is connected to Kitsune. Ask the user to open Firefox with the Kitsune extension (npx kitsune-firefox doctor checks the setup).');
-    const lines = list.map(e => `- deviceId ${e.browserId}: "${e.name}" (Kitsune ${e.version || '?'}, platform ${process.platform}, onThisComputer: true${e.clients ? `, ${e.clients} other agent${e.clients > 1 ? 's' : ''} connected` : ''})${inUse(e) ? ' [inUse]' : ''}`);
-    return { content: [{ type: 'text', text: `Connected Firefox browsers (${list.length}):\n${lines.join('\n')}${list.length > 1 ? '\nThe user can rename a browser in the Kitsune toolbar popup.' : ''}` }] };
+      return errorResult('No Firefox is connected to Zenko. Ask the user to open Firefox with the Zenko extension (npx zenko-firefox doctor checks the setup).');
+    const lines = list.map(e => `- deviceId ${e.browserId}: "${e.name}" (Zenko ${e.version || '?'}, platform ${process.platform}, onThisComputer: true${e.clients ? `, ${e.clients} other agent${e.clients > 1 ? 's' : ''} connected` : ''})${inUse(e) ? ' [inUse]' : ''}`);
+    return { content: [{ type: 'text', text: `Connected Firefox browsers (${list.length}):\n${lines.join('\n')}${list.length > 1 ? '\nThe user can rename a browser in the Zenko toolbar popup.' : ''}` }] };
   });
 
   server.registerTool('select_browser', {
@@ -458,16 +458,16 @@ export async function runMcp() {
     if (!e)
       return errorResult(`No connected browser has deviceId ${a.deviceId}. Call list_connected_browsers.`);
     useBrowser(e);
-    return { content: [{ type: 'text', text: `Now using "${e.name}" (deviceId ${e.browserId}). Call tabs_context_mcp to see its Kitsune tabs.` }] };
+    return { content: [{ type: 'text', text: `Now using "${e.name}" (deviceId ${e.browserId}). Call tabs_context_mcp to see its Zenko tabs.` }] };
   });
 
   server.registerTool('switch_browser', {
-    description: 'Let the user pick the browser: every connected Firefox shows a "Use this Firefox?" window, and Kitsune switches to the one where the user clicks Connect (waits up to 2 minutes). Prefer select_browser when you already know the deviceId.',
+    description: 'Let the user pick the browser: every connected Firefox shows a "Use this Firefox?" window, and Zenko switches to the one where the user clicks Connect (waits up to 2 minutes). Prefer select_browser when you already know the deviceId.',
     inputSchema: {},
   }, async () => {
     const list = await connectedBrowsers();
     if (!list.length)
-      return errorResult('No Firefox is connected to Kitsune.');
+      return errorResult('No Firefox is connected to Zenko.');
     const asks = list.map(e => ({ e, c: new HelperClient({ path: e.socket }) }));
     const winner = await new Promise((resolve) => {
       let left = asks.length;
@@ -481,13 +481,13 @@ export async function runMcp() {
     await Promise.all(asks.map(({ c }) => c.call('_pair_cancel', {}, 5000).catch(() => {})));
     asks.forEach(({ c }) => c.close());
     if (!winner)
-      return errorResult('The user didn\'t pick a browser (no one clicked Connect within 2 minutes, or they chose "Not this one" everywhere). Kitsune keeps using the current one.');
+      return errorResult('The user didn\'t pick a browser (no one clicked Connect within 2 minutes, or they chose "Not this one" everywhere). Zenko keeps using the current one.');
     useBrowser(winner);
-    return { content: [{ type: 'text', text: `The user picked "${winner.name}" (deviceId ${winner.browserId}). Call tabs_context_mcp to see its Kitsune tabs.` }] };
+    return { content: [{ type: 'text', text: `The user picked "${winner.name}" (deviceId ${winner.browserId}). Call tabs_context_mcp to see its Zenko tabs.` }] };
   });
 
   server.registerTool('navigate', {
-    description: 'Load a URL in a Kitsune tab, or go "back"/"forward" in its history. Waits for the page to load. If tabId is omitted, the first tab in the Kitsune group is used (created if needed).',
+    description: 'Load a URL in a Zenko tab, or go "back"/"forward" in its history. Waits for the page to load. If tabId is omitted, the first tab in the Zenko group is used (created if needed).',
     inputSchema: {
       url: z.string().describe('URL to open (https:// is assumed if no scheme), or "back" / "forward".'),
       tabId: tabId.optional(),
@@ -545,7 +545,7 @@ export async function runMcp() {
   });
 
   server.registerTool('computer', {
-    description: `Use mouse and keyboard on a Kitsune tab, or take screenshots.
+    description: `Use mouse and keyboard on a Zenko tab, or take screenshots.
 Actions:
 * screenshot: capture the visible viewport. Coordinates for other actions use this image's pixel grid.
 * left_click / right_click / double_click / triple_click / hover: at coordinate [x, y] or on ref. Optional modifiers like "ctrl", "shift", "cmd+shift".
@@ -607,7 +607,7 @@ Actions:
   }, async (a) => call('get_page_text', a));
 
   server.registerTool('javascript_tool', {
-    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Only available in the self-distributed "Kitsune (Full)" build, and pages with a strict Content-Security-Policy may block it.',
+    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Only available in the self-distributed "Zenko (Full)" build, and pages with a strict Content-Security-Policy may block it.',
     inputSchema: {
       action: z.literal('javascript_exec').optional(),
       text: z.string().describe('The JavaScript to run.'),
@@ -625,7 +625,7 @@ Actions:
   }, async (a) => call('handle_dialog', a));
 
   server.registerTool('read_console_messages', {
-    description: 'Read console output (log/info/warn/error/debug) and uncaught exceptions from a Kitsune tab. Capture starts when the tab joins the Kitsune group; reload to capture a page\'s startup logs. Provide a pattern to keep the output small.',
+    description: 'Read console output (log/info/warn/error/debug) and uncaught exceptions from a Zenko tab. Capture starts when the tab joins the Zenko group; reload to capture a page\'s startup logs. Provide a pattern to keep the output small.',
     inputSchema: {
       tabId,
       pattern: z.string().optional().describe('Regex to filter messages (case-insensitive).'),
@@ -636,7 +636,7 @@ Actions:
   }, async (a) => call('read_console_messages', a));
 
   server.registerTool('read_network_requests', {
-    description: 'List HTTP requests (method, status, type, URL) made by a Kitsune tab. Cleared when the tab navigates to a different site.',
+    description: 'List HTTP requests (method, status, type, URL) made by a Zenko tab. Cleared when the tab navigates to a different site.',
     inputSchema: {
       tabId,
       urlPattern: z.string().optional().describe('Only include URLs containing this string.'),
@@ -651,7 +651,7 @@ Actions:
   }, async (a) => call('resize_window', a));
 
   server.registerTool('file_upload', {
-    description: 'Attach local files to a file input (or drop them on a drop zone) without opening the file picker. Give absolute file paths on this computer. The user confirms every upload in a Kitsune window; key/credential files are always refused.',
+    description: 'Attach local files to a file input (or drop them on a drop zone) without opening the file picker. Give absolute file paths on this computer. The user confirms every upload in a Zenko window; key/credential files are always refused.',
     inputSchema: {
       paths: jsonish(z.union([z.array(z.string()), z.string()])).optional().describe('Absolute paths of files to upload.'),
       ref: z.string().optional().describe('Ref of the file input or drop zone.'),
@@ -691,7 +691,7 @@ Actions:
   });
 
   server.registerTool('upload_image', {
-    description: 'Attach a screenshot you took (computer screenshot or zoom; its result gives a Screenshot ID) to a file input by ref, or drop it on a drop zone at coordinate, e.g. to add a screenshot to a bug report. The user confirms the upload in a Kitsune window. Screenshot IDs are kept for 10 minutes; take a new screenshot right before uploading.',
+    description: 'Attach a screenshot you took (computer screenshot or zoom; its result gives a Screenshot ID) to a file input by ref, or drop it on a drop zone at coordinate, e.g. to add a screenshot to a bug report. The user confirms the upload in a Zenko window. Screenshot IDs are kept for 10 minutes; take a new screenshot right before uploading.',
     inputSchema: {
       imageId: z.string().describe('The Screenshot ID, e.g. "shot-3".'),
       ref: z.string().optional().describe('Ref of the file input or drop zone.'),
@@ -758,7 +758,7 @@ Actions:
         stopRecording(tab);
       const annotate = async (jpegB64, spec) => (await helper.call('_annotate_frame', { jpeg: jpegB64, ...spec }, 20000))?.data;
       const out = await exportGif(tab, { filename: a.filename, options: a.options, annotate });
-      const saved = `Saved ${out.frames}-frame GIF (${Math.round(out.bytes / 1024)} KB) to ${out.file}${out.annotated ? '' : ' (only click circles drawn: update the Kitsune extension for labels, arrows and the progress bar)'}`;
+      const saved = `Saved ${out.frames}-frame GIF (${Math.round(out.bytes / 1024)} KB) to ${out.file}${out.annotated ? '' : ' (only click circles drawn: update the Zenko extension for labels, arrows and the progress bar)'}`;
       if (!a.coordinate)
         return { content: [{ type: 'text', text: saved }] };
       const up = await handlers.file_upload({ tabId: tab, coordinate: a.coordinate, paths: [out.file] });
@@ -770,7 +770,7 @@ Actions:
   });
 
   server.registerTool('browser_batch', {
-    description: 'Run several Kitsune actions in one call, in order, stopping at the first error, e.g. fill three fields and click Submit. Each step is {tool, args} using the same tools and arguments as when called directly (tabId defaults to the tab used last). Saves round trips; only the last screenshot of the batch is returned.',
+    description: 'Run several Zenko actions in one call, in order, stopping at the first error, e.g. fill three fields and click Submit. Each step is {tool, args} using the same tools and arguments as when called directly (tabId defaults to the tab used last). Saves round trips; only the last screenshot of the batch is returned.',
     inputSchema: {
       actions: jsonish(z.array(z.looseObject({
         tool: z.enum(['navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'handle_dialog', 'tabs_create_mcp']),
@@ -844,7 +844,7 @@ Actions:
 
 // Never upload obvious secrets, even if asked (a prompt-injected agent might try).
 const SECRET_DIRS = [
-  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.kitsune', '.password-store', '1password', 'keychains',
+  '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.zenko', '.password-store', '1password', 'keychains',
   '.config/gcloud', '.config/gh',
   // Claude Code / Claude Desktop settings and credentials
   '.claude', '.config/claude', 'application support/claude', 'appdata/roaming/claude',

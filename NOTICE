@@ -1,4 +1,4 @@
-Kitsune
+Zenko
 Copyright 2026 William Ricchiuti
 
 This product includes software developed by Microsoft Corporation
@@ -6,7 +6,7 @@ This product includes software developed by Microsoft Corporation
 Apache License, Version 2.0. See vendor/playwright/LICENSE and
 vendor/playwright/NOTICE.
 
-Modifications to Playwright: Kitsune's build (scripts/build.mjs) patches the vendored
+Modifications to Playwright: Zenko's build (scripts/build.mjs) patches the vendored
 files while bundling. The patches (1) report contenteditable roots as textboxes,
 (2) hide password field values, and (3) read closed shadow roots through Firefox's
 openOrClosedShadowRoot. vendor/playwright/README.md lists them.

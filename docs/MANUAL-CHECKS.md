@@ -2,14 +2,14 @@
 
 These are the things automated tests can't cover: other operating systems, your own logged-in accounts, and real people. Each takes a few minutes. Note anything odd in a GitHub issue.
 
-Before starting, install the extension (`dist/full` via `about:debugging` → *Load Temporary Add-on*, or the signed `.xpi`), run `npx kitsune-firefox setup --claude-code`, and open Claude Code.
+Before starting, install the extension (`dist/full` via `about:debugging` → *Load Temporary Add-on*, or the signed `.xpi`), run `npx zenko-firefox setup --claude-code`, and open Claude Code.
 
 ## Windows (10/11)
 
-1. `npx kitsune-firefox setup` prints `✓ Registered with Firefox … (+ registry HKCU\Software\Mozilla\NativeMessagingHosts\kitsune)`.
-2. `npx kitsune-firefox doctor` shows no ✗ while Firefox is running with the extension. The toolbar fox has no `!` badge.
-3. Ask Claude: *"Use Kitsune to open example.com and read me the heading."* A Kitsune permission window appears; approve it.
-4. **Named pipe.** `%USERPROFILE%\.kitsune\pipe-id` exists, and a second Windows user account can't connect. Optional; needs two accounts.
+1. `npx zenko-firefox setup` prints `✓ Registered with Firefox … (+ registry HKCU\Software\Mozilla\NativeMessagingHosts\zenko)`.
+2. `npx zenko-firefox doctor` shows no ✗ while Firefox is running with the extension. The toolbar fox has no `!` badge.
+3. Ask Claude: *"Use Zenko to open example.com and read me the heading."* A Zenko permission window appears; approve it.
+4. **Named pipe.** `%USERPROFILE%\.zenko\pipe-id` exists, and a second Windows user account can't connect. Optional; needs two accounts.
 5. **Real clicks.** Start Firefox with `"C:\Program Files\Mozilla Firefox\firefox.exe" --remote-debugging-port=9222`. `tabs_context_mcp` says `Input mode: trusted`.
 
 ## Linux distributions
@@ -25,7 +25,7 @@ Use your normal Firefox profile, and approve each site when asked. Say "stop" or
 | Task to give Claude | What to watch for |
 |---|---|
 | "Summarize my 5 newest unread emails in Gmail" | It reads without sending anything. Gmail's heavy DOM stays under `read_page` limits (try `visible_only`). |
-| "In Google Docs, add a line at the end of <doc> saying 'Checked by Kitsune'" | Google Docs uses a canvas and a hidden text target. Expect synthetic typing to fail and trusted mode to work. |
+| "In Google Docs, add a line at the end of <doc> saying 'Checked by Zenko'" | Google Docs uses a canvas and a hidden text target. Expect synthetic typing to fail and trusted mode to work. |
 | "Draft (don't send) a reply to the newest GitHub notification" | Typing into GitHub's markdown editor; clicking stops before Submit. |
 | "Add 'oat milk' to my shopping list in <todo app>" | Whatever to-do app you use. |
 | "Find the cheapest nonstop flight NOLA→NYC next Friday on Google Flights" | Heavy React UI with date pickers and dropdowns. |
@@ -35,7 +35,7 @@ Use your normal Firefox profile, and approve each site when asked. Say "stop" or
 
 `test/e2e-safety.mjs` now covers the permission-window buttons, revoking a site, Pause/Resume from the popup (also mid-typing and with a prompt open) and upload approval automatically. These still need a person:
 
-- [ ] **Unapproved sites.** A new site shows the Kitsune window, and its buttons only respond after a moment. *Deny* makes the tool call fail, and Claude says so.
+- [ ] **Unapproved sites.** A new site shows the Zenko window, and its buttons only respond after a moment. *Deny* makes the tool call fail, and Claude says so.
 - [ ] **Stop controls.** Pressing *Stop* in the page pill or **Alt+Shift+K** makes every later call fail with "paused". Pressing it while Claude is typing a long text stops the typing.
 - [ ] **Dialogs when you use the tab.** In an agent tab, click something that shows a JavaScript confirm yourself, a minute after the agent last acted: the real dialog appears.
 - [ ] **Tabs outside the group.** A tab you drag *out* of the orange group can't be used. One you drag *in* can.

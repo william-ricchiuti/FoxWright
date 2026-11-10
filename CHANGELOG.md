@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 (2026-11-10)
+
+**Kitsune is now Zenko** (善狐, "good fox"). Another, unrelated Firefox MCP project is also called Kitsune (github.com/junyeong-nero/kitsune), and it even uses the same `~/.kitsune` folder and Claude Code name.
+- npm package `zenko-firefox` (was `kitsune-firefox`), command `npx zenko-firefox setup`. The MCP server registers as `zenko`, so tools are `mcp__zenko__*`.
+- Files in `~/.zenko`, Firefox native-messaging name `zenko`, settings `ZENKO_*` (were `~/.kitsune`, `kitsune`, `KITSUNE_*`). The tab group is titled Zenko.
+- `setup` (and `uninstall`) remove an old Kitsune install, but only what is provably this project's: the `kitsune.json` registration if it names this extension, the Claude entries if they run this helper, and this helper's files in `~/.kitsune` (the folder too only if nothing else is in it). `uninstall` used to delete all of `~/.kitsune`, which would also have removed the other project's files. New `test/rename-cleanup.mjs`.
+- The extension's id is unchanged, so its settings and site approvals carry over, and an open Kitsune tab group is reused.
+
 ## 0.5.0 (2026-11-08)
 
 Features from Claude in Chrome's public tool definitions (interface only; no code was copied).

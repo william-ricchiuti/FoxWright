@@ -1,18 +1,18 @@
 // Real-agent evaluation: Claude Code (headless) completes everyday browser tasks using
-// only Kitsune's tools, and an independent verifier checks the result in the browser.
+// only Zenko's tools, and an independent verifier checks the result in the browser.
 //
 //   node test/agent-eval.mjs [--agent claude|codex|opencode] [--trusted | --ask] [--only REGEX] [--model NAME] [--max-turns N] [--repeat N]
 //
 //   --agent    which agent CLI runs the tasks (default claude). codex = OpenAI's Codex CLI
 //              (`codex exec`), opencode = OpenCode (`opencode run`, any provider, e.g.
-//              --model deepseek/deepseek-v4-pro). Both are locked down so only Kitsune's tools
+//              --model deepseek/deepseek-v4-pro). Both are locked down so only Zenko's tools
 //              can reach the web: Codex without its shell, browser, computer use, apps and web
 //              search (its code mode has no network APIs) (read-only sandbox, your config.toml ignored); OpenCode with a
 //              temporary config (your opencode.json and plugins ignored) denying bash, edit,
 //              webfetch, websearch, task and skill. --max-turns applies to Claude only.
 //
 //   --trusted  real input through WebDriver BiDi
-//   --ask      Kitsune asks before every new site, as it does for real users; a scripted "user"
+//   --ask      Zenko asks before every new site, as it does for real users; a scripted "user"
 //              presses "Allow this session" in each permission window (synthetic input only)
 //   --repeat N run every task N times and report pass@1 and pass@N
 //
@@ -55,7 +55,7 @@ const outDir = path.join(root, 'test', 'results');
 const transcriptDir = path.join(outDir, 'agent');
 fs.mkdirSync(transcriptDir, { recursive: true });
 
-const KITSUNE_TOOLS = ['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'javascript_tool', 'handle_dialog', 'read_console_messages', 'read_network_requests', 'resize_window', 'file_upload', 'browser_batch', 'gif_creator', 'upload_image'];
+const ZENKO_TOOLS = ['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'computer', 'get_page_text', 'javascript_tool', 'handle_dialog', 'read_console_messages', 'read_network_requests', 'resize_window', 'file_upload', 'browser_batch', 'gif_creator', 'upload_image'];
 // Everything else is off, so the agent can't route around the browser (e.g. with WebFetch).
 const BLOCKED = ['Bash', 'WebFetch', 'WebSearch', 'Read', 'Write', 'Edit', 'MultiEdit', 'Glob', 'Grep', 'Task', 'Agent', 'NotebookEdit'];
 
@@ -68,25 +68,25 @@ try {
 }
 const STRICT = help.includes('--strict-mcp-config');
 
-const mcpConfig = path.join(os.tmpdir(), `kitsune-agent-eval-${process.pid}.json`);
-// Written after the harness starts (below), so the MCP server can point at the harness's Kitsune folder.
+const mcpConfig = path.join(os.tmpdir(), `zenko-agent-eval-${process.pid}.json`);
+// Written after the harness starts (below), so the MCP server can point at the harness's Zenko folder.
 let mcpServer = null; // { command, args, env } for the agents that take it directly
 function writeMcpConfig(h) {
-  const env = { KITSUNE_HOME: path.join(h.home, '.kitsune'), ...(h.bidiUrl ? { KITSUNE_BIDI_URL: h.bidiUrl } : {}) };
-  mcpServer = { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], env };
-  fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { kitsune: { command: process.execPath, args: [path.join(root, 'host/dist/kitsune.mjs'), 'mcp'], env } } }));
+  const env = { ZENKO_HOME: path.join(h.home, '.zenko'), ...(h.bidiUrl ? { ZENKO_BIDI_URL: h.bidiUrl } : {}) };
+  mcpServer = { command: process.execPath, args: [path.join(root, 'host/dist/zenko.mjs'), 'mcp'], env };
+  fs.writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { zenko: { command: process.execPath, args: [path.join(root, 'host/dist/zenko.mjs'), 'mcp'], env } } }));
 }
-const uploadFile = path.join(os.tmpdir(), 'kitsune-agent-upload.txt');
-fs.writeFileSync(uploadFile, 'Uploaded by an AI agent through Kitsune.\n');
+const uploadFile = path.join(os.tmpdir(), 'zenko-agent-upload.txt');
+fs.writeFileSync(uploadFile, 'Uploaded by an AI agent through Zenko.\n');
 
 function runClaude(prompt, transcriptPath) {
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--mcp-config', mcpConfig, '--max-turns', MAX_TURNS,
-    '--allowedTools', 'mcp__kitsune', ...KITSUNE_TOOLS.map(t => `mcp__kitsune__${t}`), '--disallowedTools', ...BLOCKED];
+    '--allowedTools', 'mcp__zenko', ...ZENKO_TOOLS.map(t => `mcp__zenko__${t}`), '--disallowedTools', ...BLOCKED];
   if (STRICT)
     args.push('--strict-mcp-config');
   if (help.includes('--no-chrome'))
-    args.push('--no-chrome'); // make sure the agent uses Kitsune, not Claude in Chrome
-  args.push('--append-system-prompt', 'Do the task in the web browser using the Kitsune tools (mcp__kitsune__*). Do not answer from memory.');
+    args.push('--no-chrome'); // make sure the agent uses Zenko, not Claude in Chrome
+  args.push('--append-system-prompt', 'Do the task in the web browser using the Zenko tools (mcp__zenko__*). Do not answer from memory.');
   if (MODEL)
     args.push('--model', MODEL);
   const env = { ...process.env };
@@ -108,7 +108,7 @@ function runClaude(prompt, transcriptPath) {
         const msg = ev.message;
         for (const c of msg.content || []) {
           if (c.type === 'tool_use') {
-            const name = String(c.name).replace(/^mcp__kitsune__/, '');
+            const name = String(c.name).replace(/^mcp__zenko__/, '');
             m.toolCalls[name] = (m.toolCalls[name] || 0) + 1;
             m.calls.push({ name, input: c.input || {} });
             m.idToTool[c.id] = name;
@@ -162,7 +162,7 @@ function runClaude(prompt, transcriptPath) {
   });
 }
 
-const BROWSER_HINT = 'Do the task in the web browser using the Kitsune tools. Do not answer from memory.';
+const BROWSER_HINT = 'Do the task in the web browser using the Zenko tools. Do not answer from memory.';
 const newMetrics = () => ({ calls: [], toolCalls: {}, toolErrors: 0, resultChars: {}, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, seen: new Set(), idToTool: {}, final: null });
 function countResult(m, tool, parts) {
   const r = m.resultChars[tool] || (m.resultChars[tool] = { chars: 0, images: 0 });
@@ -174,7 +174,7 @@ function countResult(m, tool, parts) {
   }
 }
 function recordCall(m, name, input, isError, parts) {
-  name = String(name).replace(/^(mcp__)?kitsune(__|_|\.)/, '');
+  name = String(name).replace(/^(mcp__)?zenko(__|_|\.)/, '');
   m.toolCalls[name] = (m.toolCalls[name] || 0) + 1;
   m.calls.push({ name, input: input || {} });
   if (isError)
@@ -231,12 +231,12 @@ function runCodex(prompt, transcriptPath) {
   const off = ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access', 'computer_use', 'apps', 'in_app_browser', 'image_generation', 'skill_search', 'tool_suggest'];
   const args = ['exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only',
     '-c', 'web_search="disabled"', ...off.flatMap(f => ['--disable', f]),
-    '-c', `mcp_servers.kitsune.command=${tomlStr(s.command)}`,
-    '-c', `mcp_servers.kitsune.args=[${s.args.map(tomlStr).join(', ')}]`,
-    '-c', `mcp_servers.kitsune.env=${envTable}`,
-    '-c', 'mcp_servers.kitsune.startup_timeout_sec=30',
-    '-c', 'mcp_servers.kitsune.tool_timeout_sec=180',
-    '-c', 'mcp_servers.kitsune.default_tools_approval_mode="approve"', // headless: nobody can approve calls (Kitsune's own permission windows still apply)
+    '-c', `mcp_servers.zenko.command=${tomlStr(s.command)}`,
+    '-c', `mcp_servers.zenko.args=[${s.args.map(tomlStr).join(', ')}]`,
+    '-c', `mcp_servers.zenko.env=${envTable}`,
+    '-c', 'mcp_servers.zenko.startup_timeout_sec=30',
+    '-c', 'mcp_servers.zenko.tool_timeout_sec=180',
+    '-c', 'mcp_servers.zenko.default_tools_approval_mode="approve"', // headless: nobody can approve calls (Zenko's own permission windows still apply)
     '-C', os.tmpdir()];
   if (MODEL)
     args.push('-m', MODEL);
@@ -247,7 +247,7 @@ function runCodex(prompt, transcriptPath) {
     if (ev.type === 'item.completed' && it) {
       if (it.type === 'agent_message')
         lastMessage = it.text || '';
-      else if (it.type === 'mcp_tool_call' && it.server === 'kitsune') {
+      else if (it.type === 'mcp_tool_call' && it.server === 'zenko') {
         const content = it.result?.content || [];
         recordCall(m, it.tool || it.name, it.arguments, it.status === 'failed' || !!it.error || !!it.result?.isError || !!it.result?.is_error, content);
       }
@@ -262,16 +262,16 @@ function runCodex(prompt, transcriptPath) {
 
 function runOpencode(prompt, transcriptPath) {
   // A throwaway config folder: the user's opencode.json, AGENTS.md and plugins are not loaded.
-  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'kitsune-opencode-'));
+  const xdg = fs.mkdtempSync(path.join(os.tmpdir(), 'zenko-opencode-'));
   fs.mkdirSync(path.join(xdg, 'opencode'));
   const deny = ['bash', 'edit', 'write', 'patch', 'webfetch', 'websearch', 'codesearch', 'task', 'skill'];
   fs.writeFileSync(path.join(xdg, 'opencode', 'opencode.json'), JSON.stringify({
     $schema: 'https://opencode.ai/config.json',
-    mcp: { kitsune: { type: 'local', command: [mcpServer.command, ...mcpServer.args], environment: mcpServer.env, enabled: true, timeout: 30000 } },
+    mcp: { zenko: { type: 'local', command: [mcpServer.command, ...mcpServer.args], environment: mcpServer.env, enabled: true, timeout: 30000 } },
     permission: { bash: 'deny', edit: 'deny', webfetch: 'deny', websearch: 'deny', codesearch: 'deny', external_directory: 'deny' },
     tools: Object.fromEntries(deny.map(t => [t, false])),
   }));
-  const args = ['run', '--pure', '--format', 'json', '--title', `kitsune-eval ${path.basename(transcriptPath, '.jsonl')}`];
+  const args = ['run', '--pure', '--format', 'json', '--title', `zenko-eval ${path.basename(transcriptPath, '.jsonl')}`];
   if (MODEL)
     args.push('-m', MODEL);
   args.push(`${BROWSER_HINT}\n\n${prompt}`);
@@ -303,8 +303,8 @@ function runOpencode(prompt, transcriptPath) {
 const runAgent = (prompt, transcriptPath) => (AGENT === 'codex' ? runCodex : AGENT === 'opencode' ? runOpencode : runClaude)(prompt, transcriptPath);
 
 async function main() {
-  console.log(`Kitsune agent evaluation: ${AGENT_NAME} + Kitsune (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)${MODEL ? `, model ${MODEL}` : ''}${AGENT === 'claude' && !STRICT ? ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]' : ''}`);
-  // In trusted mode Firefox gets a debugging port for Claude's Kitsune MCP server; the harness's
+  console.log(`Zenko agent evaluation: ${AGENT_NAME} + Zenko (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)${MODEL ? `, model ${MODEL}` : ''}${AGENT === 'claude' && !STRICT ? ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]' : ''}`);
+  // In trusted mode Firefox gets a debugging port for Claude's Zenko MCP server; the harness's
   // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
   const h = await start({ testDriver: TRUSTED || ASK, policy: ASK ? { mode: 'ask', confirmUploads: true } : undefined });
   writeMcpConfig(h);
@@ -326,7 +326,7 @@ async function main() {
       if (ONLY && !ONLY.test(task.id))
         continue;
       await resetTabs();
-      const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.KITSUNE_P1}`);
+      const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.ZENKO_P1}`);
       const transcript = path.join(transcriptDir, `${MODE}-${task.id}${REPEAT > 1 ? `-${rep + 1}` : ''}.jsonl`);
       process.stdout.write(`  … ${task.id}`);
       const run = await runAgent(prompt, transcript);
@@ -398,14 +398,14 @@ async function main() {
     }
   const totalCost = rows.reduce((s, r) => s + (r.cost || 0), 0);
   const md = [
-    `# Agent evaluation: ${AGENT_NAME} + Kitsune (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)`,
+    `# Agent evaluation: ${AGENT_NAME} + Zenko (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)`,
     '',
     `${new Date().toISOString()} · ${os.platform()} ${os.arch()}${MODEL ? ` · model ${MODEL}` : ''}${AGENT === 'claude' ? ` · max turns ${MAX_TURNS}` : ''}`,
     '',
     REPEAT > 1 ? `Each task ran ${REPEAT} times. pass@1: **${Math.round(100 * passed / rows.length)}%** (${passed}/${rows.length} runs). pass@${REPEAT}: ${passAtN}/${taskIds.length} tasks. Passed every time: ${allPass}/${taskIds.length} tasks.\n` : '',
     `**${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,
     '',
-    ASK ? `Kitsune was in "ask" mode: a scripted user approved ${approver.count} permission window(s).\n` : '',
+    ASK ? `Zenko was in "ask" mode: a scripted user approved ${approver.count} permission window(s).\n` : '',
     '| Task | Result | Time | Tool calls | Errors | Tokens (in+cache / out) | Cost | Answer |',
     '|---|---|---|---|---|---|---|---|',
     ...rows.map(r => `| ${r.id} | ${r.ok ? 'pass' : '**fail**'} | ${Math.round(r.ms / 1000)} s | ${r.toolCalls} | ${r.toolErrors} | ${Math.round((r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / 1000)}k / ${Math.round(r.usage.output / 1000)}k | ${r.cost != null ? '$' + r.cost.toFixed(3) : '–'} | ${r.answer.replace(/\s+/g, ' ').replace(/\|/g, '/').slice(0, 90)} |`),

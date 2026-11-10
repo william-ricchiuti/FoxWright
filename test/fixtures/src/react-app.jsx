@@ -7,7 +7,7 @@ function App() {
   const [count, setCount] = useState(0);
   const [submitted, setSubmitted] = useState(null);
   const [q, setQ] = useState('');
-  const suggestions = ['firefox', 'fox', 'foxglove', 'kitsune', 'kitten'].filter(s => q && s.startsWith(q.toLowerCase()));
+  const suggestions = ['firefox', 'fox', 'foxglove', 'zenko', 'kitten'].filter(s => q && s.startsWith(q.toLowerCase()));
   return (
     <form onSubmit={e => { e.preventDefault(); setSubmitted({ name, agree, size }); }}>
       <h1>React form</h1>

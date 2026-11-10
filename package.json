@@ -1,8 +1,8 @@
 {
-  "name": "kitsune-workspace",
+  "name": "zenko-workspace",
   "private": true,
-  "version": "0.5.0",
-  "description": "Kitsune: let AI agents (Claude, via MCP) drive your real Firefox.",
+  "version": "0.6.0",
+  "description": "Zenko: let AI agents (Claude, via MCP) drive your real Firefox.",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -11,14 +11,14 @@
     "lint": "node scripts/build.mjs && web-ext lint --source-dir dist/store && web-ext lint --source-dir dist/full",
     "package": "node scripts/build.mjs --zip",
     "test": "node test/e2e.mjs",
-    "test:trusted": "KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs",
+    "test:trusted": "ZENKO_E2E_TRUSTED=1 node test/e2e.mjs",
     "test:permissions": "node test/e2e-permissions.mjs",
     "test:store": "node test/e2e-store.mjs",
     "test:idle": "node test/e2e-idle.mjs",
     "test:safety": "node test/e2e-safety.mjs",
     "test:resilience": "node test/e2e-resilience.mjs",
     "test:multi": "node test/e2e-multi.mjs",
-    "test:all": "node test/e2e.mjs && KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs && node test/e2e-safety.mjs && node test/e2e-permissions.mjs && node test/e2e-store.mjs && node test/e2e-resilience.mjs",
+    "test:all": "node test/e2e.mjs && ZENKO_E2E_TRUSTED=1 node test/e2e.mjs && node test/e2e-safety.mjs && node test/e2e-permissions.mjs && node test/e2e-store.mjs && node test/e2e-resilience.mjs",
     "bench": "node test/bench-actions.mjs",
     "screenshots": "node scripts/amo-screenshots.mjs",
     "version:check": "node scripts/version.mjs check"

@@ -1,9 +1,9 @@
-// Native-messaging link to the Kitsune helper (kitsune host), which relays
+// Native-messaging link to the Zenko helper (zenko host), which relays
 // requests from the MCP server over a user-only Unix socket / named pipe.
 /* global browser */
 import { state, updateBadge, VERSION, FULL } from './state.js';
 
-const HOST_NAME = 'kitsune';
+const HOST_NAME = 'zenko';
 let port = null;
 let retryTimer = null;
 let retryMs = 2000;
@@ -44,7 +44,7 @@ export function connect() {
   p.onDisconnect.addListener((dp) => {
     const err = dp.error?.message || (browser.runtime.lastError && browser.runtime.lastError.message) || 'Helper exited';
     state.lastError = /No such native application|not found/i.test(err)
-      ? 'The Kitsune helper is not installed. Run: npx kitsune-firefox setup'
+      ? 'The Zenko helper is not installed. Run: npx zenko-firefox setup'
       : err;
     state.connected = false;
     state.connecting = false;

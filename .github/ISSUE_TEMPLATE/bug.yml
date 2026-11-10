@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Kitsune doesn't work as it should
+description: Something in Zenko doesn't work as it should
 labels: [bug]
 body:
   - type: markdown
@@ -21,7 +21,7 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Kitsune version (toolbar popup) and helper version (`npx kitsune-firefox --version`)
+      label: Zenko version (toolbar popup) and helper version (`npx zenko-firefox --version`)
     validations:
       required: true
   - type: input
@@ -49,5 +49,5 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `npx kitsune-firefox doctor`
+      label: Output of `npx zenko-firefox doctor`
       render: text

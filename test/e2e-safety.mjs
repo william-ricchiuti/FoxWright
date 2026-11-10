@@ -1,5 +1,5 @@
 // Safety controls, exercised the way a person would use them. The test opens its own WebDriver
-// BiDi session (the MCP server is told not to use it) to press buttons in Kitsune's permission
+// BiDi session (the MCP server is told not to use it) to press buttons in Zenko's permission
 // window and toolbar popup, which are extension pages that web pages and the agent can't reach.
 //
 //   node test/e2e-safety.mjs
@@ -24,7 +24,7 @@ async function test(name, fn) {
 }
 const expect = (c, m) => { if (!c) throw new Error(m); };
 
-const P1 = process.env.KITSUNE_P1, P2 = process.env.KITSUNE_P2;
+const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
 const ORIGIN = {
   deny: `http://localhost:${P2}`,
   once: `http://127.0.0.1:${P1}`,
@@ -32,7 +32,7 @@ const ORIGIN = {
   upload: `http://localhost:${P1}`,
 };
 
-console.log('Kitsune safety e2e');
+console.log('Zenko safety e2e');
 const h = await start({ testDriver: true, policy: { mode: 'ask', promptTimeoutSec: 30, confirmUploads: true } });
 
 const driver = await connectDriver(h.bidiUrl);
@@ -146,9 +146,9 @@ await test('Pause answers an open permission window with Deny', async () => {
   await sleep(300);
 });
 
-await test('file upload: the user approves it in the Kitsune window', async () => {
+await test('file upload: the user approves it in the Zenko window', async () => {
   await h.call('navigate', { tabId, url: `${ORIGIN.once}/basic.html` });
-  const file = path.join(os.tmpdir(), `kitsune-upload-${process.pid}.txt`);
+  const file = path.join(os.tmpdir(), `zenko-upload-${process.pid}.txt`);
   fs.writeFileSync(file, 'hello from the safety test\n');
   const f = await h.call('find', { tabId, query: 'Avatar' });
   const ref = /\[ref=([^\]]+)\]/.exec(f.text)?.[1];
@@ -199,7 +199,7 @@ await test('the popup lists what the agent did, with its own summaries cleaned u
   const name = /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId, query: 'Full name' })).text)?.[1];
   expect(btn && name, 'fixture elements not found');
   await h.call('computer', { tabId, action: 'left_click', ref: btn, action_summary: 'Clicks the\ncounter ‮button' });
-  await h.call('form_input', { tabId, ref: name, value: 'Ada' }); // no summary: Kitsune describes it
+  await h.call('form_input', { tabId, ref: name, value: 'Ada' }); // no summary: Zenko describes it
   const p = await openPopup(extBase);
   let items = [];
   for (let i = 0; i < 50; i++) { // the popup refreshes every 1.5 s
@@ -208,7 +208,7 @@ await test('the popup lists what the agent did, with its own summaries cleaned u
       break;
     await sleep(100);
   }
-  expect(items[0] === `Filled ${name}`, `newest entry should be Kitsune's own description: ${JSON.stringify(items)}`);
+  expect(items[0] === `Filled ${name}`, `newest entry should be Zenko's own description: ${JSON.stringify(items)}`);
   expect(items[1] === '“Clicks the counter button”', `agent's summary should be quoted, on one line, without control characters: ${JSON.stringify(items)}`);
 });
 

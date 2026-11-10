@@ -1,4 +1,4 @@
-# Contributing to Kitsune
+# Contributing to Zenko
 
 Thanks for helping. Bug reports with a site and steps to reproduce are the most useful thing you can send; the issue templates ask for what's needed.
 
@@ -6,11 +6,11 @@ Thanks for helping. Bug reports with a site and steps to reproduce are the most 
 
 ```sh
 npm ci && npm ci --prefix host
-npm run build                  # extension → dist/store + dist/full, helper → host/dist/kitsune.mjs
+npm run build                  # extension → dist/store + dist/full, helper → host/dist/zenko.mjs
 node test/build-fixtures.mjs   # React and ProseMirror test pages
 ```
 
-Load `dist/full/manifest.json` from `about:debugging#/runtime/this-firefox` and run `node host/dist/kitsune.mjs setup` to try it by hand.
+Load `dist/full/manifest.json` from `about:debugging#/runtime/this-firefox` and run `node host/dist/zenko.mjs setup` to try it by hand.
 
 ## Where things are
 
@@ -25,7 +25,7 @@ Load `dist/full/manifest.json` from `about:debugging#/runtime/this-firefox` and 
 
 ```sh
 export FIREFOX=/path/to/firefox          # Firefox 152 or newer
-node test/e2e.mjs && KITSUNE_E2E_TRUSTED=1 node test/e2e.mjs
+node test/e2e.mjs && ZENKO_E2E_TRUSTED=1 node test/e2e.mjs
 node test/e2e-safety.mjs && node test/e2e-permissions.mjs && node test/e2e-store.mjs
 npx web-ext lint --source-dir dist/store
 ```
@@ -33,7 +33,7 @@ npx web-ext lint --source-dir dist/store
 - Add a test for new behavior. Fixtures go in `test/fixtures/` and must not load anything from the internet.
 - Anything that changes what the agent can reach (permissions, frames, uploads, dialogs, tabs) needs a test in `test/e2e-safety.mjs` or `test/e2e-permissions.mjs`, and a line in the README's safety model if users should know.
 - Tool results are read by a model: keep them short and plain, and say what to do next when something fails.
-- Keep the store build free of anything that runs code strings (AMO policy); full-build-only code goes behind `__KITSUNE_FULL__`.
+- Keep the store build free of anything that runs code strings (AMO policy); full-build-only code goes behind `__ZENKO_FULL__`.
 - Add a line to the "Unreleased" section of `CHANGELOG.md`.
 
 ## Releasing

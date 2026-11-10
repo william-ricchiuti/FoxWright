@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Kitsune</title>
+  <title>Zenko</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <header>
     <div class="hanko" aria-hidden="true">狐</div>
     <div class="title">
-      <h1>Kitsune</h1>
+      <h1>Zenko</h1>
       <p id="status-line"><span class="dot" id="dot"></span><span id="status-text">Checking…</span></p>
     </div>
   </header>
@@ -21,8 +21,8 @@
 
   <section id="setup" class="card" hidden>
     <h2>Connect your AI</h2>
-    <p>Kitsune needs its small helper program. In a terminal, run:</p>
-    <pre><code>npx kitsune-firefox setup</code></pre>
+    <p>Zenko needs its small helper program. In a terminal, run:</p>
+    <pre><code>npx zenko-firefox setup</code></pre>
     <p class="fine">Then restart Firefox. <span id="err"></span></p>
     <button id="retry">Try again</button>
   </section>
@@ -47,7 +47,7 @@
     <button id="pause" class="ghost">Pause the agent <small>(Alt+Shift+K)</small></button>
   </section>
 
-  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/Kitsune" target="_blank" rel="noopener">docs</a></footer>
+  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/Zenko" target="_blank" rel="noopener">docs</a></footer>
   <script src="popup.js"></script>
 </body>
 </html>

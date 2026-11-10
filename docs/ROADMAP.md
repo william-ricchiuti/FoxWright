@@ -1,4 +1,6 @@
-# Kitsune roadmap (post-0.3.0 review)
+# Zenko roadmap (formerly Kitsune; post-0.3.0 review)
+
+> Renamed from Kitsune to Zenko in 0.6.0 (section G). Earlier sections keep the old name as written at the time.
 
 A full review of 0.3.0 (extension, helper, tests, docs) produced the list below. This file is the
 source of truth for what's done and what's left: each item is marked when its change is committed,
@@ -293,6 +295,14 @@ From comparing Claude in Chrome's public tool definitions with Kitsune's (no rev
 - [x] Several Firefox profiles: per-helper sockets and registry in ~/.kitsune/browsers, `list_connected_browsers` / `select_browser` / `switch_browser`, browser names in the popup, takeover note. test/e2e-multi.mjs. Trusted input can't reach another Firefox: tabs are found by a token set through the selected browser's extension.
 - [x] Tool guidance: close the tabs you opened.
 - Found along the way: on macOS the test harness uses the installed helper (`~/.kitsune/app`), so helper changes need `node host/dist/kitsune.mjs setup` (mac-test.sh does it) before a local run.
+
+### G. Rename to Zenko (0.6.0, 2026-11-10)
+
+- [x] Found an unrelated project with the same name and goal (github.com/junyeong-nero/kitsune, Python, public since 2026-10-16, 40 stars) and two more competitors the earlier check missed (Foxhand, FoxPilot, both on AMO). Added all three to the README comparison.
+- [x] Name chosen by William from a checked shortlist: Zenko (善狐). Free on npm as `zenko-firefox`, on PyPI and as an AMO slug; no Firefox/MCP/agent projects named Zenko. Rejected: foxtail (npm/PyPI taken; padenot/foxtail is a Claude Code tool for Mozilla developers), Foxhand / FoxPilot / foxpaw (competitors), Reynard (a Gecko browser for iOS).
+- [x] Everything renamed except the extension ids (AMO listing), the agent-eval task text, past CHANGELOG entries and old eval reports.
+- [x] The other Kitsune also uses `~/.kitsune` and the Claude name `kitsune`: cleanup of the old install removes only provably-ours files; `uninstall` no longer deletes a whole folder that could hold another program's data. test/rename-cleanup.mjs.
+- [ ] William: rename the GitHub repo to Zenko, publish `zenko-firefox` and deprecate `kitsune-firefox`, change the AMO listing's name and address.
 
 - [ ] When AMO approves: put the listing's address into README step 2 (and the repo's website link).
 

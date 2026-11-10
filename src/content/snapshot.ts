@@ -1,4 +1,4 @@
-// Page outline ("read_page") and element search ("find") for Kitsune.
+// Page outline ("read_page") and element search ("find") for Zenko.
 // Uses Playwright's vendored aria-snapshot code to compute WAI-ARIA roles and
 // accessible names in plain JavaScript (Firefox extensions have no CDP).
 
