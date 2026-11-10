@@ -18,6 +18,7 @@ Zenko connects an AI agent that you run on your own computer, such as Claude Cod
 
 - The agent only works in tabs in its own orange "Zenko" tab group. Your other tabs are off-limits.
 - Before it opens or reads a site for the first time, Zenko asks you in its own window: Deny, Allow this session, or Always allow. Pages and the agent can't press these buttons.
+- See what it's doing: the page shows the agent's description of each action, and the toolbar popup lists its recent actions.
 - Password fields are never shown to the agent.
 - Pause it any time from the toolbar button, with Alt+Shift+K, or with the Stop button on the page. Pausing stops work already in progress too.
 - File uploads need your confirmation every time, and key or credential files are always refused.
@@ -26,7 +27,11 @@ Zenko connects an AI agent that you run on your own computer, such as Claude Cod
 
 Zenko has two parts: this extension, and a small helper program you install once with `npx zenko-firefox setup` (it needs Node.js). The helper is also the MCP server your AI client talks to. Page content only goes from the extension to that helper on your computer and on to the AI client you connected. Zenko itself has no servers and collects nothing.
 
+Several Firefox profiles can be connected at once: name each one in the toolbar popup, and the agent can pick one or ask you to choose.
+
 Optional: start Firefox with `--remote-debugging-port=9222` and Zenko sends real mouse and keyboard input, which some sites require.
+
+Zenko was called Kitsune until version 0.6.0.
 
 Source code, documentation and test results: https://github.com/william-ricchiuti/Zenko
 
@@ -53,7 +58,7 @@ Generated from the real UI by `node scripts/amo-screenshots.mjs`:
 
 1. `screenshot-1-agent-working.png`: "The agent fills in a form; the orange glow and Stop button show which tab it's using."
 2. `screenshot-2-permission-window.png`: "You approve every site in a window the page and the agent can't touch."
-3. `screenshot-3-popup.png`: "Pause the agent, review and revoke sites, see the input mode."
+3. `screenshot-3-popup.png`: "See what the agent did, pause it, review and revoke sites."
 
 ## License
 
