@@ -89,7 +89,8 @@ export function addToGroup(tabId) {
 }
 
 async function addToGroupNow(tabId) {
-  if ((await browser.tabs.get(tabId)).incognito)
+  const tab = await browser.tabs.get(tabId);
+  if (tab.incognito)
     throw privateTabError(tabId);
   if (!hasGroups()) {
     fallbackTabs.add(tabId);
@@ -100,7 +101,8 @@ async function addToGroupNow(tabId) {
   if (gid != null) {
     await browser.tabs.group({ groupId: gid, tabIds: [tabId] });
   } else {
-    state.groupId = await browser.tabs.group({ tabIds: [tabId] });
+    // In the tab's own window: by default a new group goes to the focused window, which may be private.
+    state.groupId = await browser.tabs.group({ tabIds: [tabId], createProperties: { windowId: tab.windowId } });
     try {
       await browser.tabGroups.update(state.groupId, { title: GROUP_TITLE, color: 'orange' });
     } catch { /* ignore */ }

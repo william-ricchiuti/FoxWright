@@ -715,7 +715,13 @@ export const tools = {
       if (t.cookieStoreId && t.cookieStoreId !== 'firefox-default')
         throw new Error(`${viewerNote}\nFoxwright won't re-fetch it: the tab is in a container, and a re-fetch would use the default cookies instead of the container's. Take a screenshot to see what's on screen, or ask the user to open it in a normal tab.`);
       // Never follow a redirect: it could lead to a site the user hasn't approved, with their cookies.
-      const r = await fetch(t.url, { credentials: 'include', redirect: 'manual' });
+      let r;
+      try {
+        r = await fetch(t.url, { credentials: 'include', redirect: 'error' });
+      } catch (fe) {
+        // redirect: 'error' stops at a redirect without requesting its target (a network error).
+        throw new Error(`${viewerNote}\nFoxwright couldn't re-fetch it (${fe.message}); the address may now redirect, and Foxwright doesn't follow redirects when re-fetching. Navigate the tab to the final address and try again.`);
+      }
       if (r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400))
         throw new Error(`${viewerNote}\nThe address now redirects, and Foxwright doesn't follow redirects when re-fetching (they could lead to a site the user hasn't approved). Navigate the tab to the final address and try again.`);
       let body = await r.text();
