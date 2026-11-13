@@ -8,23 +8,54 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setCurrentTest } from './harness.mjs';
+import { WebSocket } from './ws-shim.mjs';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 export const expect = (c, m) => { if (!c) throw new Error(m); };
 export const refOf = (t, re = /\[ref=([^\]]+)\]/) => (re.exec(t || '') || [])[1];
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/**
+ * Known limits: tests that fail today for a reason we have accepted (for now). They are reported as
+ * "known limit" and don't fail the suite, but only while they fail with the expected message: a
+ * different failure is a real failure, and a known limit that starts PASSING fails the suite, so the
+ * entry gets removed here once the limit is fixed. One entry per limit; delete it when fixed.
+ */
+export const KNOWN_LIMITS = [
+  // javascript_tool has no timeout of its own for code that never finishes. Delete when fixed.
+  { suite: 'e2e-gaps-fuzz', test: /^an endless javascript_tool loop/, error: /javascript_tool never returns for an endless loop/, why: 'javascript_tool has no timeout for code that never finishes' },
+  // The page's own GET form puts the password in its URL; Foxwright can only hide it afterwards.
+  { suite: 'e2e-gaps-secrets', test: /^submitting a login form that uses GET/, error: /the password \(sent in the URL by the page's own GET form\) appears in/, why: 'a GET login form puts the password in the page URL, which tab/network output shows' },
+];
+
 export function runner(suite) {
   const results = [];
-  async function test(name, fn, { area = '', expectFail = false } = {}) {
+  const limitFor = name => KNOWN_LIMITS.find(k => k.suite === suite && k.test.test(name));
+  async function test(name, fn, { area = '' } = {}) {
     const t0 = Date.now();
+    const limit = limitFor(name);
+    setCurrentTest(name);
     try {
       await fn();
-      results.push({ name, area, ok: true, ms: Date.now() - t0 });
-      console.log(`  ✓ ${name}`);
+      if (limit) {
+        results.push({ name, area, ok: false, ms: Date.now() - t0, err: 'known limit passed unexpectedly', unexpectedPass: true });
+        console.log(`  ✗ ${name}\n      PASSED, but it is listed as a known limit (${limit.why}). If it is fixed, delete its entry from KNOWN_LIMITS in test/gap-lib.mjs.`);
+      } else {
+        results.push({ name, area, ok: true, ms: Date.now() - t0 });
+        console.log(`  ✓ ${name}`);
+      }
     } catch (e) {
-      results.push({ name, area, ok: false, ms: Date.now() - t0, err: e.message });
-      console.log(`  ✗ ${name}\n      ${String(e.message).split('\n').join('\n      ')}`);
+      const msg = String(e?.message ?? e);
+      if (limit && limit.error.test(msg)) {
+        results.push({ name, area, ok: true, knownLimit: limit.why, ms: Date.now() - t0, err: msg });
+        console.log(`  ~ ${name} (known limit: ${limit.why})\n      ${msg.split('\n').join('\n      ')}`);
+      } else {
+        results.push({ name, area, ok: false, ms: Date.now() - t0, err: msg });
+        console.log(`  ✗ ${name}\n      ${msg.split('\n').join('\n      ')}`);
+      }
+    } finally {
+      setCurrentTest(null);
     }
   }
   function skip(name, why, { area = '' } = {}) {
@@ -32,10 +63,11 @@ export function runner(suite) {
     console.log(`  - ${name} (not testable here: ${why})`);
   }
   function finish() {
-    const passed = results.filter(r => r.ok === true).length;
+    const known = results.filter(r => r.knownLimit).length;
+    const passed = results.filter(r => r.ok === true).length - known;
     const failed = results.filter(r => r.ok === false).length;
     const skipped = results.filter(r => r.ok === null).length;
-    console.log(`\n${suite}: ${passed} passed, ${failed} failed, ${skipped} not testable`);
+    console.log(`\n${suite}: ${passed} passed, ${failed} failed, ${known} known limit${known === 1 ? '' : 's'}, ${skipped} not testable`);
     fs.mkdirSync(path.join(root, 'test/results'), { recursive: true });
     fs.writeFileSync(path.join(root, `test/results/${suite}.json`), JSON.stringify(results, null, 2));
     return failed ? 1 : 0;

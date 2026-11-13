@@ -1,6 +1,8 @@
 // A minimal WebDriver BiDi client for tests that need to act like the person at the computer:
 // pressing buttons in Foxwright's permission window or toolbar popup (extension pages that web
 // pages and the agent can't reach). Needs Firefox started by the harness with `testDriver: true`.
+import { WebSocket } from './ws-shim.mjs';
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export async function connectDriver(url) {
