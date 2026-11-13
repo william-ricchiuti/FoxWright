@@ -2,6 +2,7 @@
 // so pages can't hide, restyle, overlay or click-jack them.
 /* global browser */
 import { state } from './state.js';
+import { logQuestion } from './actionlog.js';
 
 const pending = new Map(); // id -> { req, resolve, windowId, timer }
 const byKey = new Map(); // dedupe identical concurrent asks -> promise
@@ -34,6 +35,7 @@ function ask(req) {
   if (key && byKey.has(key))
     return byKey.get(key);
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  logQuestion(req, 'asked');
   const p = new Promise((resolve) => {
     const entry = { req, resolve, windowId: null, timer: null };
     pending.set(id, entry);
@@ -63,6 +65,7 @@ function finish(id, answer, level = 'full') {
   if (e.windowId != null && answer === 'timeout')
     browser.windows.remove(e.windowId).catch(() => {});
   e.resolve({ answer, level });
+  logQuestion(e.req, answer);
 }
 
 export function handlePromptMessage(msg, sender) {
