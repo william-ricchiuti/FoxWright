@@ -137,7 +137,7 @@ function onExtensionMessage(msg) {
     browserInfo = { browserId: /^[a-f0-9]{12}$/.test(msg.browserId || '') ? msg.browserId : '', name: cleanName(msg.name) || 'Firefox' };
     writeRegistry();
     log('extension connected', extensionInfo, browserInfo);
-    writeToExtension({ type: 'hello-ack', error: serverError });
+    writeToExtension({ type: 'hello-ack', error: serverError, version: VERSION });
     broadcastClientCount();
     return;
   }
@@ -299,7 +299,7 @@ function listen() {
     ownsSocket = true;
     if (serverError) {
       serverError = null;
-      writeToExtension({ type: 'hello-ack', error: null });
+      writeToExtension({ type: 'hello-ack', error: null, version: VERSION });
     }
   }
   server.listen(sp, onListening);

@@ -30,6 +30,9 @@ export const state = {
   // what the agent did lately (shown in the popup and the in-page pill); memory only
   recentActions: [], // [{ at, tabId, text, own }] newest first, at most 12
   labels: new Map(), // tabId -> { text, at }: the latest action summary, for the in-page pill
+  // --- connection details for the popup and the welcome page (onboarding) ---
+  helperVersion: null, // the connected helper's version (from hello-ack; older helpers don't say)
+  errorKind: null, // why the helper isn't connected: 'not-installed' | 'exited' | 'helper-error' | null
 };
 
 const RECENT_MAX = 12;
@@ -114,7 +117,14 @@ export function publicStatus() {
     recentActions: state.recentActions.slice(0, 8),
     browserId: state.browserId,
     browserName: state.browserName,
+    helperVersion: state.helperVersion,
+    errorKind: state.errorKind,
+    versionMismatch: !!(state.connected && state.helperVersion && minorOf(state.helperVersion) !== minorOf(VERSION)),
   };
+}
+
+function minorOf(v) {
+  return String(v || '').split('.').slice(0, 2).join('.');
 }
 
 export async function updateBadge() {
