@@ -1,4 +1,4 @@
-// Page outline ("read_page") and element search ("find") for Zenko.
+// Page outline ("read_page") and element search ("find") for Foxwright.
 // Uses Playwright's vendored aria-snapshot code to compute WAI-ARIA roles and
 // accessible names in plain JavaScript (Firefox extensions have no CDP).
 

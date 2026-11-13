@@ -22,7 +22,7 @@ function answer(a) {
     $('tabline').textContent = `Page title (set by the website): “${t.length > 70 ? t.slice(0, 70) + '…' : t}”`;
   }
   if (req.type === 'upload') {
-    document.title = 'Zenko: allow file upload?';
+    document.title = 'Foxwright: allow file upload?';
     $('title').textContent = 'Upload files to this site?';
     $('body').textContent = 'The AI agent wants to attach these files from your computer to a page on:';
     const ul = $('files');
@@ -35,10 +35,10 @@ function answer(a) {
     $('once').textContent = 'Upload';
     $('always').hidden = true;
   } else if (req.type === 'pair') {
-    document.title = 'Zenko: use this Firefox?';
+    document.title = 'Foxwright: use this Firefox?';
     $('title').textContent = 'Use this Firefox for the AI agent?';
-    $('subtitle').textContent = 'An AI agent connected through Zenko wants to pick a browser.';
-    $('body').textContent = 'Several Firefox windows or profiles are connected to Zenko. If this is the one the agent should work in, click Connect. This browser is named:';
+    $('subtitle').textContent = 'An AI agent connected through Foxwright wants to pick a browser.';
+    $('body').textContent = 'Several Firefox windows or profiles are connected to Foxwright. If this is the one the agent should work in, click Connect. This browser is named:';
     $('once').textContent = 'Connect';
     $('deny').textContent = 'Not this one';
     $('always').hidden = true;

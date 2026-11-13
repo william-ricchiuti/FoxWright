@@ -1,5 +1,5 @@
 // A minimal WebDriver BiDi client for tests that need to act like the person at the computer:
-// pressing buttons in Zenko's permission window or toolbar popup (extension pages that web
+// pressing buttons in Foxwright's permission window or toolbar popup (extension pages that web
 // pages and the agent can't reach). Needs Firefox started by the harness with `testDriver: true`.
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -32,7 +32,7 @@ export async function connectDriver(url) {
       throw new Error(`evaluate failed: ${r.exceptionDetails?.text}`);
     return r.result?.value;
   }
-  /** Wait for Zenko's permission window; returns its browsing context ({ context, url }). */
+  /** Wait for Foxwright's permission window; returns its browsing context ({ context, url }). */
   async function promptWindow(ms = 10000) {
     const t0 = Date.now();
     while (Date.now() - t0 < ms) {

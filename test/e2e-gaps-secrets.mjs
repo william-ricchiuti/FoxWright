@@ -1,6 +1,6 @@
 // Uploads (gap area 5) and secrets in tool output (gap area 6).
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-secrets.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-secrets.mjs
 // Linux only for the upload part (it plants fake credential files in the harness's temporary HOME).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,19 +8,19 @@ import { start } from './harness.mjs';
 import { runner, extraServer, connectPerson, chromeEval, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, skip, finish } = runner('e2e-gaps-secrets');
-const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
+const P1 = process.env.FOXWRIGHT_P1, P2 = process.env.FOXWRIGHT_P2;
 const xs = await extraServer(P1, P2);
 const { P3 } = xs;
 const A = `http://a.test:${P3}`;
 const C = `http://c.test:${P3}`;
 
-console.log('Zenko gap tests: uploads and secrets');
+console.log('Foxwright gap tests: uploads and secrets');
 const h = await start({ testDriver: true, policy: { mode: 'all', confirmUploads: true, promptTimeoutSec: 15 } });
 const d = await connectPerson(h.bidiUrl);
 const tabId = tabIdOf((await h.call('tabs_context_mcp', { createIfEmpty: true })).text);
 const promptW = async (ms) => { try { return await d.promptWindow(ms); } catch { return null; } };
 
-/** file_upload while watching for the Zenko window (denied if it shows). */
+/** file_upload while watching for the Foxwright window (denied if it shows). */
 async function upload(paths, ref) {
   let asked = null, done = false;
   const call = h.call('file_upload', { tabId, ref, paths }).finally(() => { done = true; });
@@ -75,7 +75,7 @@ if (process.platform !== 'linux' || h.home === (await import('node:os')).homedir
     const rel = path.relative(process.cwd(), key);
     const cases = [key, path.join(H, 'proj/.env'), path.join(H, 'proj/.env.production'), path.join(H, '.aws/credentials'), path.join(H, '.git-credentials'), path.join(H, '.bash_history'),
       path.join(H, '.mozilla/firefox/abc.default/logins.json'), path.join(H, '.mozilla/firefox/abc.default/cookies.sqlite'), path.join(H, '.config/gcloud/application_default_credentials.json'), path.join(H, '.kube/config'),
-      path.join(H, '.zenko/helper.log'), path.join(H, '.zenko/zenko.sock'), path.join(H, 'innocent-link.txt'), path.join(H, 'notes/id_ed25519'), `${H}/Documents/../.ssh/id_ed25519`, rel, `./${rel}`];
+      path.join(H, '.foxwright/helper.log'), path.join(H, '.foxwright/foxwright.sock'), path.join(H, 'innocent-link.txt'), path.join(H, 'notes/id_ed25519'), `${H}/Documents/../.ssh/id_ed25519`, rel, `./${rel}`];
     const bad = [];
     for (const p of cases) {
       const { r, asked } = await upload([p], ref);

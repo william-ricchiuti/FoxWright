@@ -1,8 +1,8 @@
-# Test report: Zenko
+# Test report: Foxwright
 
 _Latest run: 0.5.0 (unreleased), 2026-11-08, macOS 27 with Firefox 158.0.1 and Node 22. The previous run (0.4.2) also covered Linux with Firefox 152 and 159 in Docker. Earlier sections are marked with the version they were measured on._
 
-Every test drives Zenko the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
+Every test drives Foxwright the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
 - **synthetic**: the extension alone.
 - **trusted**: Firefox started with `--remote-debugging-port`, so input goes through WebDriver BiDi.
@@ -35,14 +35,14 @@ Firefox 140–151 are no longer supported: they give Manifest V3 extensions neit
 
 The gain comes from waiting on Firefox's navigation events, only as long as the action could start a page load, instead of fixed sleeps. Typing in a tab that isn't in front no longer runs at one character per second.
 
-The 2 real-site failures in each mode come from the test sandbox's network, not from Zenko:
+The 2 real-site failures in each mode come from the test sandbox's network, not from Foxwright:
 
-- **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Zenko opened the search dialog and typed the query; the dialog showed "No results".
+- **react.dev search**: the Algolia search API is unreachable from the sandbox (`curl` fails too). Foxwright opened the search dialog and typed the query; the dialog showed "No results".
 - **DuckDuckGo**: it served a blank page to the sandbox's data-center IP in 3 of 4 runs. It passed in the one run where the page loaded.
 
 ## Real-agent evaluation (Claude Code, 0.2.0 → now)
 
-`test/agent-eval.mjs` runs `claude -p` with only Zenko's tools enabled. Everything else is blocked: WebFetch, Bash, file tools and Claude in Chrome. After each task, an independent verifier checks the result through Zenko's own tools: the page state, the tabs that are open and the answer.
+`test/agent-eval.mjs` runs `claude -p` with only Foxwright's tools enabled. Everything else is blocked: WebFetch, Bash, file tools and Claude in Chrome. After each task, an independent verifier checks the result through Foxwright's own tools: the page state, the tabs that are open and the answer.
 
 | Run | Passed | Median time | Median tool calls | Cost (16 tasks) | What changed before the run |
 |---|---|---|---|---|---|
@@ -68,7 +68,7 @@ The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-
 
 ### Other models (2026-11-08)
 
-`--agent codex` runs the tasks with OpenAI's Codex CLI and `--agent opencode` with OpenCode (any provider). Both were locked down so Zenko was their only way to the web. That was checked first by asking each to fetch example.com without Zenko: Codex had no shell, browser, computer use, apps or web search (its code-mode JavaScript has no `fetch`, `XMLHttpRequest`, `WebSocket` or `require`), and OpenCode ran with a temporary config denying bash, edit, webfetch, websearch, task and skill. Your own `config.toml` / `opencode.json` aren't loaded or changed.
+`--agent codex` runs the tasks with OpenAI's Codex CLI and `--agent opencode` with OpenCode (any provider). Both were locked down so Foxwright was their only way to the web. That was checked first by asking each to fetch example.com without Foxwright: Codex had no shell, browser, computer use, apps or web search (its code-mode JavaScript has no `fetch`, `XMLHttpRequest`, `WebSocket` or `require`), and OpenCode ran with a temporary config denying bash, edit, webfetch, websearch, task and skill. Your own `config.toml` / `opencode.json` aren't loaded or changed.
 
 | Agent and model | Passed | Median time | Median tool calls | Tool errors | Tokens | Cost |
 |---|---|---|---|---|---|---|
@@ -79,10 +79,10 @@ The per-task reports are in `docs/agent-eval-synthetic.md` and `docs/agent-eval-
 
 What the transcripts showed:
 
-- **A loose check.** The Quill playground now runs its editor in a cross-origin frame, so the `rich-editor` check's page script couldn't read it and fell back to "the words appear somewhere", never checking the bold. DeepSeek v4-pro's first run passed that way while its editor showed an empty `strong` (bold toggled with nothing selected). The fallback now reads the editor paragraph from the outline and requires exactly "Zenko" bold, then "was here." (`quillOutlineOk` in `test/agent-tasks.mjs`). Claude's and GPT's transcripts show the correct result, and a rerun of that task with the fixed check passed for all four models.
-- **A Zenko bug: Cmd/Alt/Ctrl+arrow do nothing in synthetic mode.** DeepSeek pressed `cmd+left` to get to the start of the line before selecting "Zenko". In synthetic mode `cmd+left`, `alt+left` and `ctrl+left` leave the caret where it was, in contenteditable and text inputs alike (`Home` works). Confirmed with a direct test on `basic.html`. Trusted mode isn't affected (Firefox handles the keys). Fixed in 0.4.2.
+- **A loose check.** The Quill playground now runs its editor in a cross-origin frame, so the `rich-editor` check's page script couldn't read it and fell back to "the words appear somewhere", never checking the bold. DeepSeek v4-pro's first run passed that way while its editor showed an empty `strong` (bold toggled with nothing selected). The fallback now reads the editor paragraph from the outline and requires exactly "Foxwright" bold, then "was here." (`quillOutlineOk` in `test/agent-tasks.mjs`). Claude's and GPT's transcripts show the correct result, and a rerun of that task with the fixed check passed for all four models.
+- **A Foxwright bug: Cmd/Alt/Ctrl+arrow do nothing in synthetic mode.** DeepSeek pressed `cmd+left` to get to the start of the line before selecting "Foxwright". In synthetic mode `cmd+left`, `alt+left` and `ctrl+left` leave the caret where it was, in contenteditable and text inputs alike (`Home` works). Confirmed with a direct test on `basic.html`. Trusted mode isn't affected (Firefox handles the keys). Fixed in 0.4.2.
 - **javascript_tool used only to look.** Both DeepSeek models called `javascript_tool` (full build) on the canvas and editor tasks, but only to measure the canvas or list iframes; the drawing and the bold were done with clicks and keys.
-- **Codex needs its approval switch.** Headless Codex refuses MCP tool calls unless the server is pre-approved (`default_tools_approval_mode="approve"`); Zenko's own permission windows are unaffected.
+- **Codex needs its approval switch.** Headless Codex refuses MCP tool calls unless the server is pre-approved (`default_tools_approval_mode="approve"`); Foxwright's own permission windows are unaffected.
 
 
 **Since 0.3.0** the checks are stricter and there's a 17th, local task (`signup-wizard`: validation errors, three steps, a code that depends on every answer). The full run on 2026-11-08 passed all 17 in both modes. The cost per run went from about $1.57 to about $4 with similar token counts; that run used Claude Opus 5.5, and the earlier runs didn't record their model, so the difference is probably the model's price. Not yet run: `--ask` (permission prompts answered by a scripted user) and `--repeat`.
@@ -111,26 +111,26 @@ macOS 26.5.1 on Apple Silicon, Firefox 155.0.1 (a throwaway copy made by `script
 | TodoMVC (React) | add 3 todos, complete one, filter |
 | selenium.dev web form | text, password, textarea, select, checkbox, range → submit |
 | Wikipedia, Hacker News, gov.uk, YouTube, Amazon, Reddit, BBC | search / navigate / read, cookie-consent dismissal |
-| Google | search (Google showed its bot check to the data-center IP; Zenko reported it) |
+| Google | search (Google showed its bot check to the data-center IP; Foxwright reported it) |
 | **Rich editors** | Lexical, Slate, Quill (inside an iframe), ProseMirror, CodeMirror 6, **Monaco** |
 | **Widgets** | MUI Autocomplete, Radix Select, jQuery UI sortable (in an iframe), Excalidraw (draws a 200×150 rectangle on the canvas) |
 | httpbin | classic form POST (the JSON result is explained clearly), GET JSON re-fetched |
 
 ## Bugs found by real-site testing, and fixed
 
-1. **Alerts froze the tab.** A JavaScript `alert()` blocked the page's JavaScript, and Zenko with it, for 30 s. Zenko now replaces the blocking dialogs in agent tabs:
+1. **Alerts froze the tab.** A JavaScript `alert()` blocked the page's JavaScript, and Foxwright with it, for 30 s. Foxwright now replaces the blocking dialogs in agent tabs:
    - `alert` is dismissed, and `confirm`/`prompt` are cancelled.
    - The tool result tells the agent what the page asked.
    - The new `handle_dialog` tool lets the agent accept the next dialog.
-2. **Rich editors lost keystrokes.** Lexical dropped every character after the first, because Zenko typed a whole string within one browser task while the editor updates asynchronously. Zenko now yields to the page between keystrokes. Lexical, Slate, Quill, CodeMirror and ProseMirror all pass.
-3. **Canvas apps crashed on synthetic pointers.** Excalidraw and similar apps call `setPointerCapture`, which Firefox rejects for synthetic pointers ("Invalid pointer id"), aborting the drawing. Zenko now emulates pointer capture during its own gestures.
+2. **Rich editors lost keystrokes.** Lexical dropped every character after the first, because Foxwright typed a whole string within one browser task while the editor updates asynchronously. Foxwright now yields to the page between keystrokes. Lexical, Slate, Quill, CodeMirror and ProseMirror all pass.
+3. **Canvas apps crashed on synthetic pointers.** Excalidraw and similar apps call `setPointerCapture`, which Firefox rejects for synthetic pointers ("Invalid pointer id"), aborting the drawing. Foxwright now emulates pointer capture during its own gestures.
 4. **Popups were cut off.** Menus, listboxes and dialogs rendered at the end of `<body>` (Radix, MUI, DocSearch) were truncated from long outlines. `read_page` now lists open popups first.
 5. **Custom selects hid their value.** A combobox labelled "Food" didn't show its chosen value. The outline now shows it (`combobox "Food": Banana`).
 6. **Drags inside iframes did nothing.** `find` also gave no coordinates for elements in frames. Both are fixed.
 7. **Slider clicks didn't move the thumb.** Clicking a range input now moves it to the click position, like a real click.
 8. **`find` put whole tables and containers ahead of the actual element.** It now ranks exact name matches first and down-weights containers and long text blocks.
-9. **Firefox error and viewer pages were confusing.** They produced "Missing host permission". Zenko now says what's going on: network error, certificate warning, the JSON viewer or the PDF viewer.
-10. **Navigations weren't always reported.** Some page navigations start a moment after a click or Enter, and Zenko now watches for them before reporting.
+9. **Firefox error and viewer pages were confusing.** They produced "Missing host permission". Foxwright now says what's going on: network error, certificate warning, the JSON viewer or the PDF viewer.
+10. **Navigations weren't always reported.** Some page navigations start a moment after a click or Enter, and Foxwright now watches for them before reporting.
 11. **`read_page` was huge on long pages.** Wikipedia's full outline is about 500 KB. The new `visible_only` option returns just what's on screen: 14.7 KB instead of 512 KB on Wikipedia's Red fox article.
 
 ## Performance (0.2.0, local page, 15 rounds)

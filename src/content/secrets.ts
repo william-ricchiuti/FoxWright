@@ -20,7 +20,7 @@ function mark(root: ParentNode) {
 
 /** Remember password fields from now on (called once when the content script loads). */
 export function watchSecrets() {
-  (globalThis as any).__zenkoSecret = isSecretInput; // used by the patched page-outline code
+  (globalThis as any).__foxwrightSecret = isSecretInput; // used by the patched page-outline code
   mark(document);
   try {
     new MutationObserver((records) => {

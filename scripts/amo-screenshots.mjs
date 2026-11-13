@@ -1,5 +1,5 @@
 // Makes the addons.mozilla.org listing screenshots (1280x800 PNGs in docs/amo/) from the real UI:
-// the agent working in a tab, Zenko's permission window, and the toolbar popup.
+// the agent working in a tab, Foxwright's permission window, and the toolbar popup.
 //
 //   FIREFOX=/path/to/firefox node scripts/amo-screenshots.mjs
 //
@@ -16,7 +16,7 @@ import { connectDriver } from '../test/bidi-driver.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'docs', 'amo');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zenko-shots-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'foxwright-shots-'));
 fs.mkdirSync(out, { recursive: true });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const W = 1280, H = 800;
@@ -31,7 +31,7 @@ const shot = async (context, file) => {
 
 const ctx = await h.call('tabs_context_mcp', { createIfEmpty: true });
 const tabId = parseInt(/tabId (\d+)/.exec(ctx.text)[1], 10);
-const url = `http://127.0.0.1:${process.env.ZENKO_P1}/wizard.html`;
+const url = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}/wizard.html`;
 
 // Extension pages can't be screenshotted over WebDriver BiDi, so the permission window and the
 // popup are rendered from their real HTML/CSS/JS with a stubbed `browser` API and sample data.
@@ -97,7 +97,7 @@ const find = async (q) => /\[ref=([^\]]+)\]/.exec((await h.call('find', { tabId,
 await h.call('form_input', { tabId, ref: await find('Username'), value: 'ada_l' });
 await h.call('form_input', { tabId, ref: await find('Email'), value: 'ada@example.com' });
 await h.call('computer', { tabId, action: 'left_click', ref: await find('Password') });
-await h.call('computer', { tabId, action: 'type', text: 'zenko2026!' });
+await h.call('computer', { tabId, action: 'type', text: 'foxwright2026!' });
 await sleep(300);
 await shot(agentCtx, path.join(out, 'screenshot-1-agent-working.png'));
 

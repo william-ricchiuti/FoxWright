@@ -1,5 +1,6 @@
 # Zenko roadmap (formerly Kitsune; post-0.3.0 review)
 
+> Renamed from Zenko to Foxwright in 0.7.0 (2026-11-13); this file keeps the names as written at the time.
 > Renamed from Kitsune to Zenko in 0.6.0 (section G). Earlier sections keep the old name as written at the time.
 
 A full review of 0.3.0 (extension, helper, tests, docs) produced the list below. This file is the

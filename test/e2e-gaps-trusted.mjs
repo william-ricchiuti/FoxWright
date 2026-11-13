@@ -3,16 +3,16 @@
 // real X11 input (xdotool: Alt+Shift+K), and pages report what they received to the fixture server.
 // Each scenario gets a fresh Firefox, because nothing can press Resume without a BiDi session.
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-trusted.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-trusted.mjs
 import { start } from './harness.mjs';
 import { runner, extraServer, x11, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, skip, finish } = runner('e2e-gaps-trusted');
-const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
+const P1 = process.env.FOXWRIGHT_P1, P2 = process.env.FOXWRIGHT_P2;
 const xs = await extraServer(P1, P2);
 const { P3 } = xs;
 const A = `http://a.test:${P3}`;
-console.log('Zenko gap tests: trusted (BiDi) input vs Stop / Alt+Shift+K / the pill / focus');
+console.log('Foxwright gap tests: trusted (BiDi) input vs Stop / Alt+Shift+K / the pill / focus');
 
 /** Latest value a page reported for a beacon key (e.g. len, tabs, bar). */
 function beacon(key, since = 0) {
@@ -61,7 +61,7 @@ if (!x11.available()) {
       const final = Number(await waitBeacon('len', () => false, 1500, since));
       const later = await h.call('read_page', { tabId });
       console.log(`      (Alt+Shift+K at ${at} chars; final ${final} of 3000; result: ${r.isError ? 'error' : 'success'}: ${r.text.slice(0, 100)}; later call paused: ${/paused/i.test(later.text)})`);
-      expect(/paused/i.test(later.text), 'the shortcut did not pause Zenko at all: ' + later.text.slice(0, 80));
+      expect(/paused/i.test(later.text), 'the shortcut did not pause Foxwright at all: ' + later.text.slice(0, 80));
       expect(final < 3000 && r.isError, `typing went on to ${final} of 3000 characters after the person pressed Alt+Shift+K at ${at}, and the agent was told: ${r.isError ? 'error' : 'SUCCESS'} "${r.text.slice(0, 90)}"`);
     } finally {
       await h.stop();
@@ -88,7 +88,7 @@ if (!x11.available()) {
   }, { area: '2-trusted' });
 }
 
-await test('trusted click on a page button under the faded pill reaches the page (and does not pause Zenko)', async () => {
+await test('trusted click on a page button under the faded pill reaches the page (and does not pause Foxwright)', async () => {
   const { h, tabId } = await fresh();
   try {
     const since = Date.now();
@@ -100,8 +100,8 @@ await test('trusted click on a page button under the faded pill reaches the page
     const bar = Number(await waitBeacon('bar', v => Number(v) > 0, 1500, since));
     const later = await h.call('read_page', { tabId });
     const paused = /paused/i.test(later.text);
-    console.log(`      (click result: ${r.text.replace(/\n/g, ' ').slice(0, 120)}; page counted ${bar} click(s); Zenko paused: ${paused})`);
-    expect(bar >= 1 && !paused, `the agent's own trusted click on the page's bottom bar ${paused ? 'PAUSED ZENKO (it hit the invisible Stop pill)' : 'did not pause'}; the page got ${bar} click(s)`);
+    console.log(`      (click result: ${r.text.replace(/\n/g, ' ').slice(0, 120)}; page counted ${bar} click(s); Foxwright paused: ${paused})`);
+    expect(bar >= 1 && !paused, `the agent's own trusted click on the page's bottom bar ${paused ? 'PAUSED FOXWRIGHT (it hit the invisible Stop pill)' : 'did not pause'}; the page got ${bar} click(s)`);
   } finally {
     await h.stop();
   }
@@ -119,8 +119,8 @@ await test('trusted click on a small bottom-centre page button (fully under the 
     const bar = Number(await waitBeacon('bar', v => Number(v) > 0, 1500, since));
     const later = await h.call('read_page', { tabId });
     const paused = /paused/i.test(later.text);
-    console.log(`      (click result: ${r.text.replace(/\n/g, ' ').slice(0, 120)}; page counted ${bar} click(s); Zenko paused: ${paused})`);
-    expect(bar >= 1 && !paused, `the agent's own trusted click on the page's bottom bar ${paused ? 'PAUSED ZENKO (it hit the invisible Stop pill)' : 'did not pause'}; the page got ${bar} click(s)`);
+    console.log(`      (click result: ${r.text.replace(/\n/g, ' ').slice(0, 120)}; page counted ${bar} click(s); Foxwright paused: ${paused})`);
+    expect(bar >= 1 && !paused, `the agent's own trusted click on the page's bottom bar ${paused ? 'PAUSED FOXWRIGHT (it hit the invisible Stop pill)' : 'did not pause'}; the page got ${bar} click(s)`);
   } finally {
     await h.stop();
   }

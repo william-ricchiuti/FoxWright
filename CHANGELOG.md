@@ -1,6 +1,22 @@
 # Changelog
 
-## 0.6.1 (2026-11-13)
+## 0.7.1 (2026-11-13)
+
+**Fix: the helper works with the 0.6 extension again.** Until Firefox updates the add-on to 0.7, the store's extension is still the Zenko 0.6 one, which asks Firefox for a helper named "zenko". The 0.7.0 helper only answered to "foxwright", so a new install didn't connect, and running `npx foxwright-firefox setup` on a working Zenko install disconnected it. `setup` now registers the helper under both names. `uninstall` removes both.
+- `gif_creator` works with a 0.6 extension again (0.7.0 asked it for a check it doesn't have).
+
+## 0.7.0 (2026-11-13)
+
+**Zenko is now Foxwright.** "Zenko" turned out to be shared with a crypto token, a storage project and several other "Zen" browser tools, so the project couldn't be found by its name. What changes for you:
+
+- The helper is now `npx foxwright-firefox setup`. Running it removes the old Zenko (and Kitsune) helper, its `~/.zenko` folder and its Claude Code / Claude Desktop entries, and installs the new one in `~/.foxwright`. Do this once after the extension updates; until then the toolbar fox shows `!`.
+- The tab group is titled "Foxwright". An existing orange "Zenko" group is adopted and renamed.
+- Environment variables are now `FOXWRIGHT_*` (were `ZENKO_*`), and the MCP server entry is named `foxwright`.
+- The add-on's ID is unchanged, so the extension updates in place and keeps your approved sites.
+
+This release also contains the fixes below, which were prepared as 0.6.1 and not published separately.
+
+## 0.6.1 (2026-11-13, released as part of 0.7.0)
 
 Fixes from a round of testing after the store listing went live. Most are in the Stop button and the per-site approval, the two things Zenko promises.
 

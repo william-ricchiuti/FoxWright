@@ -1,8 +1,8 @@
 // Minimal repro: a real alert() that opens while the agent is idle blocks the next tool call.
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a node test/repro-late-alert.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a node test/repro-late-alert.mjs
 import { start } from './harness.mjs';
 import { connectPerson, sleep, refOf, tabIdOf } from './gap-lib.mjs';
-const O = `http://127.0.0.1:${process.env.ZENKO_P1}`;
+const O = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`;
 const h = await start({ testDriver: true, policy: { mode: 'all' } });
 const d = await connectPerson(h.bidiUrl);
 const tabId = tabIdOf((await h.call('tabs_context_mcp', { createIfEmpty: true })).text);

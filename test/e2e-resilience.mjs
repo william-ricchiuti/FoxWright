@@ -11,7 +11,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { start } from './harness.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BASE = `http://127.0.0.1:${process.env.ZENKO_P1}`;
+const BASE = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const results = [];
 async function test(name, fn) {
@@ -29,8 +29,8 @@ const expect = (c, m) => { if (!c) throw new Error(m); };
 const pct = (arr, p) => arr.slice().sort((a, b) => a - b)[Math.min(arr.length - 1, Math.floor(arr.length * p))];
 
 async function newClient() {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/zenko.mjs'), 'mcp'], stderr: 'ignore', env: { ...process.env, ZENKO_HOME: path.join(h.home, '.zenko') } });
-  const client = new Client({ name: 'zenko-resilience', version: '0' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'host/dist/foxwright.mjs'), 'mcp'], stderr: 'ignore', env: { ...process.env, FOXWRIGHT_HOME: path.join(h.home, '.foxwright') } });
+  const client = new Client({ name: 'foxwright-resilience', version: '0' });
   await client.connect(transport);
   const call = async (name, args = {}) => {
     const r = await client.callTool({ name, arguments: args });

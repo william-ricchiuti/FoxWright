@@ -38,7 +38,7 @@ server.on('connection', (ws) => {
   });
 });
 
-process.env.ZENKO_BIDI_URL = `ws://127.0.0.1:${port}/session`;
+process.env.FOXWRIGHT_BIDI_URL = `ws://127.0.0.1:${port}/session`;
 const { Bidi } = await import(path.join(root, 'host', 'src', 'bidi.js'));
 
 let failed = 0;
@@ -48,7 +48,7 @@ const check = (ok, name, detail = '') => {
     failed++;
 };
 
-console.log('Zenko BiDi connection');
+console.log('Foxwright BiDi connection');
 const bidi = new Bidi();
 // The startup probe and the first tool calls, all at the same moment.
 const results = await Promise.all([bidi.available(), bidi.available(), bidi.available()]);

@@ -1,5 +1,5 @@
-// GIF recording of agent sessions (Zenko's equivalent of Claude in Chrome's gif_creator).
-// Frames are the same JPEG screenshots Zenko already takes; they are decoded, scaled,
+// GIF recording of agent sessions (Foxwright's equivalent of Claude in Chrome's gif_creator).
+// Frames are the same JPEG screenshots Foxwright already takes; they are decoded, scaled,
 // marked with the click position, quantized and encoded only on export.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -80,8 +80,8 @@ function drawRing(px, w, h, cx, cy, radius, rgb) {
 }
 
 function defaultDir() {
-  if (process.env.ZENKO_GIF_DIR && fs.existsSync(process.env.ZENKO_GIF_DIR))
-    return process.env.ZENKO_GIF_DIR;
+  if (process.env.FOXWRIGHT_GIF_DIR && fs.existsSync(process.env.FOXWRIGHT_GIF_DIR))
+    return process.env.FOXWRIGHT_GIF_DIR;
   const dl = path.join(os.homedir(), 'Downloads');
   return fs.existsSync(dl) ? dl : process.cwd();
 }
@@ -135,7 +135,7 @@ export async function exportGif(tabId, { filename, width = 800, options = {}, an
   enc.finish();
   const bytes = enc.bytes();
   // Only a file name is honoured (no directories), so an agent can't write GIFs over arbitrary files.
-  const name = path.basename(filename || `zenko-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.gif`).replace(/[^\w.-]/g, '_');
+  const name = path.basename(filename || `foxwright-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.gif`).replace(/[^\w.-]/g, '_');
   let file = path.join(defaultDir(), name.endsWith('.gif') ? name : name + '.gif');
   // 'wx' never follows an existing file or symlink: pick a new name instead of overwriting.
   try {

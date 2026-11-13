@@ -75,7 +75,7 @@ browser.windows.onRemoved.addListener((windowId) => {
   }
 });
 
-/** The user paused Zenko: answer every open question with "deny" and close the windows. */
+/** The user paused Foxwright: answer every open question with "deny" and close the windows. */
 export function denyAllPrompts() {
   for (const [id, e] of [...pending]) {
     if (e.windowId != null)
