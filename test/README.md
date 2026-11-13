@@ -39,7 +39,7 @@ Helpers: `harness.mjs` (fixture servers, Firefox, MCP client, `pageEval`, suite 
 |---|---|
 | `FOXWRIGHT_E2E_BUILD=store\|full\|<folder>` | Which extension build a suite runs against when it doesn't pick one itself (default `full`). A folder is an unpacked extension, e.g. `dist/amo` from `fetch-amo-xpi.mjs`. |
 | `FOXWRIGHT_E2E_TRUSTED=1` | Trusted (WebDriver BiDi) input. The harness waits until Firefox's BiDi endpoint opens sessions promptly before the first test (`FOXWRIGHT_E2E_TRUSTED_WAIT_SEC`, default 90) and, if the MCP server's first connection still lost a race with a busy Firefox, waits for it to switch to trusted input instead of letting the run test synthetic input; it fails with a clear message if trusted input never comes up. |
-| `FOXWRIGHT_E2E_SUITE_TIMEOUT_MIN` | Give up on a whole suite after this many minutes (default 25), printing the current test, the last tool call and whether it was answered, and the tail of the helper log, and exit with code 124. Also written to `test/results/<suite>-timeout.txt`. |
+| `FOXWRIGHT_E2E_SUITE_TIMEOUT_MIN` | Give up on a whole suite after this many minutes (default 25; 120 for `realsites.mjs` and `agent-eval.mjs`), printing the current test, the last tool call and whether it was answered, and the tail of the helper log, and exit with code 124. Also written to `test/results/<suite>-timeout.txt`. |
 | `FOXWRIGHT_E2E_PAGE_EVAL=bidi\|beacon` | Force how `pageEval` reads page state (see below). |
 
 ### Reading page state without `javascript_tool` (`pageEval`)

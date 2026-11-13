@@ -251,7 +251,9 @@ export function setCurrentTest(name) {
 function armWatchdog() {
   if (watch.timer)
     return;
-  const min = Number(process.env.FOXWRIGHT_E2E_SUITE_TIMEOUT_MIN || 25);
+  // The real-site and real-agent runs are long by design (17 agent tasks can take an hour).
+  const long = /(agent-eval|realsites)\.mjs$/.test(process.argv[1] || '');
+  const min = Number(process.env.FOXWRIGHT_E2E_SUITE_TIMEOUT_MIN || (long ? 120 : 25));
   watch.timer = setTimeout(onSuiteTimeout, min * 60000);
   watch.timer.unref();
   watch.minutes = min;
