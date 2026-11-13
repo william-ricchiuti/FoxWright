@@ -3,6 +3,7 @@ import { takeSnapshot, findElements, setRefPrefix, getRefPrefix, resolveRef } fr
 import { clickConsequence, keysConsequence, typeConsequence, sameConsequence } from './consequence';
 import * as input from './input';
 import { pageText } from './text';
+import { waitCheck, uiAfter } from './wait';
 import { showActivity, hideActivity, dodgePill } from './overlay';
 import { watchSecrets } from './secrets';
 
@@ -168,8 +169,8 @@ const handlers: Record<string, (args: any) => any> = {
       r.conseq = clickConsequence(input.elementAt(a.x, a.y), hereOrigin());
     return r;
   },
-  focusInfo: (a) => {
-    const r = input.focusInfo();
+  focusInfo: async (a) => {
+    const r = await input.focusInfo(a);
     if (r.forward)
       return r;
     const el = input.deepActiveElement();
@@ -178,6 +179,8 @@ const handlers: Record<string, (args: any) => any> = {
       r.conseq = a.guard.action === 'type' ? typeConsequence(a.guard.text, el, hereOrigin()) : keysConsequence(a.guard.text, a.guard.repeat, el, hereOrigin());
     return r;
   },
+  waitCheck: (a) => waitCheck(a),
+  uiAfter: () => uiAfter(),
   frameOffset: (a) => frameOffset(a),
   frameRects: (a) => frameRects(a),
   dodgePill: (a) => dodgePill(a.x, a.y),

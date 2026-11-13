@@ -1,0 +1,13 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Foxwright test: one giant pre</title></head>
+<body><pre id="log"></pre>
+<script>
+// About 1.6 million characters of log, like a plain-text file or a build log shown in a <pre>.
+const lines = [];
+for (let i = 0; i < 30000; i++)
+  lines.push(`${String(i).padStart(5, '0')} INFO  worker-${i % 7} processed batch ${i} in ${(i * 37) % 997} ms`);
+lines[12345] = '12345 ERROR worker-3 checksum mismatch in batch 12345';
+lines[100] = '00100 WARN  config:\n    indented:   value with   spaces\n\n\n    after three blank lines';
+lines.push('LAST LINE OF THE LOG');
+document.getElementById('log').textContent = lines.join('\n');
+</script></body></html>

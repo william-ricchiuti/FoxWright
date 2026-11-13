@@ -23,8 +23,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * entry gets removed here once the limit is fixed. One entry per limit; delete it when fixed.
  */
 export const KNOWN_LIMITS = [
-  // javascript_tool has no timeout of its own for code that never finishes. Delete when fixed.
-  { suite: 'e2e-gaps-fuzz', test: /^an endless javascript_tool loop/, error: /javascript_tool never returns for an endless loop/, why: 'javascript_tool has no timeout for code that never finishes' },
   // The page's own GET form puts the password in its URL; Foxwright can only hide it afterwards.
   { suite: 'e2e-gaps-secrets', test: /^submitting a login form that uses GET/, error: /the password \(sent in the URL by the page's own GET form\) appears in/, why: 'a GET login form puts the password in the page URL, which tab/network output shows' },
 ];

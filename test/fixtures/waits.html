@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Foxwright test: waiting and popups</title>
+<style>
+body{font-family:sans-serif;margin:20px}
+[role=menu]{border:1px solid #999;padding:4px;width:160px}
+dialog{border:1px solid #333}
+#zero{height:0;overflow:hidden}
+.lazy{position:fixed;top:60px;left:60px;background:#fff;border:2px solid #333;padding:20px}
+</style>
+</head><body>
+<h1>Waiting</h1>
+
+<!-- Like react.dev's search: the dialog's code loads on demand, ~800 ms after the click, then its input takes focus. -->
+<button id="open-search" onclick="setTimeout(() => {
+  const d = document.createElement('div');
+  d.className = 'lazy'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Search docs'); d.id = 'search-dialog';
+  d.innerHTML = '<input id=q type=search placeholder=&quot;Search docs&quot; aria-label=&quot;Search docs&quot;> <button id=close-search>Close</button>';
+  document.body.append(d);
+  d.querySelector('#q').addEventListener('input', e => document.getElementById('typed').textContent = 'typed: ' + e.target.value);
+  d.querySelector('#close-search').onclick = () => setTimeout(() => d.remove(), 400);
+  d.querySelector('#q').focus();
+}, 800)">Search</button>
+<p id="typed">typed: (nothing)</p>
+
+<!-- A menu button: the menu renders 300 ms after the click. -->
+<button id="menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="menu" onclick="const b = this; setTimeout(() => {
+  const open = b.getAttribute('aria-expanded') !== 'true';
+  b.setAttribute('aria-expanded', String(open));
+  document.getElementById('menu').hidden = !open;
+}, 300)">Actions</button>
+<div id="menu" role="menu" hidden><div role="menuitem" tabindex="-1">Rename</div><div role="menuitem" tabindex="-1">Duplicate</div></div>
+
+<!-- A dialog that opens at once and focuses its first field. -->
+<button id="open-dialog" onclick="document.getElementById('dlg').showModal(); document.getElementById('dlg-name').focus()">Edit profile</button>
+<dialog id="dlg" aria-label="Edit profile"><label>Display name <input id="dlg-name"></label> <button onclick="document.getElementById('dlg').close()">Done</button></dialog>
+
+<!-- Data that loads with fetch after a delay, with a spinner meanwhile. -->
+<button id="load" onclick="
+  document.getElementById('status').textContent = 'Loading…';
+  fetch('data.json?delay=900').then(r => r.json()).then(() => setTimeout(() => { document.getElementById('status').textContent = 'Loaded 3 items'; }, 50));
+">Load data</button>
+<p id="status">Nothing loaded</p>
+
+<button id="counter" onclick="this.textContent = 'Count ' + (++window.n)">Count 0</button>
+<script>window.n = 0;</script>
+
+<h2>Collapsed sections</h2>
+<details id="faq"><summary>Pricing details</summary><p>Plans start at $5.</p><a href="#pricing">Hidden pricing link</a></details>
+<button id="adv" aria-expanded="false" aria-controls="adv-panel" onclick="const p = document.getElementById('adv-panel'); p.hidden = !p.hidden; this.setAttribute('aria-expanded', String(!p.hidden))">Advanced settings</button>
+<div id="adv-panel" hidden><button>Delete account</button></div>
+<div><button aria-expanded="false" onclick="document.getElementById('zero').style.height = 'auto'; this.setAttribute('aria-expanded', 'true')">More links</button>
+<div id="zero"><a href="#z">Zero height link</a></div></div>
+
+<h2>Multi-select</h2>
+<label>Colors <select id="colors" multiple size="4" onchange="document.getElementById('picked').textContent = 'picked: ' + Array.from(this.selectedOptions).map(o => o.value).join(',')">
+  <option value="r">Red</option><option value="g">Green</option><option value="b">Blue</option><option value="y" selected>Yellow</option>
+</select></label>
+<p id="picked">picked: y</p>
+
+<h2>Plain editor</h2>
+<div id="plain-ed" contenteditable="true" aria-label="Notes" style="border:1px solid #999;min-height:40px"><p>Old <b>notes</b></p></div>
+
+<h2>Typing</h2>
+<label>Message <input id="msg" oninput="window.inputs = (window.inputs || 0) + 1"></label>
+</body></html>

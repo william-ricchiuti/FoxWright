@@ -154,7 +154,7 @@ function injectProbe(html) {
 }
 
 function serve(port) {
-  const types = { html: 'text/html', js: 'text/javascript', json: 'application/json', css: 'text/css' };
+  const types = { html: 'text/html', js: 'text/javascript', json: 'application/json', css: 'text/css', pdf: 'application/pdf' };
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (u.pathname === `${PROBE_PATH}.js`) {
