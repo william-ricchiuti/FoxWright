@@ -19,18 +19,20 @@ onRequest(async (tool, args) => {
   const fn = tools[tool];
   if (!fn || (!PUBLIC_TOOLS.has(tool) && !tool.startsWith('_')))
     throw new Error(`Unknown tool ${tool}`);
-  const logged = !tool.startsWith('_');
+  // The second step of an upload (after the user approved it) is what the user knows as file_upload.
+  const logTool = tool === '_upload_send' ? 'file_upload' : tool;
+  const logged = !logTool.startsWith('_');
   // Where the action happens, for the activity log (origin only), read before the action runs.
-  const where = logged && logEnabled() ? siteForLog(tool, args) : null;
+  const where = logged && logEnabled() ? siteForLog(logTool, args) : null;
   if (state.paused && tool !== '_status' && tool !== '_pair_cancel') {
     if (logged)
-      logAction(tool, args, where, 'paused');
+      logAction(logTool, args, where, 'paused');
     throw new Error(PAUSED_MSG);
   }
   if (logged) {
     noteAgentActivity(args?.tabId);
     const own = cleanSummary(args?.action_summary);
-    noteAction(args?.tabId, own || describeAction(tool, args), !!own);
+    noteAction(args?.tabId, own || describeAction(logTool, args), !!own);
   }
   let result;
   try {
@@ -44,7 +46,7 @@ onRequest(async (tool, args) => {
     });
   } catch (e) {
     if (logged)
-      logAction(tool, args, where, state.paused ? 'paused' : resultOfError(e));
+      logAction(logTool, args, where, state.paused ? 'paused' : resultOfError(e));
     throw friendlyTabError(e, args?.tabId);
   } finally {
     if (!tool.startsWith('_'))
@@ -52,11 +54,11 @@ onRequest(async (tool, args) => {
   }
   // Stop pressed while this command ran: don't report success for an interrupted action.
   if (state.paused && !tool.startsWith('_')) {
-    logAction(tool, args, where, 'paused');
+    logAction(logTool, args, where, 'paused');
     throw new Error(PAUSED_MSG);
   }
   if (logged)
-    logAction(tool, args, where, 'allowed');
+    logAction(logTool, args, where, 'allowed');
   return result;
 });
 
