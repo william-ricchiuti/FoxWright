@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Foxwright test: consequential actions</title></head><body style="font-family:sans-serif">
+<h1>Consequential actions</h1>
+<form id="f" onsubmit="event.preventDefault(); document.getElementById('log').textContent += ' SUBMITTED';">
+  <label>Search <input id="q" name="q"></label>
+  <button id="go">Search</button>
+</form>
+<p><button id="send" type="button" onclick="document.getElementById('log').textContent += ' SENT'">Send message</button>
+<button id="plain" type="button" onclick="document.getElementById('log').textContent += ' DETAILS'">Show details</button>
+<button id="tricky" type="button" aria-label="Delete&#x202E;&#x200B; everything&#x2028;now" onclick="document.getElementById('log').textContent += ' DELETED'">X</button></p>
+<p><label>Chat <textarea id="chat"></textarea></label></p>
+<p>Log:<span id="log"></span></p>
+<p>Clicks: <span id="clicks">0</span></p>
+<div style="height:2000px"></div>
+<p id="far">Far down the page</p>
+<script>addEventListener('click', () => { document.getElementById('clicks').textContent = String(Number(document.getElementById('clicks').textContent) + 1); }, true);</script>
+</body></html>

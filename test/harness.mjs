@@ -82,7 +82,7 @@ function waitForSocket(p, ms = 30000) {
   });
 }
 
-export function writePolicies(firefoxBin, policy) {
+export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
   // Enterprise policies live next to the binary on Linux/Windows, in Contents/Resources on macOS.
   const mac = /\.app\/Contents\/MacOS\//.test(firefoxBin);
   const dist = mac ? path.join(path.dirname(firefoxBin), '..', 'Resources', 'distribution') : path.join(path.dirname(firefoxBin), 'distribution');
@@ -97,7 +97,7 @@ export function writePolicies(firefoxBin, policy) {
   const ext = {};
   for (const id of ['kitsune@william-ricchiuti.com', 'kitsune-full@william-ricchiuti.com'])
     ext[id] = policy;
-  fs.writeFileSync(file, JSON.stringify({ policies: { '3rdparty': { Extensions: ext } } }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ policies: { ...extraPolicies, '3rdparty': { Extensions: ext } } }, null, 2));
 }
 
 /**
@@ -114,12 +114,14 @@ export function writePolicies(firefoxBin, policy) {
  * alongside: a harness from an earlier start(). Starts a second Firefox (its own temporary profile)
  * that shares that one's Foxwright folder and fixture servers, like a second Firefox profile on the
  * same computer. Resolves once the second browser has registered in ~/.foxwright/browsers.
+ *
+ * extraPolicies: other Firefox enterprise policies to set, e.g. { ExtensionSettings: ... }.
  */
-export async function start({ build = 'full', trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null } = {}) {
+export async function start({ build = 'full', trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null, extraPolicies = {} } = {}) {
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
     throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
-  writePolicies(firefox, policy);
+  writePolicies(firefox, policy, extraPolicies);
 
   const isolate = !alongside && process.platform === 'linux' && process.env.FOXWRIGHT_E2E_ISOLATE !== '0';
   let home = alongside ? alongside.home : os.homedir();
