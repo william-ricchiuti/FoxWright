@@ -65,10 +65,12 @@ function textFast(needle: string): boolean {
   if (norm(body.innerText || '').includes(needle))
     return true;
   const els = document.querySelectorAll('input:not([type=hidden]), textarea, [aria-label], [placeholder], [title], img[alt]');
+  const focused = deepActiveElement();
   for (let i = 0; i < els.length && i < 5000; i++) {
     const el = els[i];
     const vals = [el.getAttribute('aria-label'), el.getAttribute('placeholder'), el.getAttribute('title'), el.getAttribute('alt')];
-    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !isSecret(el))
+    // Field values count (e.g. a filled-in result), except the field being typed in.
+    if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !isSecret(el) && el !== focused)
       vals.push(el.value);
     if (vals.some(v => v && norm(v).includes(needle)) && (el as any).checkVisibility?.() !== false)
       return true;
@@ -108,12 +110,40 @@ function anyNode(nodes: any[], pred: (n: any) => boolean): boolean {
   return false;
 }
 
+const FIELD_ROLES = new Set(['textbox', 'searchbox', 'combobox', 'spinbutton']);
+
+/** Text in the outline, leaving out what is typed in the focused field (it isn't news from the page). */
+function outlineHasText(nodes: any[], needle: string): boolean {
+  for (const n of nodes) {
+    if (typeof n === 'string') {
+      if (norm(n).includes(needle))
+        return true;
+      continue;
+    }
+    const typedHere = n.active && FIELD_ROLES.has(n.role);
+    if ([n.name, typedHere ? '' : n.text, n.placeholder].some(v => typeof v === 'string' && norm(v).includes(needle)))
+      return true;
+    if (n.children && !typedHere && outlineHasText(n.children, needle))
+      return true;
+  }
+  return false;
+}
+
 function textPresent(needle: string): boolean {
-  return textFast(needle) || outlineCheck(`t:${needle}`, nodes => anyNode(nodes, n => typeof n === 'string' ? norm(n).includes(needle) : [n.name, n.text, n.placeholder].some(v => typeof v === 'string' && norm(v).includes(needle))));
+  return textFast(needle) || outlineCheck(`t:${needle}`, nodes => outlineHasText(nodes, needle));
+}
+
+/** All text of an outline node: its name, or for unnamed nodes (an option wrapping a link) its content. */
+function nodeText(n: any): string {
+  if (typeof n === 'string')
+    return n;
+  if (n.name)
+    return n.name;
+  return [n.text || '', ...(n.children || []).map(nodeText)].join(' ');
 }
 
 function rolePresent(role: string, name: string): boolean {
-  return outlineCheck(`r:${role}:${name}`, nodes => anyNode(nodes, n => typeof n !== 'string' && n.role === role && (!name || norm(String(n.name || n.text || '')).includes(name))));
+  return outlineCheck(`r:${role}:${name}`, nodes => anyNode(nodes, n => typeof n !== 'string' && n.role === role && (!name || norm(nodeText(n)).includes(name))));
 }
 
 function refGone(ref: string): boolean {
