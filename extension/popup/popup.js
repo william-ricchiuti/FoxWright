@@ -45,11 +45,18 @@ for (const r of document.querySelectorAll('input[name=mode]')) {
 
   const ul = $('sites');
   ul.textContent = '';
+  // Each approval with its kind; "read only" and "until HH:MM" tags come from the permission levels.
+  const ro = (list, o) => ((list || []).includes(o) ? ' · read only' : '');
+  const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const entries = [
     ...(s.managedAllowed || []).map(o => [o, 'by policy']),
-    ...s.allowed.map(o => [o, 'always']),
-    ...s.sessionAllowed.filter(o => !s.allowed.includes(o)).map(o => [o, 'this session']),
+    ...(s.managedReadOnly || []).map(o => [o, 'by policy · read only']),
+    ...s.allowed.map(o => [o, 'always' + ro(s.readOnly, o)]),
+    ...s.sessionAllowed.filter(o => !s.allowed.includes(o)).map(o => [o, 'this session' + ro(s.sessionReadOnly, o)]),
+    ...(s.timed || []).filter(t => !s.allowed.includes(t.origin)).map(t => [t.origin, `until ${hhmm(t.until)}${t.level === 'read' ? ' · read only' : ''}`]),
   ];
+  $('confirm-actions').checked = !!s.confirmActions;
+  $('confirm-actions').disabled = !!s.managedConfirm;
   if (!entries.length) {
     const li = document.createElement('li');
     li.className = 'empty';
@@ -64,7 +71,7 @@ for (const r of document.querySelectorAll('input[name=mode]')) {
     em.textContent = kind;
     span.appendChild(em);
     li.append(span);
-    if (kind !== 'by policy') {
+    if (!kind.startsWith('by policy')) {
       const x = document.createElement('button');
       x.className = 'x';
       x.textContent = '✕';
@@ -86,6 +93,7 @@ $('pause').addEventListener('click', () => act({ kind: 'pause' }));
 $('retry').addEventListener('click', () => act({ kind: 'reconnect' }));
 for (const r of document.querySelectorAll('input[name=mode]'))
   r.addEventListener('change', () => act({ kind: 'setMode', mode: r.value }));
+$('confirm-actions').addEventListener('change', () => act({ kind: 'setConfirmActions', on: $('confirm-actions').checked }));
 
 act({ kind: 'status', initial: true });
 setInterval(() => act({ kind: 'status' }), 1500);

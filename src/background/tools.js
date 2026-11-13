@@ -1,8 +1,8 @@
 // Tool implementations. Tool names and arguments mirror Claude in Chrome's so
 // agents (and skills written for Chrome) work unchanged.
 /* global browser */
-import { state, publicStatus } from './state.js';
-import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks } from './tabs.js';
+import { state, publicStatus, cleanSummary } from './state.js';
+import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks, ensureFrameLevel, isReadingKeys, hostAccessRevoked, hostAccessError } from './tabs.js';
 import { askUser, cancelPairPrompts } from './prompt.js';
 import { netLog } from './netlog.js';
 
@@ -37,8 +37,11 @@ async function capture(tab, opts) {
   try {
     return await browser.tabs.captureTab(tab.id, opts);
   } catch (e) {
-    if (/Missing host permission/i.test(String(e?.message)))
+    if (/Missing host permission/i.test(String(e?.message))) {
+      if (await hostAccessRevoked(tab.url))
+        throw hostAccessError(tab.url);
       throw new Error(`Can't screenshot tab ${tab.id}: it is showing a Firefox error or internal page${tab.title ? ` ("${tab.title}")` : ''}.`);
+    }
     // Background tabs that Firefox hasn't rendered can't be captured; bring it forward.
     await browser.tabs.update(tab.id, { active: true });
     await sleep(250);
@@ -56,10 +59,10 @@ async function unapprovedFrameRects(tab) {
   const frames = ((await browser.webNavigation.getAllFrames({ tabId: tab.id })) || []).filter(f => f.frameId !== 0);
   if (!frames.length)
     return { rects: [], origins: [] };
-  const hidden = new Map(); // frameId -> origin
+  const hidden = new Map(); // frameId -> origin (null: couldn't tell which site, so hidden too)
   for (const f of frames) {
     const o = await frameOriginOf(tab.id, f.frameId).catch(() => null);
-    if (o && !isAllowed(o))
+    if (!o || !isAllowed(o))
       hidden.set(f.frameId, o);
   }
   if (!hidden.size)
@@ -84,14 +87,17 @@ async function unapprovedFrameRects(tab) {
     const found = await sendContent(tab.id, parent, 'frameRects', { frameIds: ids }, 5000);
     for (const id of ids) {
       const r = found?.[id];
+      // A frame of unknown origin that isn't in its parent's document any more isn't on screen.
+      if (!r && hidden.get(id) === null && base)
+        continue;
       // Can't tell where an unapproved frame is: refuse rather than risk showing it.
       if (!r || !base)
-        throw new Error(`Can't take a screenshot of tab ${tab.id} right now: it embeds a frame from ${hidden.get(id)}, which the user hasn't approved, and Foxwright couldn't work out where that frame is on the page. Use read_page instead.`);
+        throw new Error(`Can't take a screenshot of tab ${tab.id} right now: it embeds a frame from ${hidden.get(id) || 'an unknown site'}, which the user hasn't approved, and Foxwright couldn't work out where that frame is on the page. Use read_page instead.`);
       if (r.w > 0 && r.h > 0)
         rects.push({ x: base.x + r.x, y: base.y + r.y, w: r.w, h: r.h });
     }
   }
-  return { rects, origins: [...new Set(hidden.values())] };
+  return { rects, origins: [...new Set([...hidden.values()].map(o => o || 'unknown sites'))] };
 }
 
 /** Grey out rectangles (image pixels) in a captured image. */
@@ -351,9 +357,10 @@ function normalizeUrl(url) {
   return (local ? 'http://' : 'https://') + u;
 }
 
-async function tabForPageTool(args) {
+/** need: 'read' for tools that only look, 'full' for tools that change the page (see tabs.js levelOf). */
+async function tabForPageTool(args, need = 'read') {
   const tab = await requireTab(args.tabId);
-  await ensurePermission(tab);
+  await ensurePermission(tab, need);
   if (checkAccessible(tab) === 'blank')
     return tab;
   await ensureContent(tab.id, 0);
@@ -497,6 +504,43 @@ function runUserCode(code, expectOrigin) {
   if (!fn)
     return Promise.resolve({ ok: false, error: String(lastErr) + (/Content Security Policy|call to Function\(\)|eval/i.test(String(lastErr)) ? '\nThis page\'s Content-Security-Policy forbids evaluating code strings, so javascript_tool cannot run here. Use read_page / get_page_text / computer instead.' : '') });
   return Promise.resolve().then(() => fn()).then(v => ({ ok: true, value: ser(v) }), e => ({ ok: false, error: e && typeof e === 'object' && 'message' in e ? `${e.name || 'Error'}: ${e.message}${e.stack ? '\n' + String(e.stack).split('\n').slice(0, 3).join('\n') : ''}`.slice(0, 3000) : String(e) }));
+}
+
+// ---------- confirm before consequential actions (opt-in) ----------
+
+const CONFIRM_CLICKS = new Set(['left_click', 'double_click', 'triple_click']);
+
+function conseqText(c) {
+  return `${c.role || 'element'} "${String(c.name || '').slice(0, 80)}", which ${c.reason}`;
+}
+
+/**
+ * Ask the person to confirm an action on an element the content script found consequential (a form
+ * submission, or a button/link named "Send", "Buy", "Delete"...). The element's role and name come
+ * from the page, the summary from the agent: the window labels both as such.
+ */
+async function confirmAction(tab, c, summary) {
+  const a = await askUser({ type: 'action', origin: c.origin, tabTitle: tab.title, element: { role: c.role, name: c.name, reason: c.reason }, summary: cleanSummary(summary) });
+  if (a === 'once')
+    return;
+  if (a === 'timeout')
+    throw new Error(`Waiting for the user to confirm this action on ${c.origin} (${conseqText(c)}) timed out. Ask the user to answer the Foxwright window, then try again.`);
+  throw new Error(`The user did not allow this action on ${c.origin}: ${conseqText(c)}. Foxwright asks before consequential actions because the user turned that on. Do not retry it unless the user asks you to.`);
+}
+
+/** sendContent for click/type/key, asking the person first when the target is consequential. */
+async function sendGuarded(tab, frameId, cmd, args, summary) {
+  if (!state.confirmActions)
+    return sendContent(tab.id, frameId, cmd, args);
+  let r = await sendContent(tab.id, frameId, cmd, { ...args, guard: true });
+  if (r?.needsConfirm) {
+    const c = r.needsConfirm;
+    await confirmAction(tab, c, summary);
+    r = await sendContent(tab.id, frameId, cmd, { ...args, guard: true, approved: c });
+    if (r?.needsConfirm)
+      throw new Error(`The page changed after the user confirmed the action (now: ${conseqText(r.needsConfirm)}), so Foxwright didn't do it. Check the page and try again.`);
+  }
+  return r;
 }
 
 // ---------- tools ----------
@@ -650,7 +694,7 @@ export const tools = {
   },
 
   async form_input(args) {
-    const tab = await tabForPageTool(args);
+    const tab = await tabForPageTool(args, 'full');
     const frameId = frameForRef(tab.id, args.ref);
     const r = await sendContent(tab.id, frameId, 'formInput', { ref: args.ref, value: args.value });
     return text([fmtResult('Set', r), ...await dialogNotes(tab.id)].join('\n'));
@@ -665,7 +709,15 @@ export const tools = {
         throw e;
       // Firefox's JSON viewer hides the document from extensions; fetch the JSON again (GET).
       const t = await browser.tabs.get(args.tabId);
-      const r = await fetch(t.url, { credentials: 'include' });
+      const viewerNote = e.message.replace(/ get_page_text can re-fetch it\./, '');
+      // The background page's fetch uses the default cookie jar: for a tab in a container (or a
+      // private window) it would read the JSON as a different identity. Don't.
+      if (t.cookieStoreId && t.cookieStoreId !== 'firefox-default')
+        throw new Error(`${viewerNote}\nFoxwright won't re-fetch it: the tab is in a container, and a re-fetch would use the default cookies instead of the container's. Take a screenshot to see what's on screen, or ask the user to open it in a normal tab.`);
+      // Never follow a redirect: it could lead to a site the user hasn't approved, with their cookies.
+      const r = await fetch(t.url, { credentials: 'include', redirect: 'manual' });
+      if (r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400))
+        throw new Error(`${viewerNote}\nThe address now redirects, and Foxwright doesn't follow redirects when re-fetching (they could lead to a site the user hasn't approved). Navigate the tab to the final address and try again.`);
       let body = await r.text();
       try {
         body = JSON.stringify(JSON.parse(body), null, 2);
@@ -708,7 +760,9 @@ export const tools = {
       await sleep(secs * 1000);
       return text(`Waited ${secs}s.`);
     }
-    await ensurePermission(tab);
+    // Looking, scrolling, hovering and reading keys need read access; anything else full access.
+    const reading = ['screenshot', 'zoom', 'scroll', 'scroll_to', 'hover'].includes(action) || (action === 'key' && isReadingKeys(args.text));
+    await ensurePermission(tab, reading ? 'read' : 'full');
     const blank = checkAccessible(tab) === 'blank';
     if (!blank) {
       await ensureContent(tab.id, 0);
@@ -737,7 +791,8 @@ export const tools = {
           throw new Error(`${action} needs coordinate or ref.`);
         const button = action === 'right_click' ? 'right' : 'left';
         const clickCount = action === 'double_click' ? 2 : action === 'triple_click' ? 3 : 1;
-        r = await sendContent(tab.id, refFrame, 'click', { ref: args.ref, x: pt?.x, y: pt?.y, button, clickCount, modifiers: args.modifiers });
+        const clickArgs = { ref: args.ref, x: pt?.x, y: pt?.y, button, clickCount, modifiers: args.modifiers };
+        r = CONFIRM_CLICKS.has(action) ? await sendGuarded(tab, refFrame, 'click', clickArgs, args.action_summary) : await sendContent(tab.id, refFrame, 'click', clickArgs);
         verb = { left_click: 'Clicked', right_click: 'Right-clicked', double_click: 'Double-clicked', triple_click: 'Triple-clicked' }[action];
         break;
       }
@@ -750,7 +805,7 @@ export const tools = {
       case 'type':
         if (typeof args.text !== 'string')
           throw new Error('type needs text.');
-        r = await sendContent(tab.id, 0, 'type', { text: args.text });
+        r = await sendGuarded(tab, 0, 'type', { text: args.text }, args.action_summary);
         verb = `Typed ${args.text.length} character${args.text.length === 1 ? '' : 's'} into`;
         r.target = r.focused;
         break;
@@ -759,7 +814,7 @@ export const tools = {
           throw new Error('key needs text, e.g. "Enter" or "ctrl+a".');
         if (/^(cmd|ctrl|meta)\+(=|-|\+|0)$/i.test(args.text.trim()))
           throw new Error('Page zoom shortcuts are not supported; use the zoom action to magnify a region instead.');
-        r = await sendContent(tab.id, 0, 'key', { text: args.text, repeat: args.repeat });
+        r = isReadingKeys(args.text) ? await sendContent(tab.id, 0, 'key', { text: args.text, repeat: args.repeat }) : await sendGuarded(tab, 0, 'key', { text: args.text, repeat: args.repeat }, args.action_summary);
         verb = `Pressed ${args.text}${args.repeat > 1 ? ` x${args.repeat}` : ''}; focus on`;
         r.target = r.focused;
         break;
@@ -794,12 +849,13 @@ export const tools = {
   async javascript_tool(args) {
     // eslint-disable-next-line no-undef
     if (__FOXWRIGHT_FULL__) {
-      const tab = await tabForPageTool(args);
+      const tab = await tabForPageTool(args, 'full');
       if (typeof args.text !== 'string' || !args.text.trim())
         throw new Error('text (the JavaScript to run) is required.');
       const expectOrigin = await frameOriginOf(tab.id, 0).catch(() => null);
-      if (expectOrigin && !isAllowed(expectOrigin))
-        throw new Error(`Foxwright is not allowed to access ${expectOrigin}.`);
+      if (!expectOrigin)
+        throw new Error(`Foxwright can't tell which site tab ${tab.id} is showing right now, so it won't run code there. Try again in a moment.`);
+      await ensureFrameLevel(tab.id, 0, 'full');
       const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text, expectOrigin && /^https?:/.test(expectOrigin) ? expectOrigin : null] });
       if (res?.error)
         throw new Error(String(res.error.message || res.error));
@@ -840,7 +896,8 @@ export const tools = {
   },
 
   async handle_dialog(args) {
-    const tab = await tabForPageTool(args);
+    // Answering OK to a confirm() acts on the page; choosing Cancel only reads.
+    const tab = await tabForPageTool(args, args.accept ? 'full' : 'read');
     await sendContent(tab.id, 0, 'dialogPolicy', { accept: !!args.accept, text: args.prompt_text });
     return text(`The next JavaScript dialog in tab ${tab.id} will be answered ${args.accept ? `OK${args.prompt_text !== undefined ? ` with ${JSON.stringify(args.prompt_text)}` : ''}` : 'Cancel'}. Now perform the action that opens it.`);
   },
@@ -886,8 +943,10 @@ export const tools = {
   },
 
   async file_upload(args) {
-    const tab = await tabForPageTool(args);
+    const tab = await tabForPageTool(args, 'full');
     const frameId = args.ref ? frameForRef(tab.id, args.ref) : 0;
+    if (frameId)
+      await ensureFrameLevel(tab.id, frameId, 'full'); // before the upload window, not after it
     let x, y;
     if (!args.ref && Array.isArray(args.coordinate)) {
       const p = await toCss(tab, args.coordinate);
@@ -914,18 +973,27 @@ export const tools = {
 
   async _point(args) {
     // Resolve a ref or screenshot coordinate to CSS pixels in the viewport of the frame it lands in.
-    const tab = await tabForPageTool(args);
+    // args.action: the trusted action about to be sent there. Hover and scroll only need read access;
+    // 'locate' is a lookup (GIF markers); anything else, or none, needs full access to that frame's site.
+    const act = !['hover', 'scroll', 'locate'].includes(args.action);
+    const guard = state.confirmActions && CONFIRM_CLICKS.has(args.action);
+    const tab = await tabForPageTool(args, act ? 'full' : 'read');
     let p = null;
     if (args.ref) {
       const frameId = frameForRef(tab.id, args.ref);
-      p = await sendContent(tab.id, frameId, 'refPoint', { ref: args.ref });
+      p = await sendContent(tab.id, frameId, 'refPoint', { ref: args.ref, guard });
     } else if (Array.isArray(args.coordinate)) {
       const c = await toCss(tab, args.coordinate);
-      p = await sendContent(tab.id, 0, 'locate', { x: c.x, y: c.y });
+      p = await sendContent(tab.id, 0, 'locate', { x: c.x, y: c.y, guard });
     }
     if (!p)
       return { data: null };
     const frameId = frameIdFromPrefix(tab.id, p.prefix);
+    if (act)
+      await ensureFrameLevel(tab.id, frameId, 'full');
+    // Same check as a synthetic click, made on the element the trusted click will land on.
+    if (p.conseq)
+      await confirmAction(tab, p.conseq, args.action_summary);
     // Also in screenshot pixels (top-level viewport), e.g. to mark a ref click in a GIF frame.
     let shot;
     try {
@@ -948,11 +1016,20 @@ export const tools = {
 
   async _focus(args) {
     // Which frame has keyboard focus (so trusted key input can target its BiDi context).
-    const tab = await tabForPageTool(args);
+    // args.action/text/repeat: the trusted 'type' or 'key' about to be sent. Reading keys need read
+    // access unless focus is on a form control; everything else (or no action given) full access.
+    const reading = args.action === 'key' && isReadingKeys(args.text);
+    const tab = await tabForPageTool(args, reading ? 'read' : 'full');
     if (checkAccessible(tab) === 'blank')
       return { data: { frameId: 0 } };
-    const f = await sendContent(tab.id, 0, 'focusInfo', {});
-    return { data: { frameId: frameIdFromPrefix(tab.id, f.prefix), target: f.target, editable: f.editable } };
+    const guard = state.confirmActions && !reading && (args.action === 'type' || args.action === 'key') ? { action: args.action, text: String(args.text ?? ''), repeat: args.repeat } : undefined;
+    const f = await sendContent(tab.id, 0, 'focusInfo', { guard });
+    const frameId = frameIdFromPrefix(tab.id, f.prefix);
+    if (!reading || f.control)
+      await ensureFrameLevel(tab.id, frameId, 'full');
+    if (f.conseq)
+      await confirmAction(tab, f.conseq, args.action_summary);
+    return { data: { frameId, target: f.target, editable: f.editable } };
   },
 
   async _mark(args) {

@@ -70,7 +70,7 @@ function iframeForward(el: Element | null, x: number, y: number): Forward | null
   return { forward: { frameId, x: x - ox, y: y - oy } };
 }
 
-function deepActiveElement(): Element | null {
+export function deepActiveElement(): Element | null {
   let a: Element | null = document.activeElement;
   while (a && shadowOf(a)?.activeElement)
     a = shadowOf(a)!.activeElement;

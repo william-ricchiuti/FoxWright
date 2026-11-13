@@ -3,7 +3,7 @@
 import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity } from './tabs.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
 
@@ -146,8 +146,11 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
         state.mode = msg.mode === 'all' ? 'all' : 'ask';
       break;
     case 'removeSite':
-      state.allowed = state.allowed.filter(o => o !== msg.origin);
-      state.sessionAllowed = state.sessionAllowed.filter(o => o !== msg.origin);
+      forgetSite(msg.origin); // every approval of the site: always, session, 1 hour, read-only
+      break;
+    case 'setConfirmActions':
+      if (!state.managedConfirm)
+        state.confirmActions = msg.on === true;
       break;
     case 'reconnect':
       reconnectNow();
