@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.6.1 (2026-11-13)
+
+Fixes from a round of testing after the store listing went live. Most are in the Stop button and the per-site approval, the two things Zenko promises.
+
+**Stop and pause**
+- Stop now interrupts real (WebDriver BiDi) typing and key repeats within a few keystrokes. Before, a long text kept arriving after Stop and the agent was told it had succeeded.
+- A command that was waiting behind another one on the same tab no longer runs after Stop.
+- Paused stays paused across a Firefox restart or an extension update, until you resume it.
+- The in-page Stop pill no longer catches clicks after it has faded out. A click on the page there used to do nothing and pause Zenko. When the agent's own real click is aimed under the visible pill, the pill moves to the top edge first.
+
+**Site approval**
+- Screenshots, zooms and GIF frames grey out embedded frames from sites you haven't approved, as `read_page` already left them out. The result names those sites.
+- `read_network_requests` no longer returns requests recorded on another site: the log is cleared whenever the tab's top-level site changes, including back/forward. Requests from unapproved embedded frames are left out.
+- `navigate` back/forward asks before staying on a site you haven't approved. An extension can't see where history leads, so Zenko goes, steps straight back out if the site isn't approved, asks, and goes again only if you allow. The page does load for a moment first.
+- A tab dragged out of the Zenko group loses access at once (it stayed readable for about half a second).
+- `tabs_context_mcp` shows only the site for a tab on an unapproved site, not its full address and title.
+- `gif_creator` refuses tabs outside the group.
+- A click that lands on an unapproved site no longer opens a permission window by itself; the window appears when the agent next acts there.
+- The permission window strips text-direction and zero-width characters from the page title it shows.
+- The `upload_image` window says which site the screenshot was taken on.
+
+**Secrets**
+- A password field stays masked after the page's "Show password" button turns it into a text field.
+- More files are refused for upload without asking: `.pgpass`, `.vault-token`, `.my.cnf`, `.s3cfg`, `.boto`, rclone, Terraform and Cargo credentials, keyrings, 1Password CLI and Thunderbird folders, renamed SSH keys (`id_rsa_old`), hard links to files in those folders, and anything under `/proc` or `/sys`.
+
+**Reliability**
+- `navigate` waits as long as the permission window stays open. It used to give up after 60 seconds while the window stayed up for 120, so a late Allow navigated after the agent had been told it failed.
+- `navigate` says so when the page didn't leave, which usually means a "Leave page?" dialog that only you can answer.
+- In real-input mode, `type` says when no text field had focus instead of reporting that it typed into a button.
+- `read_console_messages` refuses patterns that could take minutes to evaluate, such as `(a+)+`, which froze the extension.
+- Reinstalling without restarting Firefox works: the helper exits when `uninstall` removes its socket, and the extension starts a fresh one after `setup`.
+- The helper no longer uses a full CPU core when its socket path is longer than the system allows; it gives up and logs why.
+- The MCP server releases Firefox's remote-control session when its terminal is closed (SIGHUP). If a force-quit server left the session held, the status line now says a Firefox restart frees it.
+
+**Docs**
+- The README, the npm README and `setup` link the store listing. The npm README said Firefox 140+; the minimum is 152.
+
+**Tests**
+- Seven new suites, `test/e2e-gaps-*.mjs`: hostile pages against the permission window, the Stop pill and the Alt+Shift+K shortcut pressed for real, the tab-group boundary, uploads and secrets, argument fuzzing, approvals across restarts. They need `a.test`, `sub.a.test`, `b.test`, `c.test` and `xn--pple-43d.test` pointing to 127.0.0.1, and `xdotool` under Xvfb; see `test/README.md`.
+
+**Known limits**
+- A page whose login form submits with GET puts the password in a URL, which `read_network_requests` shows.
+- An endless loop in `javascript_tool` (Full build) blocks that tab until it is closed.
+
 ## 0.6.0 (2026-11-10)
 
 **Kitsune is now Zenko** (善狐, "good fox"). Another, unrelated Firefox MCP project is also called Kitsune (github.com/junyeong-nero/kitsune), and it even uses the same `~/.kitsune` folder and Claude Code name.

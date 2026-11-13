@@ -1,0 +1,4 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Focus stealer</title></head><body>
+<h1>This page keeps focusing itself</h1>
+<script>setInterval(() => { try { window.focus(); window.opener && window.opener.focus && 0; } catch (e) {} }, 30);</script>
+</body></html>

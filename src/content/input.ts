@@ -9,6 +9,7 @@
 
 import { resolveRef, getRefPrefix } from './snapshot';
 import { isZenkoUi } from './overlay';
+import { isSecretInput } from './secrets';
 
 declare const browser: any;
 
@@ -87,7 +88,7 @@ export function describe(el: Element | null): string {
   const tag = el.tagName.toLowerCase();
   const id = el.id ? `#${el.id}` : '';
   const role = el.getAttribute('role');
-  const isPassword = el instanceof HTMLInputElement && el.type === 'password';
+  const isPassword = isSecretInput(el);
   // textContent (not innerText): innerText forces layout of the whole subtree, and the focused element is often <body>.
   const text = tag === 'body' || tag === 'html' ? '' : (el.textContent || '').slice(0, 200);
   const value = isPassword ? '' : (el as HTMLInputElement).value;
@@ -986,7 +987,7 @@ function valueOf(el: Element | null): string | undefined {
   if (!el)
     return undefined;
   if (isTextField(el) || el instanceof HTMLSelectElement)
-    return (el as any).type === 'password' ? '(password field)' : String((el as any).value).slice(0, 500);
+    return isSecretInput(el) ? '(password field)' : String((el as any).value).slice(0, 500);
   if (isContentEditable(el))
     return el.innerText.slice(0, 500);
   return undefined;
@@ -1354,7 +1355,8 @@ export function focusInfo(): any {
   const fwd = focusedFrameForward();
   if (fwd)
     return fwd;
-  return { prefix: getRefPrefix(), target: describe(deepActiveElement()) };
+  const a = deepActiveElement();
+  return { prefix: getRefPrefix(), target: describe(a), editable: !!isEditable(a) };
 }
 
 /** Which frame and element a viewport point lands on (forwards into iframes). */

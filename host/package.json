@@ -1,6 +1,6 @@
 {
   "name": "zenko-firefox",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "MCP server + native helper that lets AI agents like Claude drive your real Firefox through the Zenko extension.",
   "license": "Apache-2.0",
   "author": "William Ricchiuti",

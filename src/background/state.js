@@ -52,13 +52,15 @@ export function noteAction(tabId, text, own) {
 }
 
 export async function loadSettings() {
-  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], browserId: '', browserName: '' });
+  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], browserId: '', browserName: '', paused: false });
   state.browserId = /^[a-f0-9]{12}$/.test(local.browserId) ? local.browserId : [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
   state.browserName = cleanName(local.browserName) || 'Firefox';
   if (state.browserId !== local.browserId)
     await browser.storage.local.set({ browserId: state.browserId });
   state.mode = local.mode === 'all' ? 'all' : 'ask';
   state.allowed = Array.isArray(local.allowed) ? local.allowed : [];
+  // Stop stays in force across a Firefox restart or an extension update, until the user resumes.
+  state.paused = !!local.paused;
   // Administrators (and test profiles) can preset site access with an enterprise policy:
   // policies.json → "3rdparty": { "Extensions": { "<extension id>": { "mode": "all", "allowed": [...] } } }
   try {
@@ -75,9 +77,8 @@ export async function loadSettings() {
       state.managedAllowed = managed.allowed.filter(o => typeof o === 'string');
   } catch { /* no policy set */ }
   try {
-    const sess = await browser.storage.session.get({ sessionAllowed: [], paused: false, groupId: null });
+    const sess = await browser.storage.session.get({ sessionAllowed: [], groupId: null });
     state.sessionAllowed = sess.sessionAllowed || [];
-    state.paused = !!sess.paused;
     state.groupId = sess.groupId ?? null;
   } catch { /* storage.session unavailable */ }
 }
@@ -88,9 +89,9 @@ export function cleanName(s) {
 }
 
 export async function saveSettings() {
-  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed, browserName: state.browserName });
+  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed, browserName: state.browserName, paused: state.paused });
   try {
-    await browser.storage.session.set({ sessionAllowed: state.sessionAllowed, paused: state.paused, groupId: state.groupId });
+    await browser.storage.session.set({ sessionAllowed: state.sessionAllowed, groupId: state.groupId });
   } catch { /* ignore */ }
 }
 

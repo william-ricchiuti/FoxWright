@@ -254,6 +254,7 @@ function listen() {
   const server = net.createServer(onClientSocket);
 
   let attempts = 0;
+  let staleRetries = 0;
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       // Is another helper alive on it? Usually the previous helper of a just-reloaded
@@ -269,11 +270,18 @@ function listen() {
         setTimeout(() => server.listen(sp, onListening), Math.min(5000, 250 * attempts));
       });
       probe.on('error', () => {
-        // Stale socket file from a crashed helper.
+        // Stale socket file from a crashed helper. Back off and give up after a while: a path
+        // that can never be bound (e.g. longer than the OS allows) also ends up here, and
+        // retrying at once would spin the CPU forever.
         try {
           fs.unlinkSync(sp);
         } catch { /* ignore */ }
-        server.listen(sp, onListening);
+        if (++staleRetries > 20) {
+          serverError = `Helper could not listen on ${sp}${Buffer.byteLength(sp) > 100 ? ' (the path is too long for a socket; use a shorter home folder or set ZENKO_HOME to a short path)' : ''}.`;
+          log(serverError);
+          return;
+        }
+        setTimeout(() => server.listen(sp, onListening), Math.min(2000, 50 * staleRetries));
       });
     } else {
       serverError = `Helper could not listen on ${sp}: ${err.message}`;
@@ -321,4 +329,18 @@ export function runHost() {
   listenOwn();
   // Keep the extension's event page busy so Firefox never idles it out while we're connected.
   setInterval(() => writeToExtension({ type: 'ping' }), 20000).unref();
+  // `zenko uninstall` (or deleting ~/.zenko) removes this helper's socket while it runs. Nothing
+  // can reach it after that, and a reinstall could never connect while it lingers: exit, and
+  // the extension starts a fresh helper once setup has been run again.
+  if (process.platform !== 'win32') {
+    let seen = false;
+    setInterval(() => {
+      if (fs.existsSync(browserSocketPath()))
+        seen = true;
+      else if (seen) {
+        log('this helper\'s socket was removed (uninstall?); exiting');
+        process.exit(0);
+      }
+    }, 3000).unref();
+  }
 }

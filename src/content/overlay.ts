@@ -27,13 +27,14 @@ const CSS = `
 @keyframes breathe { 50% { box-shadow: inset 0 0 0 2px rgba(214, 64, 36, .95), inset 0 0 40px 10px rgba(240, 120, 40, .45); } }
 .pill {
   position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%) translateY(8px);
-  z-index: 2147483647; pointer-events: auto; opacity: 0; transition: opacity .2s, transform .2s;
+  z-index: 2147483647; pointer-events: none; opacity: 0; transition: opacity .2s, transform .2s;
   display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px;
   background: #1b1714; color: #f6efe3; border-radius: 999px;
   font: 500 13px/1.2 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
   box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06);
 }
-.pill.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.pill.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+.pill.top { bottom: auto; top: 14px; }
 .pill .mark { width: 18px; height: 18px; flex: none; }
 .pill .what { max-width: min(60vw, 520px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pill .what b { font-weight: 600; }
@@ -124,6 +125,22 @@ export function showActivity(ms = 6000, label?: string) {
   });
   clearTimeout(hideTimer);
   hideTimer = setTimeout(hideActivity, ms);
+}
+
+/**
+ * A real (trusted-input) click by the agent is about to land at this viewport point. If the
+ * pill is in the way, move it to the other edge so the click reaches the page, not the pill.
+ */
+export function dodgePill(x: number, y: number) {
+  const pill = root?.querySelector('.pill') as HTMLElement | null;
+  if (!pill)
+    return false;
+  const r = pill.getBoundingClientRect();
+  const m = 12;
+  if (x < r.left - m || x > r.right + m || y < r.top - m || y > r.bottom + m)
+    return false;
+  pill.classList.toggle('top');
+  return true;
 }
 
 export function hideActivity() {

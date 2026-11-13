@@ -1,7 +1,7 @@
 {
   "name": "zenko-workspace",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Zenko: let AI agents (Claude, via MCP) drive your real Firefox.",
   "license": "Apache-2.0",
   "type": "module",

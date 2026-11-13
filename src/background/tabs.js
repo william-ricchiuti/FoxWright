@@ -115,8 +115,8 @@ export async function requireTab(tabId) {
   } catch {
     throw new Error(`Tab ${tabId} does not exist. Call tabs_context_mcp to get current tab IDs.`);
   }
-  if (!state.groupTabIds.has(tabId))
-    await groupTabs();
+  // Always re-read the group: a tab the user just dragged out must lose access at once.
+  await groupTabs();
   if (!state.groupTabIds.has(tabId))
     throw new Error(`Tab ${tabId} is not in the Zenko tab group, so the agent may not use it. Use tabs_context_mcp / tabs_create_mcp, or ask the user to drag the tab into the orange "Zenko" group.`);
   return tab;

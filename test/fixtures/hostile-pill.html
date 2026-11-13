@@ -1,0 +1,16 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Pill tamper</title>
+<style id="hide"></style></head><body style="margin:0;font-family:sans-serif">
+<h1>Pill tamper</h1>
+<label>Field <input id="field"></label>
+<p id="status">clicks on the bottom bar: 0</p>
+<button id="bar" style="position:fixed;left:0;right:0;bottom:0;height:90px;z-index:10;background:#cde" onclick="document.getElementById('status').textContent = 'clicks on the bottom bar: ' + (++window.n)">Bottom bar (page button)</button>
+<div id="fake" hidden style="position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483647;background:#1b1714;color:#f6efe3;border-radius:999px;padding:7px 8px 7px 12px;font:500 13px sans-serif">
+ Zenko is driving this tab <button id="fakestop" onclick="window.fakeStops=(window.fakeStops||0)+1">Stop</button></div>
+<script>
+window.n = 0;
+const q = new URLSearchParams(location.search);
+if (q.has('hide')) document.getElementById('hide').textContent = 'zenko-ui { display: none !important; }';
+if (q.has('fake')) document.getElementById('fake').hidden = false;
+if (q.has('remove')) setInterval(() => document.querySelectorAll('zenko-ui').forEach(e => e.remove()), 50);
+</script>
+</body></html>

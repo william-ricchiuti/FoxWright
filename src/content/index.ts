@@ -2,7 +2,10 @@
 import { takeSnapshot, findElements, setRefPrefix, getRefPrefix } from './snapshot';
 import * as input from './input';
 import { pageText } from './text';
-import { showActivity, hideActivity } from './overlay';
+import { showActivity, hideActivity, dodgePill } from './overlay';
+import { watchSecrets } from './secrets';
+
+watchSecrets();
 import { AGENT_WINDOW_MS, type Hooks } from './hooks';
 
 declare const browser: any;
@@ -72,6 +75,31 @@ function frameOffset(args: { frameId: number }) {
   return null;
 }
 
+/** Border boxes (this frame's viewport, CSS px) of the given child frames, also inside shadow roots. */
+function frameRects(args: { frameIds: number[] }) {
+  const want = new Set(args.frameIds);
+  const out: Record<number, { x: number, y: number, w: number, h: number }> = {};
+  const walk = (root: Document | ShadowRoot) => {
+    for (const el of Array.from(root.querySelectorAll('*'))) {
+      if (/^(iframe|frame|object|embed)$/i.test(el.localName)) {
+        let id = -1;
+        try {
+          id = browser.runtime.getFrameId(el as any);
+        } catch { /* ignore */ }
+        if (want.has(id)) {
+          const r = el.getBoundingClientRect();
+          out[id] = { x: r.left, y: r.top, w: r.width, h: r.height };
+        }
+      }
+      const sr = (el as any).openOrClosedShadowRoot ?? el.shadowRoot;
+      if (sr)
+        walk(sr);
+    }
+  };
+  walk(document);
+  return out;
+}
+
 const handlers: Record<string, (args: any) => any> = {
   ping: () => ({ pong: true, url: location.href, prefix: getRefPrefix() }),
   viewport: () => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scrollX: scrollX, scrollY: scrollY }),
@@ -91,6 +119,8 @@ const handlers: Record<string, (args: any) => any> = {
   locate: (a) => input.locate(a),
   focusInfo: () => input.focusInfo(),
   frameOffset: (a) => frameOffset(a),
+  frameRects: (a) => frameRects(a),
+  dodgePill: (a) => dodgePill(a.x, a.y),
   pageText: (a) => pageText(a),
   console: (a) => consoleDump(!!a.clear),
   dialogs: () => dialogsDump(),

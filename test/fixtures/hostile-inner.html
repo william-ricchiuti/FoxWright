@@ -1,0 +1,4 @@
+<!doctype html><html><head><meta charset="utf-8"><title>inner</title></head><body>
+<button id="ib" onclick="this.textContent='inner A clicked'">Inner A button</button>
+<script>if (!location.search.includes('stay')) setTimeout(() => { location.href = 'http://b.test:8767/b-frame.html'; }, 1500);</script>
+</body></html>

@@ -238,7 +238,8 @@ export async function setup(flags) {
 
   console.log(`
 ${c.b('Next steps')}
-  1. Install the Zenko extension in Firefox (152+), then restart Firefox or toggle the extension off/on.
+  1. Install the Zenko extension in Firefox (152+): https://addons.mozilla.org/firefox/addon/zenko/
+     If it was already installed, restart Firefox or toggle the extension off/on.
      The toolbar fox should lose its "!" badge once it finds this helper.
   2. Connect your AI client:
      ${c.b('Claude Code:')}   claude mcp add --scope user zenko -- ${cmdline}

@@ -265,29 +265,38 @@ export class Bidi {
     await this.perform(context, [{ type: 'wheel', id: 'zenko-wheel', actions: [{ type: 'scroll', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy), origin: 'viewport' }] }]);
   }
 
-  async type(context, text) {
+  /**
+   * `check` is called between small chunks and throws when the user pressed Stop, so a long
+   * text or key repeat ends within a few keystrokes instead of running to the end.
+   */
+  async type(context, text, check = () => {}) {
     const acts = [];
     for (const ch of text.replace(/\r\n?/g, '\n')) {
       const v = ch === '\n' ? KEY.Enter : ch;
       acts.push({ type: 'keyDown', value: v }, { type: 'keyUp', value: v });
     }
-    // Chunk to keep individual commands reasonable.
-    for (let i = 0; i < acts.length; i += 400)
-      await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: acts.slice(i, i + 400) }]);
+    for (let i = 0; i < acts.length; i += 40) {
+      check();
+      await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: acts.slice(i, i + 40) }]);
+    }
   }
 
-  async keys(context, combos, repeat = 1) {
-    const acts = [];
-    for (let r = 0; r < repeat; r++) {
-      for (const combo of combos) {
-        const parts = combo.split('+').filter(p => p !== '');
-        if (combo.endsWith('++'))
-          parts.push('+');
-        const values = parts.map(keyValue);
-        for (const v of values) acts.push({ type: 'keyDown', value: v });
-        for (const v of [...values].reverse()) acts.push({ type: 'keyUp', value: v });
-      }
+  async keys(context, combos, repeat = 1, check = () => {}) {
+    const once = [];
+    for (const combo of combos) {
+      const parts = combo.split('+').filter(p => p !== '');
+      if (combo.endsWith('++'))
+        parts.push('+');
+      const values = parts.map(keyValue);
+      for (const v of values) once.push({ type: 'keyDown', value: v });
+      for (const v of [...values].reverse()) once.push({ type: 'keyUp', value: v });
     }
-    await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: acts }]);
+    // A few repeats per command, so Stop is noticed between them.
+    const per = Math.max(1, Math.floor(20 / Math.max(1, once.length)));
+    for (let r = 0; r < repeat; r += per) {
+      check();
+      const n = Math.min(per, repeat - r);
+      await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: Array.from({ length: n }, () => once).flat() }]);
+    }
   }
 }
