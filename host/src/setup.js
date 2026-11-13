@@ -2,7 +2,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { EXTENSION_IDS, HOST_NAME, foxwrightDir, nativeManifestDir, socketPath, logPath } from './paths.js';
@@ -283,30 +282,17 @@ ${c.b('Next steps')}
 `);
 }
 
-function probeSocket() {
-  return new Promise((resolve) => {
-    const s = net.connect(socketPath());
-    s.once('connect', () => {
-      s.write(JSON.stringify({ type: 'status', id: 1 }) + '\n');
-    });
-    let buf = '';
-    s.on('data', (d) => {
-      buf += d;
-      if (buf.includes('\n')) {
-        s.destroy();
-        try {
-          resolve(JSON.parse(buf.split('\n')[0]));
-        } catch {
-          resolve({ error: 'bad reply' });
-        }
-      }
-    });
-    s.on('error', (e) => resolve({ error: e.code || e.message }));
-    setTimeout(() => {
-      s.destroy();
-      resolve({ error: 'timeout' });
-    }, 2000);
-  });
+async function probeSocket() {
+  // Through the authenticated client: the helper answers nothing else (see auth.js).
+  const { HelperClient } = await import('./client.js');
+  const c = new HelperClient();
+  try {
+    return await c.status();
+  } catch (e) {
+    return { error: e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? e.code : e.message };
+  } finally {
+    c.close();
+  }
 }
 
 async function probeBidi() {

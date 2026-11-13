@@ -5,6 +5,7 @@
 //   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-stop.mjs
 import net from 'node:net';
 import { start } from './harness.mjs';
+import { openHelper } from './helper-socket.mjs';
 import { runner, connectPerson, extBaseOf, x11, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, skip, finish } = runner('e2e-gaps-stop');
@@ -166,11 +167,10 @@ await test('a command already queued behind a running one does not run after Pau
   const { typing } = await typingUnderway(ctx, 'w');
   // A second AI client (its own MCP server, so its own queue) sends a command for the same tab now:
   // it passes the extension's paused check and waits in the per-tab queue behind the typing.
-  const sock = net.connect(h.sock);
+  const sock = await openHelper(h.sock);
   let reply = '';
-  sock.on('data', (x) => { reply += x; });
-  await new Promise(r => sock.once('connect', r));
-  sock.write(JSON.stringify({ type: 'request', id: 1, tool: 'form_input', args: { tabId, ref, value: 'QUEUED-AFTER-STOP' } }) + '\n');
+  sock.onMessage((m) => { reply += JSON.stringify(m) + '\n'; });
+  sock.send({ type: 'request', id: 1, tool: 'form_input', args: { tabId, ref, value: 'QUEUED-AFTER-STOP' } });
   await sleep(100);
   await d.evalIn(await popupCtx(), `browser.runtime.sendMessage({ kind: 'pause' }).then(() => true)`);
   const r = await typing;
