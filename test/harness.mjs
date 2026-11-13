@@ -454,7 +454,7 @@ const sameDoc = (a, b) => a === b || (a && b && a.split('#')[0] === b.split('#')
  * that shares that one's Foxwright folder and fixture servers, like a second Firefox profile on the
  * same computer. Resolves once the second browser has registered in ~/.foxwright/browsers.
  */
-export async function start({ build, trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null, profileDir = null, pageEval: pageEvalOpt } = {}) {
+export async function start({ build, trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null, profileDir = null, deferSetup = false, pageEval: pageEvalOpt } = {}) {
   armWatchdog();
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
@@ -486,7 +486,8 @@ export async function start({ build, trusted = false, testDriver = false, policy
   if (isolate) {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'foxwright-home-'));
     env.HOME = home;
-    execFileSync(process.execPath, [path.join(root, 'host/dist/foxwright.mjs'), 'setup'], { env, stdio: 'ignore' });
+    if (!deferSetup)
+      execFileSync(process.execPath, [path.join(root, 'host/dist/foxwright.mjs'), 'setup'], { env, stdio: 'ignore' });
   }
   if (!alongside)
     env.FOXWRIGHT_GIF_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'foxwright-gifs-'));
@@ -585,6 +586,29 @@ export async function start({ build, trusted = false, testDriver = false, policy
     }
   };
   let runner = await runFirefox();
+  // deferSetup: Firefox runs with no helper installed (a new user's first start). The test calls
+  // runSetup() (`foxwright setup` in the isolated HOME) when it wants the helper to appear.
+  if (deferSetup) {
+    if (!isolate)
+      throw new Error('deferSetup needs the isolated HOME (Linux, FOXWRIGHT_E2E_ISOLATE not 0).');
+    return {
+      home, env, bidiUrl: bidiPort ? `ws://127.0.0.1:${bidiPort}/session` : null,
+      runSetup: async () => {
+        execFileSync(process.execPath, [path.join(root, 'host/dist/foxwright.mjs'), 'setup'], { env, stdio: 'ignore' });
+        return attach();
+      },
+      stop: async () => {
+        try {
+          await runner.exit();
+        } catch { /* ignore */ }
+        s1?.close();
+        s2?.close();
+      },
+    };
+  }
+  return attach();
+
+  async function attach() {
   try {
     if (alongside) {
       // The shared socket belongs to the first browser; wait for this one's own registry entry.
@@ -796,4 +820,5 @@ export async function start({ build, trusted = false, testDriver = false, policy
   const h = { call, stop, client, stopFirefoxOnly, restartFirefox, home, env, get sock() { return sockPath(); }, gifDir: env.FOXWRIGHT_GIF_DIR, bidiUrl: bidiPort && !ownBidi ? `ws://127.0.0.1:${bidiPort}/session` : null, build, isStore, sourceDir, pageEvalMode: evalMode, pageEval, pageEvalText, js, useDriver, describeState };
   watch.harnesses.add(h);
   return h;
+  }
 }

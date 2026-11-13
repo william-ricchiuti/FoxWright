@@ -1,0 +1,68 @@
+/* Shared look for Foxwright's full-tab pages (welcome/setup help, activity log). Same palette as the popup. */
+:root {
+  --paper: #f7f0e4; --paper-2: #fffaf2; --ink: #1b1714; --ink-2: #4a3f36; --muted: #7a6b5d;
+  --red: #c8321b; --red-2: #d64024; --line: rgba(27, 23, 20, .12); --ok: #3f7d4e; --orange: #c86a1b;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #1c1815; --paper-2: #26211d; --ink: #f3ebde; --ink-2: #d4c8b8; --muted: #a39584; --line: rgba(243, 235, 222, .12); --ok: #6fb07f; --red: #e0533a; --red-2: #e86a50; --orange: #e08a3a; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; padding: 28px 16px 40px; background: var(--paper); color: var(--ink);
+  font: 14px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 7px 7px;
+}
+main { max-width: 680px; margin: 0 auto; }
+header { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
+.hanko {
+  width: 48px; height: 48px; border-radius: 10px; background: var(--red); color: #fbeee0; flex: none;
+  display: grid; place-items: center; font: 700 26px/1 "Hiragino Mincho ProN", "Yu Mincho", serif;
+  transform: rotate(-4deg); box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
+}
+h1 { margin: 0; font-size: 22px; letter-spacing: .01em; }
+.sub { margin: 2px 0 0; color: var(--ink-2); }
+h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.card p { margin: 0 0 8px; }
+.card p:last-child { margin-bottom: 0; }
+.fine { color: var(--muted); font-size: 12.5px; }
+.lead { font-size: 15px; margin: 0 0 16px; }
+code { font: 12.5px ui-monospace, Menlo, Consolas, monospace; }
+p code, li code { background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.cmd { display: flex; gap: 8px; align-items: stretch; margin: 0 0 8px; }
+.cmd pre { flex: 1; min-width: 0; margin: 0; padding: 9px 12px; background: var(--ink); color: var(--paper); border-radius: 8px; overflow-x: auto; user-select: all; }
+button {
+  font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 6px 12px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+}
+button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+button.danger { color: var(--red); border-color: var(--red); }
+button:hover { filter: brightness(.95); }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+a { color: var(--red); }
+.status { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; margin: 0 0 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,125,78,.18); }
+.dot.bad { background: var(--red-2); }
+.dot.wait { background: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dot.wait { animation: none; } }
+.note { border-left: 3px solid var(--orange); padding: 6px 10px; background: var(--paper); border-radius: 0 8px 8px 0; font-size: 13px; }
+blockquote { margin: 0 0 8px; padding: 8px 12px; border-left: 3px solid var(--red); background: var(--paper); border-radius: 0 8px 8px 0; font-style: italic; }
+ul.plain { margin: 0; padding-left: 18px; }
+ul.plain li { margin: 0 0 6px; }
+.group-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: #ff9f00; vertical-align: middle; margin-right: 2px; }
+kbd { font: 12px ui-monospace, Menlo, Consolas, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--paper); }
+.step.done h2::after { content: " ✓"; color: var(--ok); }
+.step.current { border-color: var(--red); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 18px; }
+footer a { color: inherit; }
+@media (max-width: 480px) {
+  body { padding-top: 16px; }
+  .cmd { flex-direction: column; }
+  h1 { font-size: 19px; }
+}

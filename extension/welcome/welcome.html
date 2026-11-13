@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up Foxwright</title>
+  <link rel="stylesheet" href="page.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="hanko" aria-hidden="true">狐</div>
+    <div>
+      <h1>Set up Foxwright</h1>
+      <p class="sub">One command, then you're ready.</p>
+    </div>
+  </header>
+
+  <p class="lead">Foxwright lets an AI agent you run on this computer, such as Claude Code, read and operate Firefox tabs, with your permission for each site. To talk to the agent, Firefox needs a small helper program on this computer.</p>
+
+  <section class="card step" id="step-install" aria-labelledby="h-install">
+    <h2 id="h-install">1 · Install the helper</h2>
+    <p id="terminal-hint">Open a terminal and run:</p>
+    <div class="cmd">
+      <pre><code id="cmd">npx foxwright-firefox setup --claude-code</code></pre>
+      <button id="copy" type="button" aria-describedby="cmd">Copy</button>
+    </div>
+    <p class="fine"><span id="copied" role="status"></span></p>
+    <p class="fine">Needs Node.js 20 or newer (<code>node --version</code> shows yours). <span id="node-hint"></span></p>
+    <p class="fine">Using Claude Desktop? Use <code>--claude-desktop</code> instead (or both). For any other MCP client, leave the flag off: setup prints the settings to paste into it.</p>
+    <p class="note" id="linux-note" hidden></p>
+  </section>
+
+  <section class="card step" id="step-connect" aria-labelledby="h-connect">
+    <h2 id="h-connect">2 · Connection</h2>
+    <p class="status" role="status" aria-live="polite"><span class="dot wait" id="dot" aria-hidden="true"></span><span id="live">Looking for the helper…</span></p>
+    <p id="diag" class="fine"></p>
+    <p class="fine" id="auto-note">This page notices the helper by itself within a few seconds. No need to restart Firefox.</p>
+    <div class="row"><button id="retry" type="button">Check again</button></div>
+  </section>
+
+  <section class="card step" id="step-use" aria-labelledby="h-use">
+    <h2 id="h-use">3 · Ask your AI to use Foxwright</h2>
+    <p>Restart your AI client so it picks up the new tool, then ask it something like:</p>
+    <blockquote id="example">“Use Foxwright to open my GitHub notifications and summarize them.”</blockquote>
+  </section>
+
+  <section class="card" aria-labelledby="h-control">
+    <h2 id="h-control">How you stay in control</h2>
+    <ul class="plain">
+      <li><b>You approve each site.</b> The first time the agent wants a site, Foxwright asks you in its own small window: Deny, Allow this session, or Always allow. Change your answers later in the toolbar popup.</li>
+      <li><b>The agent has its own tabs.</b> It works only in the <span class="group-swatch" aria-hidden="true"></span>orange “Foxwright” tab group. Drag a tab into the group to share it.</li>
+      <li><b>Stop it at any time.</b> Press <b>Stop</b> on the page while the agent works, <b>Pause</b> in the toolbar popup, or <kbd id="stop-key">Alt+Shift+K</kbd>. Nothing happens until you resume.</li>
+      <li><b>See what it did.</b> The <a href="../log/log.html" id="open-log">activity log</a> lists the agent's actions and your answers.</li>
+    </ul>
+  </section>
+
+  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/FoxWright#readme" target="_blank" rel="noopener">Documentation</a></footer>
+</main>
+<script src="welcome.js"></script>
+</body>
+</html>
