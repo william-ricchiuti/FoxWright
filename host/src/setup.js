@@ -2,7 +2,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import net from 'node:net';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { EXTENSION_IDS, HOST_NAME, foxwrightDir, nativeManifestDir, socketPath, logPath, browsersDir } from './paths.js';
@@ -540,30 +539,25 @@ ${c.b('Next steps')}
 
 // ---------- doctor ----------
 
-function probeSocket(p = socketPath()) {
-  return new Promise((resolve) => {
-    const s = net.connect(p);
-    s.once('connect', () => {
-      s.write(JSON.stringify({ type: 'status', id: 1 }) + '\n');
-    });
-    let buf = '';
-    s.on('data', (d) => {
-      buf += d;
-      if (buf.includes('\n')) {
-        s.destroy();
-        try {
-          resolve(JSON.parse(buf.split('\n')[0]));
-        } catch {
-          resolve({ error: 'bad reply' });
-        }
-      }
-    });
-    s.on('error', (e) => resolve({ error: e.code || e.message }));
-    setTimeout(() => {
-      s.destroy();
-      resolve({ error: 'timeout' });
-    }, 2000);
-  });
+async function probeSocket(p) {
+  // Through the authenticated client: the helper answers nothing else (see auth.js).
+  // p: one helper's own socket; none: the shared socket.
+  const { HelperClient } = await import('./client.js');
+  const c = new HelperClient(p ? { path: p } : {});
+  let timer;
+  try {
+    return await Promise.race([
+      c.status(),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({ error: 'timeout' }), 5000);
+      }),
+    ]);
+  } catch (e) {
+    return { error: e.code || e.message };
+  } finally {
+    clearTimeout(timer);
+    c.close();
+  }
 }
 
 /** { state: 'ok' | 'held' | 'off', url, error } for Firefox's WebDriver BiDi port (trusted input). */
