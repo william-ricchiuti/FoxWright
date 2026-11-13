@@ -177,7 +177,7 @@ async function refShot(a) {
   if (!a.ref || Array.isArray(a.coordinate) || typeof a.tabId !== 'number' || !isRecording(a.tabId) || !/click|hover/.test(a.action || ''))
     return undefined;
   try {
-    return (await helper.call('_point', { tabId: a.tabId, ref: a.ref }, 10000))?.data?.shot;
+    return (await helper.call('_point', { tabId: a.tabId, ref: a.ref, action: 'locate' }, 10000))?.data?.shot;
   } catch {
     return undefined;
   }
@@ -261,7 +261,7 @@ async function trustedComputerInner(a, st) {
   // Resolve where the action lands: frame-local CSS pixels + the frame's BiDi context
   // (Firefox routes BiDi pointer input into out-of-process iframes only via their own context).
   const locate = async (key = 'coordinate') => {
-    const p = (await helper.call('_point', { tabId: a.tabId, ref: key === 'coordinate' ? a.ref : undefined, coordinate: a[key] }))?.data;
+    const p = (await helper.call('_point', { tabId: a.tabId, ref: key === 'coordinate' ? a.ref : undefined, coordinate: a[key], action: a.action, action_summary: a.action_summary }))?.data;
     if (!p)
       return null;
     p.context = p.frameId ? await bidi.contextFor(a.tabId, helper, p.frameId) : top;
@@ -294,7 +294,7 @@ async function trustedComputerInner(a, st) {
     case 'type':
     case 'key': {
       // Keyboard input must go to the (possibly out-of-process) frame that has focus.
-      const f = (await helper.call('_focus', { tabId: a.tabId }))?.data || { frameId: 0 };
+      const f = (await helper.call('_focus', { tabId: a.tabId, action: a.action, text: a.text, repeat: a.repeat, action_summary: a.action_summary }))?.data || { frameId: 0 };
       const ctx = f.frameId ? await bidi.contextFor(a.tabId, helper, f.frameId) : top;
       if (a.action === 'type') {
         await send(() => bidi.type(ctx, a.text ?? '', checkStop));

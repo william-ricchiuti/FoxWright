@@ -217,7 +217,7 @@ function waitForSocket(p, ms = 30000) {
   });
 }
 
-export function writePolicies(firefoxBin, policy) {
+export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
   // Enterprise policies live next to the binary on Linux/Windows, in Contents/Resources on macOS.
   const mac = /\.app\/Contents\/MacOS\//.test(firefoxBin);
   const dist = mac ? path.join(path.dirname(firefoxBin), '..', 'Resources', 'distribution') : path.join(path.dirname(firefoxBin), 'distribution');
@@ -234,7 +234,7 @@ export function writePolicies(firefoxBin, policy) {
       ext[id] = policy;
     policies['3rdparty'] = { Extensions: ext };
   }
-  fs.writeFileSync(file, JSON.stringify({ policies }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2));
 }
 
 // ---------- suite watchdog ----------
@@ -453,13 +453,15 @@ const sameDoc = (a, b) => a === b || (a && b && a.split('#')[0] === b.split('#')
  * alongside: a harness from an earlier start(). Starts a second Firefox (its own temporary profile)
  * that shares that one's Foxwright folder and fixture servers, like a second Firefox profile on the
  * same computer. Resolves once the second browser has registered in ~/.foxwright/browsers.
+ *
+ * extraPolicies: other Firefox enterprise policies to set, e.g. { ExtensionSettings: ... }.
  */
-export async function start({ build, trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null, profileDir = null, deferSetup = false, pageEval: pageEvalOpt } = {}) {
+export async function start({ build, trusted = false, testDriver = false, policy = { mode: 'all', confirmUploads: false }, alongside = null, profileDir = null, deferSetup = false, extraPolicies = {}, pageEval: pageEvalOpt } = {}) {
   armWatchdog();
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
     throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
-  writePolicies(firefox, policy);
+  writePolicies(firefox, policy, extraPolicies);
 
   build = build || process.env.FOXWRIGHT_E2E_BUILD || 'full';
   const sourceDir = build === 'full' || build === 'store' ? path.join(root, 'dist', build) : path.resolve(build);

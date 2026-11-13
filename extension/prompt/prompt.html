@@ -18,12 +18,19 @@
     <p id="body"></p>
     <p class="origin"><code id="origin"></code></p>
     <ul id="files" hidden></ul>
+    <div id="element" hidden>
+      <p id="elname"></p>
+      <p class="fine" id="elreason"></p>
+      <p class="fine" id="summary" hidden></p>
+    </div>
     <p class="fine" id="tabline"></p>
   </section>
+  <label class="readonly" id="readonly-row" hidden><input type="checkbox" id="readonly" disabled> <span><b>Read only</b> (no clicking or typing)</span></label>
   <div class="actions">
     <!-- disabled until prompt.js has shown the request and the window has been on screen for a moment -->
     <button id="deny" disabled>Deny</button>
     <button id="always" disabled>Always allow</button>
+    <button id="hour" disabled>Allow for 1 hour</button>
     <button id="once" class="primary" disabled>Allow this session</button>
   </div>
   <p class="fine note">This window belongs to the Foxwright extension. Web pages and the AI can't press these buttons. You can revoke sites any time from the Foxwright toolbar button.</p>
