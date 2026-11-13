@@ -148,6 +148,17 @@ export async function requireTab(tabId) {
     throw privateTabError(tabId);
   // Always re-read the group: a tab the user just dragged out must lose access at once.
   await groupTabs();
+  if (!state.groupTabIds.has(tabId)) {
+    // A tab dragged into the group from another window is missing from tabs.query() for a
+    // while (seen on Firefox 160), although the tab itself already reports the group. The tab's
+    // own record is what counts.
+    const gid = await validGroupId();
+    const fresh = await browser.tabs.get(tabId).catch(() => null);
+    if (gid != null && fresh && fresh.groupId === gid && !fresh.incognito) {
+      state.groupTabIds.add(tabId);
+      tab = fresh;
+    }
+  }
   if (!state.groupTabIds.has(tabId))
     throw new Error(`Tab ${tabId} is not in the Foxwright tab group, so the agent may not use it. Use tabs_context_mcp / tabs_create_mcp, or ask the user to drag the tab into the orange "Foxwright" group.`);
   return tab;

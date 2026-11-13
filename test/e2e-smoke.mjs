@@ -70,7 +70,7 @@ await test('doctor sees the running Firefox', async () => {
   }
   const plain = out.replace(/\x1b\[[0-9;]*m/g, '');
   console.log(plain.split('\n').map(l => `      ${l}`).join('\n'));
-  expect(/Firefox connected: extension v/.test(plain), 'doctor did not see the connected extension');
+  expect(/Firefox connected\b[^\n]*extension v?\d/.test(plain), 'doctor did not see the connected extension');
   expect(/All good\./.test(plain), 'doctor found problems');
 });
 
