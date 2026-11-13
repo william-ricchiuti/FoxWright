@@ -294,13 +294,13 @@ async function trustedComputerInner(a, st) {
     case 'type':
     case 'key': {
       // Keyboard input must go to the (possibly out-of-process) frame that has focus.
-      const f = (await helper.call('_focus', { tabId: a.tabId }))?.data || { frameId: 0 };
+      const f = (await helper.call('_focus', { tabId: a.tabId, forType: a.action === 'type' }))?.data || { frameId: 0 };
       const ctx = f.frameId ? await bidi.contextFor(a.tabId, helper, f.frameId) : top;
       if (a.action === 'type') {
         await send(() => bidi.type(ctx, a.text ?? '', checkStop));
         summary = f.editable === false
           ? `Sent ${(a.text ?? '').length} key presses, but no text field was focused (focus is on ${f.target || 'the page'}), so nothing was typed into a field. Click the field first, then type.`
-          : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.`;
+          : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.${f.waited >= 0 ? ` (Waited ${f.waited} ms for focus to move into it first.)` : ''}`;
       } else {
         await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1)), checkStop));
         summary = `Pressed ${a.text}${a.repeat > 1 ? ` x${a.repeat}` : ''} (focus was on ${f.target || 'the page'}).`;
@@ -532,7 +532,7 @@ export async function runMcp() {
   });
 
   server.registerTool('read_page', {
-    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary.',
+    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary. On long tasks pass diff: true to get only what changed since your previous read_page of the tab (refs stay valid).',
     inputSchema: {
       tabId,
       filter: z.enum(['all', 'interactive']).optional().describe('"interactive" lists only elements with refs (buttons, links, inputs...). Default "all".'),
@@ -540,28 +540,33 @@ export async function runMcp() {
       ref_id: z.string().optional().describe('Only return the subtree under this ref (or, for an iframe ref, the frame\'s content).'),
       visible_only: z.boolean().optional().describe('Only include what is currently on screen (much smaller on long pages; scroll to see more).'),
       max_chars: numish(z.number().positive()).optional().describe('Maximum characters to return (default 20000).'),
+      diff: z.boolean().optional().describe('Only return lines added, removed or changed since your previous read_page of this tab with the same options, with their parent lines for context. Falls back to the full outline after a navigation or when there is nothing to compare with.'),
+      wait_for: z.string().optional().describe('Wait until this text is on the page, or an element like \'dialog\' or \'button "Save"\' (role and name as the outline prints them) exists, then read. Up to timeout.'),
+      timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },
-  }, async (a) => call('read_page', a));
+  }, async (a) => call('read_page', a, a.wait_for ? 60000 : undefined));
 
   server.registerTool('find', {
-    description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates.',
+    description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates; also says when a match is inside a collapsed section that must be expanded first. With wait_for it first waits for something to appear (e.g. a dialog that opens after a click).',
     inputSchema: {
       query: z.string().optional().describe('What to look for.'),
       tabId,
+      wait_for: z.string().optional().describe('First wait until this text is on the page, or an element like \'dialog\' or \'searchbox "Search"\' (role and name as read_page prints them) exists. Up to timeout.'),
+      timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },
     aliases: { text: 'query', description: 'query' },
   }, async (a) => {
     const query = a.query;
     if (!query)
       return errorResult('find needs a query, e.g. {"query": "search box"}.');
-    return call('find', { tabId: a.tabId, query });
+    return call('find', { tabId: a.tabId, query, wait_for: a.wait_for, timeout: a.timeout }, a.wait_for ? 60000 : undefined);
   });
 
   server.registerTool('form_input', {
-    description: 'Set the value of a form control by ref: text fields and textareas (replaces content), <select> (option value or visible text), checkboxes/radios/switches (true/false), date/time/color/range inputs, and contenteditable editors. Fires the input/change events frameworks like React expect.',
+    description: 'Set the value of a form control by ref: text fields and textareas (replaces content), <select> (option value or visible text; for <select multiple> an array of options), checkboxes/radios/switches (true/false), date/time/color/range inputs, and contenteditable rich-text editors (replaces their content; lines become paragraphs). Fires the input/change events frameworks like React expect.',
     inputSchema: {
       ref: z.string().describe('Element ref from read_page or find, e.g. "e12".'),
-      value: z.union([z.string(), z.boolean(), z.number()]).describe('The value to set.'),
+      value: z.union([z.string(), z.boolean(), z.number(), z.array(z.string())]).describe('The value to set (an array of options for a multi-select).'),
       tabId,
       action_summary: actionSummary,
     },
@@ -583,15 +588,19 @@ Actions:
 * scroll_to: scroll ref into view.
 * left_click_drag: drag from start_coordinate to coordinate.
 * zoom: screenshot a region [x0, y0, x1, y1] at higher detail.
-* wait: wait duration seconds (max 10).`,
+* wait: wait until something happens instead of a fixed time: text (appears on the page), text_gone, ref_gone (element removed or hidden) or until: "idle" (no DOM changes or fetch/XHR for 300 ms), up to timeout seconds (default 5, max 30). Returns how long it took, or an error with what's on screen. Without these, waits duration seconds (max 10).`,
     inputSchema: {
       action: z.enum(['left_click', 'right_click', 'double_click', 'triple_click', 'type', 'screenshot', 'wait', 'scroll', 'key', 'left_click_drag', 'zoom', 'scroll_to', 'hover']),
       tabId,
       coordinate: coord.optional().describe('[x, y] in screenshot pixels.'),
       ref: z.string().optional().describe('Element ref from read_page/find; alternative to coordinate for clicks, hover, scroll, scroll_to.'),
-      text: z.string().optional().describe('Text for "type", or keys for "key".'),
+      text: z.string().optional().describe('Text for "type", keys for "key", or for "wait" the text to wait for.'),
       modifiers: z.string().optional().describe('Modifier keys for clicks, e.g. "ctrl", "shift", "cmd+shift".'),
-      duration: numish(z.number()).optional().describe('Seconds, for "wait" (max 10).'),
+      duration: numish(z.number()).optional().describe('Seconds, for a plain "wait" (max 10).'),
+      text_gone: z.string().optional().describe('For "wait": wait until this text is no longer on the page.'),
+      ref_gone: z.string().optional().describe('For "wait": wait until this element is removed or hidden (e.g. a spinner or a closing dialog).'),
+      until: z.enum(['idle']).optional().describe('For "wait": "idle" waits until the page stops changing (no DOM mutations and no fetch/XHR in flight for 300 ms).'),
+      timeout: numish(z.number()).optional().describe('For "wait" with text/text_gone/ref_gone/until: seconds to wait at most (default 5, max 30).'),
       scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional(),
       scroll_amount: numish(z.number()).optional().describe('Wheel ticks, 1-30 (default 3).'),
       start_coordinate: coord.optional().describe('Drag start [x, y].'),
@@ -616,7 +625,7 @@ Actions:
     } catch (e) {
       return errorResult(e);
     }
-    const r = await call('computer', a, a.action === 'wait' ? 20000 : 180000);
+    const r = await call('computer', a, a.action === 'wait' ? 50000 : 180000);
     if (!r.isError && ['screenshot', 'zoom'].includes(a.action))
       keepShot(r, a.tabId);
     if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
@@ -625,7 +634,7 @@ Actions:
   });
 
   server.registerTool('get_page_text', {
-    description: 'Return the readable text of the page, preferring the main article/content area. Long pages come in pages of max_chars (default 20000); pass query to get only the passages about something (e.g. "conservation status"), which is much cheaper than reading everything.',
+    description: 'Return the readable text of the page, preferring the main article/content area. Long pages come in pages of max_chars (default 20000); pass query to get only the passages about something (e.g. "conservation status"), which is much cheaper than reading everything. Also reads PDFs open in Firefox\'s PDF viewer (text PDFs; not scans or encrypted ones) and plain-text pages.',
     inputSchema: {
       tabId,
       query: z.string().optional().describe('Only return paragraphs mentioning these words.'),
@@ -635,13 +644,14 @@ Actions:
   }, async (a) => call('get_page_text', a));
 
   server.registerTool('javascript_tool', {
-    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Only available in the self-distributed "Foxwright (Full)" build, and pages with a strict Content-Security-Policy may block it.',
+    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Gives up after timeout seconds (default 10); a script stuck in a loop keeps the tab unresponsive until it is navigated or closed. Only available in the self-distributed "Foxwright (Full)" build, and pages with a strict Content-Security-Policy may block it.',
     inputSchema: {
       action: z.literal('javascript_exec').optional(),
       text: z.string().describe('The JavaScript to run.'),
       tabId,
+      timeout: numish(z.number()).optional().describe('Seconds to wait for the script (default 10, max 60).'),
     },
-  }, async (a) => call('javascript_tool', a));
+  }, async (a) => call('javascript_tool', a, (Math.min(60, Math.max(1, Number(a.timeout) > 1000 ? Number(a.timeout) / 1000 : Number(a.timeout) || 10)) + 30) * 1000));
 
   server.registerTool('handle_dialog', {
     description: 'While you work in a tab, JavaScript alert/confirm/prompt dialogs don\'t block it: alerts are dismissed, confirms answered Cancel and prompts cancelled, and the tool result tells you what the page asked. Call this BEFORE an action to answer the next dialog in that tab differently (e.g. accept a "Are you sure?" confirm, or type into a prompt).',

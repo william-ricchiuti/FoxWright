@@ -38,7 +38,7 @@ export const P2 = Number(process.env.FOXWRIGHT_P2);
 const fixtures = path.join(root, 'test', 'fixtures');
 
 function serve(port) {
-  const types = { html: 'text/html', js: 'text/javascript', json: 'application/json', css: 'text/css' };
+  const types = { html: 'text/html', js: 'text/javascript', json: 'application/json', css: 'text/css', pdf: 'application/pdf' };
   const server = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     const p = path.join(fixtures, decodeURIComponent(u.pathname));

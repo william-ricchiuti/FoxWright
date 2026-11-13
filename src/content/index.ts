@@ -2,6 +2,7 @@
 import { takeSnapshot, findElements, setRefPrefix, getRefPrefix } from './snapshot';
 import * as input from './input';
 import { pageText } from './text';
+import { waitCheck, uiAfter } from './wait';
 import { showActivity, hideActivity, dodgePill } from './overlay';
 import { watchSecrets } from './secrets';
 
@@ -117,7 +118,9 @@ const handlers: Record<string, (args: any) => any> = {
   upload: (a) => input.uploadFiles(a),
   refPoint: (a) => input.refPoint(a),
   locate: (a) => input.locate(a),
-  focusInfo: () => input.focusInfo(),
+  focusInfo: (a) => input.focusInfo(a),
+  waitCheck: (a) => waitCheck(a),
+  uiAfter: () => uiAfter(),
   frameOffset: (a) => frameOffset(a),
   frameRects: (a) => frameRects(a),
   dodgePill: (a) => dodgePill(a.x, a.y),

@@ -4,10 +4,425 @@
 import { state, publicStatus } from './state.js';
 import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks } from './tabs.js';
 import { askUser, cancelPairPrompts } from './prompt.js';
-import { netLog } from './netlog.js';
+import { netLog, docTypes } from './netlog.js';
+import { extractPdfText, PdfError } from './pdftext.js';
 
 const text = (t) => ({ content: [{ type: 'text', text: t }] });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ---------- waiting for the page ----------
+
+// fetch()/XHR requests the page has in flight, per tab (webRequest reports fetch as "xmlhttprequest").
+// Used by computer {action: "wait", until: "idle"}.
+const inflight = new Map(); // tabId -> Map(requestId -> start time)
+const netActivity = new Map(); // tabId -> time a request last started or ended
+const LONG_POLL_MS = 5000; // requests open longer than this (long polling, streams) don't block "idle"
+
+function noteRequest(d, done) {
+  if (d.tabId < 0 || !state.groupTabIds.has(d.tabId))
+    return;
+  let m = inflight.get(d.tabId);
+  if (!m)
+    inflight.set(d.tabId, (m = new Map()));
+  if (done)
+    m.delete(d.requestId);
+  else
+    m.set(d.requestId, Date.now());
+  netActivity.set(d.tabId, Date.now());
+}
+try {
+  const xhr = { urls: ['<all_urls>'], types: ['xmlhttprequest'] };
+  browser.webRequest.onBeforeRequest.addListener(d => noteRequest(d, false), xhr);
+  browser.webRequest.onCompleted.addListener(d => noteRequest(d, true), xhr);
+  browser.webRequest.onErrorOccurred.addListener(d => noteRequest(d, true), xhr);
+} catch { /* no webRequest: idle then means DOM-quiet only */ }
+browser.tabs.onRemoved.addListener((tabId) => {
+  inflight.delete(tabId);
+  netActivity.delete(tabId);
+});
+
+/** Requests still open (ignoring long polls), and ms since the network was last active. */
+function netState(tabId) {
+  const now = Date.now();
+  const open = [...(inflight.get(tabId) || new Map()).values()].filter(t => now - t < LONG_POLL_MS).length;
+  return { open, quietMs: now - (netActivity.get(tabId) || 0) };
+}
+
+/** Seconds (default 5, max 30). Values over 100 are taken as milliseconds, a common slip. */
+function waitTimeoutMs(v, dflt = 5) {
+  let s = Number(v);
+  if (!isFinite(s) || s < 0)
+    s = dflt;
+  if (s > 100)
+    s /= 1000;
+  return Math.round(Math.min(30, s) * 1000);
+}
+
+const ROLE_WORDS = new Set(['alert', 'alertdialog', 'button', 'cell', 'checkbox', 'columnheader', 'combobox', 'dialog', 'grid', 'gridcell', 'heading', 'img', 'link', 'list', 'listbox', 'listitem', 'menu', 'menubar', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'navigation', 'option', 'progressbar', 'radio', 'region', 'row', 'searchbox', 'slider', 'spinbutton', 'status', 'switch', 'tab', 'table', 'tablist', 'tabpanel', 'textbox', 'tooltip', 'tree', 'treeitem']);
+
+/** wait_for: plain text, or role + name like `button "Save"` / `dialog` (as read_page prints them). */
+function parseWaitFor(s) {
+  const str = String(s || '').trim();
+  const m = /^([a-z]+)(?:\s+"((?:[^"\\]|\\.)*)"|\s+'([^']*)')?\s*(?:\[.*\])?$/i.exec(str);
+  if (m && ROLE_WORDS.has(m[1].toLowerCase()))
+    return { role: m[1].toLowerCase(), name: (m[2] ?? m[3] ?? '').replace(/\\"/g, '"'), label: str };
+  return { text: str, label: JSON.stringify(str) };
+}
+
+function describeCond(c) {
+  const parts = [];
+  if (c.role)
+    parts.push(`${c.role}${c.name ? ` "${c.name}"` : ''} to appear`);
+  if (c.text)
+    parts.push(`"${c.text}" to appear`);
+  if (c.text_gone)
+    parts.push(`"${c.text_gone}" to go away`);
+  if (c.ref_gone)
+    parts.push(`${c.ref_gone} to go away`);
+  if (c.idle)
+    parts.push('the page to settle (no DOM changes or fetch/XHR requests for 300 ms)');
+  return parts.join(' and ');
+}
+
+/** A short view of what's on screen, for timeout messages. */
+async function onScreenNow(tab) {
+  try {
+    const r = await sendContent(tab.id, 0, 'snapshot', { visible_only: true }, 5000);
+    const y = r.yaml.length > 1500 ? r.yaml.slice(0, r.yaml.lastIndexOf('\n', 1500)) + '\n…' : r.yaml;
+    return `\nOn screen now (${r.url}):\n${y}`;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Wait until the page (top frame) meets a condition: text present or gone, an element gone, a
+ * role+name in the outline, and/or idle (no DOM mutations and no fetch/XHR for 300 ms). Survives
+ * navigations in between (the content script is re-injected). Throws a clear error on timeout.
+ */
+async function waitFor(tab, cond, timeoutMs) {
+  const t0 = Date.now();
+  const deadline = t0 + timeoutMs;
+  const quietMs = cond.idle ? 300 : 0;
+  let lastErr = '';
+  for (;;) {
+    if (state.paused)
+      throw new Error('Foxwright is paused: the user pressed Stop.');
+    const left = deadline - Date.now();
+    try {
+      await ensureContent(tab.id, 0);
+      const r = await sendContent(tab.id, 0, 'waitCheck', { text: cond.text, text_gone: cond.text_gone, ref_gone: cond.ref_gone, role: cond.role, name: cond.name, quietMs, sliceMs: Math.max(0, Math.min(2000, left)) }, Math.max(0, Math.min(2000, left)) + 5000);
+      if (r.met) {
+        if (!cond.idle)
+          return Date.now() - t0;
+        const t = await browser.tabs.get(tab.id);
+        const net = netState(tab.id);
+        if (t.status !== 'loading' && net.open === 0 && net.quietMs >= quietMs)
+          return Date.now() - t0;
+        if (Date.now() >= deadline)
+          throw Object.assign(new Error(`page still busy: ${t.status === 'loading' ? 'it is still loading' : `${net.open} fetch/XHR request${net.open === 1 ? '' : 's'} in flight`}`), { timeout: true });
+        await sleep(Math.min(100, Math.max(0, deadline - Date.now())));
+        continue;
+      }
+      lastErr = '';
+    } catch (e) {
+      if (e.timeout)
+        lastErr = e.message;
+      else if (/not allowed to access|did not allow|paused|Firefox does not let|blocks all extensions/i.test(String(e?.message)))
+        throw e;
+      else
+        lastErr = String(e?.message || e); // page navigating or not ready: try again
+      if (Date.now() < deadline)
+        await sleep(150);
+    }
+    if (Date.now() >= deadline) {
+      const secs = (timeoutMs / 1000).toFixed(1).replace(/\.0$/, '');
+      throw new Error(`Timed out after ${secs} s waiting for ${describeCond(cond)}${lastErr ? ` (${lastErr.slice(0, 200)})` : ''}.${await onScreenNow(tab)}`);
+    }
+  }
+}
+
+// ---------- read_page diffs ----------
+
+// The last outline read_page returned, per tab, frame and options; read_page {diff: true} compares to it.
+const lastOutlines = new Map(); // tabId -> Map(key -> { url, docId, yaml })
+browser.tabs.onRemoved.addListener(tabId => lastOutlines.delete(tabId));
+
+/**
+ * Line diff (Myers' O(ND) algorithm) after trimming the common start and end. Returns a list of
+ * ['=', i, j] / ['-', i] / ['+', j] or null when the lists differ in more than maxD lines.
+ */
+export function diffLines(a, b, maxD = 1500) {
+  let s = 0;
+  while (s < a.length && s < b.length && a[s] === b[s])
+    s++;
+  let ea = a.length, eb = b.length;
+  while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) {
+    ea--;
+    eb--;
+  }
+  const A = a.slice(s, ea), B = b.slice(s, eb);
+  const N = A.length, M = B.length;
+  const ops = [];
+  const trace = [];
+  const off = Math.min(N + M, maxD) + 1;
+  const v = new Int32Array(2 * off + 2);
+  let found = N === 0 && M === 0;
+  for (let d = 0; !found && d <= N + M; d++) {
+    if (d > maxD)
+      return null;
+    for (let k = -d; k <= d; k += 2) {
+      let x = k === -d || (k !== d && v[off + k - 1] < v[off + k + 1]) ? v[off + k + 1] : v[off + k - 1] + 1;
+      let y = x - k;
+      while (x < N && y < M && A[x] === B[y]) {
+        x++;
+        y++;
+      }
+      v[off + k] = x;
+      if (x >= N && y >= M) {
+        found = true;
+        break;
+      }
+    }
+    trace.push(v.slice(off - d - 1, off + d + 2)); // index k + d + 1
+  }
+  let x = N, y = M;
+  for (let d = trace.length - 1; d > 0; d--) {
+    const prev = trace[d - 1]; // k index: k + (d - 1) + 1 = k + d
+    const k = x - y;
+    const get = (kk) => prev[kk + d];
+    const prevK = k === -d || (k !== d && get(k - 1) < get(k + 1)) ? k + 1 : k - 1;
+    const px = get(prevK), py = px - prevK;
+    while (x > px && y > py) {
+      ops.push(['=', s + x - 1, s + y - 1]);
+      x--;
+      y--;
+    }
+    if (x === px)
+      ops.push(['+', s + y - 1]);
+    else
+      ops.push(['-', s + x - 1]);
+    x = px;
+    y = py;
+  }
+  while (x > 0 && y > 0) {
+    ops.push(['=', s + x - 1, s + y - 1]);
+    x--;
+    y--;
+  }
+  ops.reverse();
+  const head = [];
+  for (let i = 0; i < s; i++)
+    head.push(['=', i, i]);
+  const tail = [];
+  for (let i = 0; i < a.length - ea; i++)
+    tail.push(['=', ea + i, eb + i]);
+  return [...head, ...ops, ...tail];
+}
+
+const indentOf = (l) => l.length - l.trimStart().length;
+const refOfLine = (l) => /\[ref=([^\]]+)\]/.exec(l)?.[1];
+
+/** Changed lines of an outline, each with the ancestor lines (by indentation) that place it. */
+function outlineDiff(oldYaml, newYaml) {
+  const a = oldYaml.split('\n'), b = newYaml.split('\n');
+  const ops = diffLines(a, b);
+  if (!ops)
+    return null;
+  // Pair removals and additions of the same ref: that element changed in place.
+  const removedByRef = new Map();
+  for (const op of ops) {
+    if (op[0] === '-') {
+      const r = refOfLine(a[op[1]]);
+      if (r)
+        removedByRef.set(r, op);
+    }
+  }
+  const changedOld = new Map(); // new line index -> old line text
+  const paired = new Set();
+  for (const op of ops) {
+    if (op[0] === '+') {
+      const r = refOfLine(b[op[1]]);
+      const rem = r && removedByRef.get(r);
+      if (rem && !paired.has(rem)) {
+        paired.add(rem);
+        changedOld.set(op[1], a[rem[1]]);
+      }
+    }
+  }
+  // Old indexes of unchanged lines -> new indexes, so a parent shown as context once isn't repeated.
+  const oldToNew = new Map();
+  for (const op of ops)
+    if (op[0] === '=')
+      oldToNew.set(op[1], op[2]);
+  const out = [];
+  const shown = new Set(); // context lines already printed, by "side:index"
+  let added = 0, removed = 0, changed = 0;
+  const context = (lines, idx, side) => {
+    const chain = [];
+    let ind = indentOf(lines[idx]);
+    for (let i = idx - 1; i >= 0 && ind > 0; i--) {
+      const li = indentOf(lines[i]);
+      if (li < ind) {
+        chain.push(i);
+        ind = li;
+      }
+    }
+    for (const i of chain.reverse()) {
+      const key = side === 'a' && oldToNew.has(i) ? `b:${oldToNew.get(i)}` : `${side}:${i}`;
+      if (!shown.has(key)) {
+        shown.add(key);
+        out.push(`  ${lines[i]}`);
+      }
+    }
+  };
+  for (const op of ops) {
+    if (op[0] === '=')
+      continue;
+    if (op[0] === '-') {
+      if (paired.has(op))
+        continue;
+      removed++;
+      context(a, op[1], 'a');
+      out.push(`- ${a[op[1]]}`);
+    } else {
+      const old = changedOld.get(op[1]);
+      context(b, op[1], 'b');
+      shown.add(`b:${op[1]}`); // it is printed itself: never repeat it as a child's context
+      if (old !== undefined) {
+        changed++;
+        out.push(`~ ${b[op[1]]}`);
+        out.push(`  ${' '.repeat(indentOf(b[op[1]]))}(was: ${old.trim()})`);
+      } else {
+        added++;
+        out.push(`+ ${b[op[1]]}`);
+      }
+    }
+  }
+  return { lines: out, added, removed, changed, total: b.length };
+}
+
+// ---------- reading viewer pages (PDF) ----------
+
+/**
+ * Download the document a tab shows again, for Firefox viewer pages that extensions can't read.
+ * GET only, http(s) only, the tab's site already approved by the caller, the user's cookies
+ * included (default cookie jar: a tab in a Firefox container gets the default container's cookies).
+ * Another lane tightens the JSON viewer re-fetch in get_page_text; keep the two in step.
+ */
+async function refetchTabDocument(tab, maxBytes) {
+  const u = new URL(tab.url);
+  if (u.protocol !== 'https:' && u.protocol !== 'http:')
+    throw new Error(`Foxwright can only re-download http(s) documents, not ${u.protocol} ones.`);
+  const o = originOf(tab.url);
+  if (!o || !isAllowed(o))
+    throw new Error(`Foxwright is not allowed to access ${o || tab.url}.`);
+  const doc = docTypes.get(tab.id);
+  if (doc && doc.method && doc.method !== 'GET')
+    throw new Error(`The document was the answer to a ${doc.method} request, so Foxwright can't download it again.`);
+  // force-cache: the copy Firefox just showed is usually still in its cache, so no new download.
+  const r = await fetch(tab.url, { credentials: 'include', cache: 'force-cache', redirect: 'follow' });
+  if (!r.ok)
+    throw new Error(`Downloading it again returned HTTP ${r.status}.`);
+  const len = Number(r.headers.get('content-length') || 0);
+  if (len > maxBytes)
+    throw new Error(`It is ${Math.round(len / 1048576)} MB, more than Foxwright reads (${Math.round(maxBytes / 1048576)} MB).`);
+  const buf = new Uint8Array(await r.arrayBuffer());
+  if (buf.length > maxBytes)
+    throw new Error(`It is ${Math.round(buf.length / 1048576)} MB, more than Foxwright reads (${Math.round(maxBytes / 1048576)} MB).`);
+  return { bytes: buf, contentType: (r.headers.get('content-type') || '').toLowerCase(), container: tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default' && !tab.incognito };
+}
+
+async function pdfText(tab) {
+  let got;
+  try {
+    got = await refetchTabDocument(tab, 60 * 1048576);
+  } catch (e) {
+    throw new Error(`Tab ${tab.id} shows a PDF in Firefox's PDF viewer, which extensions can't read directly, and Foxwright couldn't download the PDF to read it: ${e.message}`);
+  }
+  try {
+    const r = await extractPdfText(got.bytes);
+    const notes = [];
+    if (r.undecoded)
+      notes.push(`${r.undecoded} of ${r.glyphs} characters couldn't be decoded (fonts without a Unicode map) and are left out.`);
+    if (r.truncated)
+      notes.push('The PDF has more text than Foxwright reads (5,000,000 characters); the rest is left out.');
+    if (got.container)
+      notes.push('This tab is in a Firefox container, but the PDF was downloaded with the default container\'s cookies.');
+    const body = r.pages.map((p, i) => `[Page ${i + 1}]\n${p}`).join('\n\n');
+    return { text: body, source: `PDF, ${r.pageCount} page${r.pageCount === 1 ? '' : 's'} (text extracted by Foxwright from the PDF file; layout is approximate)`, notes };
+  } catch (e) {
+    if (e instanceof PdfError)
+      throw new Error(`Tab ${tab.id} shows a PDF that Foxwright can't turn into text: ${e.message}`);
+    throw new Error(`Tab ${tab.id} shows a PDF that Foxwright couldn't read (${e.message}). Take screenshots of the PDF viewer instead.`);
+  }
+}
+
+const PAGE_TEXT_MAX = 5000000; // characters of page text get_page_text can page through
+
+/** Page through text, or return just the passages matching a query (get_page_text). */
+function pagedText(head, full, args, { preformatted = false, notes = [] } = {}) {
+  const max = Math.max(1000, Math.min(100000, Number(args.max_chars) || 20000));
+  const noteText = notes.length ? notes.join('\n') + '\n' : '';
+  if (args.query) {
+    // Return only the passages that mention the query words (cheap way to answer a question about a long page).
+    const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
+    const paras = full.split(/\n+/).map(p => (preformatted ? p.replace(/\s+$/, '') : p.trim())).filter(p => p.trim());
+    const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
+    scored.sort((a, b) => b.s - a.s || a.i - b.i);
+    const picked = new Set();
+    for (const x of scored.slice(0, 12))
+      for (const j of [x.i - 1, x.i, x.i + 1])
+        if (j >= 0 && j < paras.length)
+          picked.add(j);
+    let out = [...picked].sort((a, b) => a - b).map(j => paras[j]).join('\n');
+    if (out.length > max)
+      out = out.slice(0, max) + '…';
+    return text(`${head}\n${noteText}Passages matching "${args.query}" (${scored.length} matching ${preformatted ? 'lines' : 'paragraphs'} of ${paras.length}):\n\n${out || '(no matches; try other words or read the page without a query)'}`);
+  }
+  const offset = Math.max(0, Number(args.offset) || 0);
+  const chunk = full.slice(offset, offset + max);
+  const more = offset + max < full.length;
+  return text(`${head}\n${noteText}${offset || more ? `Showing characters ${offset}–${offset + chunk.length} of ${full.length}.${more ? ` Call again with offset: ${offset + chunk.length} for more, or pass query to get just the relevant passages.` : ''}\n` : ''}\n${chunk}`);
+}
+
+// ---------- javascript_tool: scripts that don't finish ----------
+
+// Tabs whose page is still running a javascript_tool script that timed out (probably an endless
+// loop). Their main thread is blocked, so anything that needs the page would hang: fail fast instead.
+const jsBusy = new Map(); // tabId -> { since }
+browser.tabs.onRemoved.addListener(tabId => jsBusy.delete(tabId));
+browser.webNavigation.onCommitted.addListener((d) => {
+  if (d.frameId === 0)
+    jsBusy.delete(d.tabId); // a new document: the old script is gone with the old one
+});
+
+/** True if the page's content script answers within ms (false: its main thread is blocked). */
+async function pageResponds(tabId, ms = 1500) {
+  let timer;
+  try {
+    await Promise.race([
+      browser.tabs.sendMessage(tabId, { foxwright: true, cmd: 'ping' }, { frameId: 0 }),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('ping timeout')), ms); }),
+    ]);
+    return true;
+  } catch (e) {
+    return !/ping timeout/.test(String(e?.message)); // "no content script yet" still means it answered
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkNotBusy(tabId) {
+  const b = jsBusy.get(tabId);
+  if (!b)
+    return;
+  if (await pageResponds(tabId)) {
+    jsBusy.delete(tabId);
+    return;
+  }
+  throw new Error(`Tab ${tabId} is still running a javascript_tool script that started ${Math.round((Date.now() - b.since) / 1000)} s ago, so its page can't respond. Foxwright can't interrupt it. Use navigate on this tab (loading a page ends the script) or close it with tabs_close_mcp; other tabs are not affected.`);
+}
 
 // ---------- screenshot geometry ----------
 // Screenshots are sized so Claude's vision model doesn't downscale them again
@@ -356,6 +771,7 @@ async function tabForPageTool(args) {
   await ensurePermission(tab);
   if (checkAccessible(tab) === 'blank')
     return tab;
+  await checkNotBusy(tab.id);
   await ensureContent(tab.id, 0);
   showActivity(tab.id);
   return tab;
@@ -578,6 +994,8 @@ export const tools = {
       try {
         await ensureContent(tab.id, 0);
       } catch (e) {
+        if (/built-in PDF viewer/.test(String(e?.message)))
+          return text(`${prefix}Navigated tab ${tab.id} to ${done.url}\nTitle: ${done.title || '(none)'}\nThe tab shows a PDF in Firefox's PDF viewer. Read it with get_page_text (it supports query and offset); the other page tools don't work in the viewer.${ctx}`);
         throw new Error(`${prefix}Navigation to ${done.url} failed: ${String(e.message).replace(/^Tab \d+ is showing/, 'Firefox is showing')}`);
       }
     }
@@ -589,33 +1007,80 @@ export const tools = {
     const tab = await tabForPageTool(args);
     if (checkAccessible(tab) === 'blank')
       return text(`Tab ${tab.id} is blank (${tab.url || 'about:blank'}). Navigate somewhere first.`);
+    let waited = '';
+    if (args.wait_for) {
+      const c = parseWaitFor(args.wait_for);
+      const ms = await waitFor(tab, c, waitTimeoutMs(args.timeout));
+      waited = `(Waited ${(ms / 1000).toFixed(1)} s for ${c.label}.)\n`;
+    }
     const frameId = args.ref_id ? frameForRef(tab.id, args.ref_id) : 0;
     if (frameId !== 0)
       await ensureContent(tab.id, frameId);
     let res = await sendContent(tab.id, frameId, 'snapshot', { filter: args.filter, depth: args.depth, ref_id: args.ref_id, visible_only: args.visible_only });
+    let readFrame = frameId;
     if (res && res.frameRedirect !== undefined) {
       // ref_id pointed at an <iframe>: show that frame's document (asking for its site if needed).
       if (res.frameRedirect < 0)
         throw new Error(`Can't read inside ${args.ref_id}; the frame is not accessible.`);
-      await ensureFramePermission(tab, res.frameRedirect);
-      await ensureContent(tab.id, res.frameRedirect);
-      res = await sendContent(tab.id, res.frameRedirect, 'snapshot', { filter: args.filter, depth: args.depth });
+      readFrame = res.frameRedirect;
+      await ensureFramePermission(tab, readFrame);
+      await ensureContent(tab.id, readFrame);
+      res = await sendContent(tab.id, readFrame, 'snapshot', { filter: args.filter, depth: args.depth });
     }
     const yaml = await stitchFrames(tab.id, res, args, 3);
     const vp = res.viewport;
-    const header = `Page: ${res.title || '(untitled)'}\nURL: ${res.url}\nViewport: ${vp.width}x${vp.height} CSS px, scrolled to y=${vp.scrollY} of ${vp.scrollHeight}\n`;
+    const header = `${waited}Page: ${res.title || '(untitled)'}\nURL: ${res.url}\nViewport: ${vp.width}x${vp.height} CSS px, scrolled to y=${vp.scrollY} of ${vp.scrollHeight}\n`;
     const body = args.ref_id ? `Subtree of ${args.ref_id}:\n${yaml}` : yaml;
-    return text(truncateLines(header + body, args.max_chars || 20000));
+    const max = args.max_chars || 20000;
+
+    // Remember this outline; with diff: true, return only what changed since the last one.
+    const key = [readFrame, args.ref_id || '', args.filter || 'all', args.visible_only ? 1 : 0, args.depth || ''].join('|');
+    let perTab = lastOutlines.get(tab.id);
+    if (!perTab)
+      lastOutlines.set(tab.id, (perTab = new Map()));
+    const prev = perTab.get(key);
+    perTab.set(key, { url: res.url, docId: res.docId, yaml: body });
+    if (perTab.size > 12)
+      perTab.delete(perTab.keys().next().value);
+    if (args.diff) {
+      let why = '';
+      if (!prev)
+        why = 'there is no earlier read_page of this tab with the same options to compare with';
+      else if (prev.url !== res.url || prev.docId !== res.docId)
+        why = 'the page navigated since the last read_page';
+      else {
+        const d = outlineDiff(prev.yaml, body);
+        if (!d)
+          why = 'too much changed for a useful diff';
+        else if (!d.lines.length)
+          return text(`${header}No changes since the previous read_page (${d.total} lines). Refs from it are still valid.`);
+        else {
+          const summary = `Changes since the previous read_page: ${d.added} added, ${d.removed} removed, ${d.changed} changed; the other ${d.total - d.added - d.changed} of ${d.total} lines are unchanged and omitted. "+" added, "-" removed, "~" changed (old version below it), indented lines without a mark are parents for context. Refs from earlier reads stay valid.\n`;
+          const diffText = summary + d.lines.join('\n');
+          if (diffText.length < body.length)
+            return text(truncateLines(header + diffText, max));
+          why = 'the diff would be longer than the outline';
+        }
+      }
+      return text(truncateLines(`${header}(Full outline: ${why}.)\n${body}`, max));
+    }
+    return text(truncateLines(header + body, max));
   },
 
   async find(args) {
     const tab = await tabForPageTool(args);
     if (!args.query)
       throw new Error('query is required.');
+    let waited = '';
+    if (args.wait_for) {
+      const c = parseWaitFor(args.wait_for);
+      const ms = await waitFor(tab, c, waitTimeoutMs(args.timeout));
+      waited = ` (after waiting ${(ms / 1000).toFixed(1)} s for ${c.label})`;
+    }
     const top = await sendContent(tab.id, 0, 'find', { query: args.query });
     const vp = top.viewport || await viewportOf(tab);
     const s = scaleFor(vp.width, vp.height);
-    const lines = top.items.map(i => i.line + (i.center ? ` at (${Math.round(i.center.x * s)}, ${Math.round(i.center.y * s)})${i.center.inView ? '' : ' (off-screen)'}` : ''));
+    const lines = top.items.map(i => i.line + (i.center ? ` at (${Math.round(i.center.x * s)}, ${Math.round(i.center.y * s)})${i.center.inView ? '' : ' (off-screen)'}` : '') + (i.note ? ` ${i.note}` : ''));
     let total = top.total;
     try {
       // Search approved frames in parallel; keep results in frame order.
@@ -645,8 +1110,8 @@ export const tools = {
       }
     } catch { /* ignore */ }
     if (!lines.length)
-      return text(`No elements matched "${args.query}". Try read_page (filter: "interactive") or a screenshot.`);
-    return text(`${lines.length} match${lines.length > 1 ? 'es' : ''} for "${args.query}"${total > lines.length ? ` (of ${total} candidates; be more specific to narrow)` : ''}:\n${lines.join('\n')}`);
+      return text(`No elements matched "${args.query}"${waited}. Try read_page (filter: "interactive") or a screenshot.`);
+    return text(`${lines.length} match${lines.length > 1 ? 'es' : ''} for "${args.query}"${waited}${total > lines.length ? ` (of ${total} candidates; be more specific to narrow)` : ''}:\n${lines.join('\n')}`);
   },
 
   async form_input(args) {
@@ -661,6 +1126,13 @@ export const tools = {
     try {
       tab = await tabForPageTool(args);
     } catch (e) {
+      // Firefox's PDF viewer: the site was approved above (the error comes after the permission
+      // check), so download the PDF and extract its text.
+      if (/built-in PDF viewer/.test(String(e?.message)) && typeof args.tabId === 'number') {
+        const t = await browser.tabs.get(args.tabId);
+        const p = await pdfText(t);
+        return pagedText(`Title: ${t.title || '(untitled)'}\nURL: ${t.url}\nSource: ${p.source}`, p.text, args, { notes: p.notes });
+      }
       if (!e.jsonViewer)
         throw e;
       // Firefox's JSON viewer hides the document from extensions; fetch the JSON again (GET).
@@ -674,41 +1146,31 @@ export const tools = {
     }
     if (checkAccessible(tab) === 'blank')
       return text(`Tab ${tab.id} is blank.`);
-    const r = await sendContent(tab.id, 0, 'pageText', { maxChars: 1000000 });
-    const max = Math.max(1000, Math.min(100000, Number(args.max_chars) || 20000));
-    const head = `Title: ${r.title}\nURL: ${r.url}\nSource: ${r.source}`;
-    const full = r.text;
-    if (args.query) {
-      // Return only the passages that mention the query words (cheap way to answer a question about a long page).
-      const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
-      const paras = full.split(/\n+/).map(p => p.trim()).filter(Boolean);
-      const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
-      scored.sort((a, b) => b.s - a.s || a.i - b.i);
-      const picked = new Set();
-      for (const x of scored.slice(0, 12))
-        for (const j of [x.i - 1, x.i, x.i + 1])
-          if (j >= 0 && j < paras.length)
-            picked.add(j);
-      let out = [...picked].sort((a, b) => a - b).map(j => paras[j]).join('\n');
-      if (out.length > max)
-        out = out.slice(0, max) + '…';
-      return text(`${head}\nPassages matching "${args.query}" (${scored.length} matching paragraphs of ${paras.length}):\n\n${out || '(no matches; try other words or read the page without a query)'}`);
-    }
-    const offset = Math.max(0, Number(args.offset) || 0);
-    const chunk = full.slice(offset, offset + max);
-    const more = offset + max < full.length;
-    return text(`${head}\n${offset || more ? `Showing characters ${offset}–${offset + chunk.length} of ${full.length}.${more ? ` Call again with offset: ${offset + chunk.length} for more, or pass query to get just the relevant passages.` : ''}\n` : ''}\n${chunk}`);
+    const r = await sendContent(tab.id, 0, 'pageText', { maxChars: PAGE_TEXT_MAX });
+    const notes = r.truncated ? [`(The page has ${r.totalChars} characters of text; only the first ${PAGE_TEXT_MAX} can be read.)`] : [];
+    return pagedText(`Title: ${r.title}\nURL: ${r.url}\nSource: ${r.source}`, r.text, args, { preformatted: !!r.preformatted, notes });
   },
 
   async computer(args) {
     const action = args.action;
     const tab = await requireTab(args.tabId);
     if (action === 'wait') {
-      const secs = Math.max(0, Math.min(10, Number(args.duration ?? 1)));
-      await sleep(secs * 1000);
-      return text(`Waited ${secs}s.`);
+      const cond = { text: args.text || undefined, text_gone: args.text_gone || undefined, ref_gone: args.ref_gone || undefined, idle: args.until === 'idle' };
+      if (!cond.text && !cond.text_gone && !cond.ref_gone && !cond.idle) {
+        const secs = Math.max(0, Math.min(10, Number(args.duration ?? 1)));
+        await sleep(secs * 1000);
+        return text(`Waited ${secs}s.`);
+      }
+      await ensurePermission(tab);
+      if (checkAccessible(tab) === 'blank')
+        throw new Error(`Tab ${tab.id} is blank; navigate to a page first.`);
+      await checkNotBusy(tab.id);
+      const ms = await waitFor(tab, cond, waitTimeoutMs(args.timeout));
+      return text(`Waited ${(ms / 1000).toFixed(1)} s for ${describeCond(cond)}.`);
     }
     await ensurePermission(tab);
+    if (checkAccessible(tab) !== 'blank')
+      await checkNotBusy(tab.id);
     const blank = checkAccessible(tab) === 'blank';
     if (!blank) {
       await ensureContent(tab.id, 0);
@@ -800,7 +1262,29 @@ export const tools = {
       const expectOrigin = await frameOriginOf(tab.id, 0).catch(() => null);
       if (expectOrigin && !isAllowed(expectOrigin))
         throw new Error(`Foxwright is not allowed to access ${expectOrigin}.`);
-      const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text, expectOrigin && /^https?:/.test(expectOrigin) ? expectOrigin : null] });
+      // A script that never finishes (an endless loop) would otherwise hold this call, and every
+      // later call on the tab, forever. Give up waiting after the timeout; the page keeps running it.
+      const secs = Math.max(1, Math.min(60, Number(args.timeout) > 0 ? (Number(args.timeout) > 1000 ? Number(args.timeout) / 1000 : Number(args.timeout)) : 10));
+      const exec = browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text, expectOrigin && /^https?:/.test(expectOrigin) ? expectOrigin : null] });
+      const entry = { since: Date.now() };
+      exec.catch(() => {}).finally(() => {
+        if (jsBusy.get(tab.id) === entry)
+          jsBusy.delete(tab.id);
+        entry.done = true;
+      });
+      let timer;
+      const raced = await Promise.race([exec.then(v => ({ v }), e => ({ e })), new Promise((r) => { timer = setTimeout(() => r(null), secs * 1000); })]);
+      clearTimeout(timer);
+      if (!raced) {
+        if (!entry.done && await pageResponds(tab.id))
+          throw new Error(`The script didn't finish within ${secs} s (it is still waiting, e.g. on a network request or a timer), so its result is lost; the page itself is responsive. Pass a larger timeout (up to 60 s) if it needs longer.`);
+        if (!entry.done)
+          jsBusy.set(tab.id, entry);
+        throw new Error(`The script is still running after ${secs} s and the page is not responding (probably an endless loop). Foxwright can't stop a running script. Until it ends, other calls on tab ${tab.id} fail fast; use navigate on this tab to load a page (that ends the script) or tabs_close_mcp to close it. Other tabs are not affected.`);
+      }
+      if (raced.e)
+        throw raced.e;
+      const [res] = raced.v;
       if (res?.error)
         throw new Error(String(res.error.message || res.error));
       const out = res?.result;
@@ -951,8 +1435,8 @@ export const tools = {
     const tab = await tabForPageTool(args);
     if (checkAccessible(tab) === 'blank')
       return { data: { frameId: 0 } };
-    const f = await sendContent(tab.id, 0, 'focusInfo', {});
-    return { data: { frameId: frameIdFromPrefix(tab.id, f.prefix), target: f.target, editable: f.editable } };
+    const f = await sendContent(tab.id, 0, 'focusInfo', { waitEditable: !!args.forType });
+    return { data: { frameId: frameIdFromPrefix(tab.id, f.prefix), target: f.target, editable: f.editable, waited: f.waited } };
   },
 
   async _mark(args) {
@@ -1083,6 +1567,11 @@ export const tools = {
     const tab = await requireTab(args.tabId);
     showActivity(tab.id);
     const extra = await afterAction(tab, { url: args.beforeUrl, t0: typeof args.t0 === 'number' ? args.t0 : undefined }, {});
+    // No navigation: report popups that opened or closed and where focus went (top frame).
+    if (!extra.some(l => /^The page navigated/.test(l)) && checkAccessible(await browser.tabs.get(tab.id)) === 'ok') {
+      const ui = await sendContent(tab.id, 0, 'uiAfter', {}, 3000).catch(() => []);
+      extra.unshift(...(Array.isArray(ui) ? ui : []));
+    }
     return { data: extra };
   },
 };
