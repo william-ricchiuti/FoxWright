@@ -3,19 +3,19 @@
 // The test plays the person: it creates, groups and ungroups tabs through an extension page
 // (the toolbar popup opened as a window), the same browser.tabs APIs a drag in the tab strip ends in.
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-boundary.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-boundary.mjs
 import fs from 'node:fs';
 import { start } from './harness.mjs';
 import { runner, extraServer, connectPerson, extBaseOf, chromeEval, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, finish } = runner('e2e-gaps-boundary');
-const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
+const P1 = process.env.FOXWRIGHT_P1, P2 = process.env.FOXWRIGHT_P2;
 const xs = await extraServer(P1, P2);
 const { P3 } = xs;
 const A = `http://a.test:${P3}`;
 const B = `http://b.test:${P3}`;
 
-console.log('Zenko gap tests: tab-group boundary and side channels');
+console.log('Foxwright gap tests: tab-group boundary and side channels');
 const h = await start({ testDriver: true, policy: { mode: 'ask', promptTimeoutSec: 15, confirmUploads: true, allowed: [A] } });
 const d = await connectPerson(h.bidiUrl);
 const tabId = tabIdOf((await h.call('tabs_context_mcp', { createIfEmpty: true })).text);
@@ -26,7 +26,7 @@ const ext = async (body) => {
   const v = await d.evalIn(extCtx, `(async () => JSON.stringify(await (async () => { ${body} })()))()`);
   return v === undefined ? undefined : JSON.parse(v);
 };
-/** Deny every Zenko permission window while `p` runs; returns the result and the origins asked about. */
+/** Deny every Foxwright permission window while `p` runs; returns the result and the origins asked about. */
 async function denyingAll(p) {
   const asked = [];
   let done = false;
@@ -52,7 +52,7 @@ const shotId = await (async () => {
   const s = await h.call('computer', { tabId, action: 'screenshot' });
   return /Screenshot ID: (shot-\d+)/.exec(s.text)?.[1];
 })();
-const tmpFile = '/tmp/zenko-gap-upload.txt';
+const tmpFile = '/tmp/foxwright-gap-upload.txt';
 fs.writeFileSync(tmpFile, 'hello');
 
 await test('every tool refuses a tab outside the orange group (and nothing from it leaks)', async () => {
@@ -89,7 +89,7 @@ await test('a tab the person drags into the group becomes usable; dragged out, i
   await sleep(600);
   const later = await h.call('get_page_text', { tabId: userTab });
   expect(!inside.isError && inside.text.includes('USER-TAB-SECRET'), 'inside the group: ' + inside.text.slice(0, 200));
-  expect(later.isError && /not in the Zenko tab group/.test(later.text), 'after ungrouping: ' + later.text.slice(0, 200));
+  expect(later.isError && /not in the Foxwright tab group/.test(later.text), 'after ungrouping: ' + later.text.slice(0, 200));
   expect(immediately.isError, `right after the person dragged the tab out, the agent could still read it: ${immediately.text.slice(0, 120)}`);
 }, { area: '3' });
 
@@ -151,7 +151,7 @@ await test('group tab showing about:, view-source:, moz-extension:, file: or add
 await test('tabs_context_mcp on a group tab that sits on an unapproved site: what it exposes', async () => {
   await h.call('navigate', { tabId, url: `${A}/redirect?to=${encodeURIComponent(`${B}/hostile-title.html?session=B-URL-TOKEN-123`)}` });
   const t = await h.call('tabs_context_mcp', {});
-  const exposed = [t.text.includes('B-URL-TOKEN-123') && 'full URL with query', /Zenko has verified/.test(t.text) && 'page title'].filter(Boolean);
+  const exposed = [t.text.includes('B-URL-TOKEN-123') && 'full URL with query', /Foxwright has verified/.test(t.text) && 'page title'].filter(Boolean);
   expect(!exposed.length, `tabs_context_mcp shows the unapproved site's ${exposed.join(' and ')}:\n${t.text}`);
 }, { area: 'side' });
 

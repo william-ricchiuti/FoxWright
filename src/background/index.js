@@ -1,4 +1,4 @@
-// Zenko background (event page).
+// Foxwright background (event page).
 /* global browser */
 import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
@@ -47,7 +47,7 @@ onRequest(async (tool, args) => {
   return result;
 });
 
-/** Zenko's own one-line description of an agent action, for the popup when the agent gave none. */
+/** Foxwright's own one-line description of an agent action, for the popup when the agent gave none. */
 function describeAction(tool, a = {}) {
   const at = Array.isArray(a.coordinate) ? ` at ${a.coordinate.map(Math.round).join(', ')}` : a.ref ? ` on ${a.ref}` : '';
   if (tool === 'computer') {
@@ -91,11 +91,11 @@ function inTabQueue(tool, tabId, run) {
 function friendlyTabError(e, tabId) {
   const m = String(e?.message || e);
   if (/Invalid tab ID|No tab with id|tab.*(closed|removed)/i.test(m) && !/^Tab \d+ /.test(m))
-    return new Error(`Tab ${tabId ?? ''} was closed (by the user or the page) while Zenko was using it. Call tabs_context_mcp to see the open tabs.`.replace('Tab  ', 'The tab '));
+    return new Error(`Tab ${tabId ?? ''} was closed (by the user or the page) while Foxwright was using it. Call tabs_context_mcp to see the open tabs.`.replace('Tab  ', 'The tab '));
   return e;
 }
 
-const PAUSED_MSG = 'Zenko is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Zenko toolbar popup if they want you to carry on.';
+const PAUSED_MSG = 'Foxwright is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Foxwright toolbar popup if they want you to carry on.';
 
 // ---------- messages from the popup and in-page UI ----------
 function isOwnPage(sender) {
@@ -108,7 +108,7 @@ async function pauseAgent() {
   // and content scripts abandon typing/drag loops at their next step.
   denyAllPrompts();
   for (const id of state.groupTabIds)
-    browser.tabs.sendMessage(id, { zenko: true, cmd: 'cancel' }).catch(() => {});
+    browser.tabs.sendMessage(id, { foxwright: true, cmd: 'cancel' }).catch(() => {});
   await saveSettings();
   await updateBadge();
   send({ type: 'event', event: 'paused' });
@@ -202,9 +202,9 @@ browser.commands.onCommand.addListener(async (command) => {
 startNetLog();
 
 // Wake up periodically so a missing/crashed helper is retried even after idle unload.
-browser.alarms.create('zenko-reconnect', { periodInMinutes: 1 });
+browser.alarms.create('foxwright-reconnect', { periodInMinutes: 1 });
 browser.alarms.onAlarm.addListener((a) => {
-  if (a.name === 'zenko-reconnect' && !state.connected)
+  if (a.name === 'foxwright-reconnect' && !state.connected)
     reconnectNow();
 });
 

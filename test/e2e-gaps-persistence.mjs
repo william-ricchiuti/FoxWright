@@ -2,7 +2,7 @@
 // restart, and an answer that comes after the MCP navigate timeout.
 // Uses gap-harness.mjs (a copy of harness.mjs) so one Firefox profile survives restartFirefox().
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-persistence.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-persistence.mjs
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,13 +10,13 @@ import { start } from './gap-harness.mjs';
 import { runner, extraServer, connectPerson, extBaseOf, sleep, expect, tabIdOf } from './gap-lib.mjs';
 
 const { test, finish } = runner('e2e-gaps-persistence');
-const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
+const P1 = process.env.FOXWRIGHT_P1, P2 = process.env.FOXWRIGHT_P2;
 const xs = await extraServer(P1, P2);
 const { P3 } = xs;
 const C = `http://c.test:${P3}`;
-const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zenko-gap-profile-'));
+const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'foxwright-gap-profile-'));
 
-console.log('Zenko gap tests: permission persistence, grant scope, pause across restart, late answers');
+console.log('Foxwright gap tests: permission persistence, grant scope, pause across restart, late answers');
 // No promptTimeoutSec: the default (120 s) is what users get.
 const h = await start({ testDriver: true, profileDir, policy: { confirmUploads: true } });
 let d = await connectPerson(h.bidiUrl);

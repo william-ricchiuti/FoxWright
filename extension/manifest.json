@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Zenko",
-  "version": "0.6.1",
+  "name": "Foxwright",
+  "version": "0.7.1",
   "description": "Lets an AI agent you run (such as Claude, over MCP) read and operate Firefox tabs, with per-site permission, its own tab group, and a Stop button.",
-  "homepage_url": "https://github.com/william-ricchiuti/Zenko",
+  "homepage_url": "https://github.com/william-ricchiuti/FoxWright",
   "icons": {
-    "48": "icons/zenko.svg",
-    "96": "icons/zenko.svg"
+    "48": "icons/foxwright.svg",
+    "96": "icons/foxwright.svg"
   },
   "background": {
     "scripts": [
@@ -14,9 +14,9 @@
     ]
   },
   "action": {
-    "default_title": "Zenko",
+    "default_title": "Foxwright",
     "default_popup": "popup/popup.html",
-    "default_icon": "icons/zenko.svg"
+    "default_icon": "icons/foxwright.svg"
   },
   "permissions": [
     "nativeMessaging",
@@ -49,7 +49,7 @@
       "suggested_key": {
         "default": "Alt+Shift+K"
       },
-      "description": "Pause the AI agent (stop Zenko)"
+      "description": "Pause the AI agent (stop Foxwright)"
     }
   }
 }

@@ -1,4 +1,4 @@
-// Synthetic input for Zenko.
+// Synthetic input for Foxwright.
 //
 // Firefox extensions cannot create trusted (isTrusted=true) mouse/keyboard events.
 // This module dispatches the same event sequences a real browser would and then
@@ -8,7 +8,7 @@
 // the MCP server uses WebDriver BiDi for real (trusted) input instead.
 
 import { resolveRef, getRefPrefix } from './snapshot';
-import { isZenkoUi } from './overlay';
+import { isFoxwrightUi } from './overlay';
 import { isSecretInput } from './secrets';
 
 declare const browser: any;
@@ -43,9 +43,9 @@ function frameIdOf(el: Element): number {
   }
 }
 
-/** Topmost page element at a viewport point, piercing open shadow roots and skipping Zenko's own UI. */
+/** Topmost page element at a viewport point, piercing open shadow roots and skipping Foxwright's own UI. */
 export function elementAt(x: number, y: number): Element | null {
-  const all = document.elementsFromPoint(x, y).filter(e => !isZenkoUi(e));
+  const all = document.elementsFromPoint(x, y).filter(e => !isFoxwrightUi(e));
   let el: Element | null = all[0] || null;
   while (el && shadowOf(el)) {
     const inner = shadowOf(el)!.elementFromPoint(x, y);
@@ -131,16 +131,16 @@ let lastHover: Element | null = null;
 // Pointer-capture emulation (see page-hooks.ts): while a synthetic gesture runs, pointer
 // events go to the element that "captured" the pointer, like the browser would do.
 let captureTarget: Element | null = null;
-document.addEventListener('zenko:pointer-capture', (e) => {
+document.addEventListener('foxwright:pointer-capture', (e) => {
   captureTarget = (e.composedPath()[0] as Element) || null;
   captureTarget?.dispatchEvent(new PointerEvent('gotpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
 }, true);
-document.addEventListener('zenko:pointer-release', () => {
+document.addEventListener('foxwright:pointer-release', () => {
   captureTarget = null;
 }, true);
 
 function gesture(on: boolean) {
-  document.dispatchEvent(new CustomEvent('zenko:synthetic-pointer', { detail: on ? 'on' : 'off' }));
+  document.dispatchEvent(new CustomEvent('foxwright:synthetic-pointer', { detail: on ? 'on' : 'off' }));
   if (!on && captureTarget) {
     captureTarget.dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, composed: true, pointerId: 0, pointerType: 'mouse', isPrimary: true } as any));
     captureTarget = null;
@@ -947,7 +947,7 @@ export function setCancelled(v: boolean) {
  * ProseMirror update their model asynchronously; typing a whole string inside one task
  * would feed them stale selections. Throws once the user has pressed Stop. */
 const tick = () => new Promise<void>((resolve, reject) => {
-  const done = () => (cancelled ? reject(new Error('Stopped: the user paused Zenko.')) : resolve());
+  const done = () => (cancelled ? reject(new Error('Stopped: the user paused Foxwright.')) : resolve());
   if (document.hidden) {
     // Timers in background tabs run at most once a second, which would make typing 300 characters
     // take five minutes. A message-channel task isn't throttled and still lets microtasks run.

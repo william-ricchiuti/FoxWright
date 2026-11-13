@@ -1,22 +1,22 @@
 {
-  "name": "zenko-firefox",
-  "version": "0.6.1",
-  "description": "MCP server + native helper that lets AI agents like Claude drive your real Firefox through the Zenko extension.",
+  "name": "foxwright-firefox",
+  "version": "0.7.1",
+  "description": "MCP server + native helper that lets AI agents like Claude drive your real Firefox through the Foxwright extension.",
   "license": "Apache-2.0",
   "author": "William Ricchiuti",
-  "homepage": "https://github.com/william-ricchiuti/Zenko#readme",
+  "homepage": "https://github.com/william-ricchiuti/FoxWright#readme",
   "bugs": {
-    "url": "https://github.com/william-ricchiuti/Zenko/issues"
+    "url": "https://github.com/william-ricchiuti/FoxWright/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/william-ricchiuti/Zenko.git",
+    "url": "git+https://github.com/william-ricchiuti/FoxWright.git",
     "directory": "host"
   },
   "type": "module",
   "bin": {
-    "zenko": "dist/zenko.mjs",
-    "zenko-firefox": "dist/zenko.mjs"
+    "foxwright": "dist/foxwright.mjs",
+    "foxwright-firefox": "dist/foxwright.mjs"
   },
   "files": [
     "dist",

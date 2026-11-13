@@ -86,7 +86,7 @@ async function unapprovedFrameRects(tab) {
       const r = found?.[id];
       // Can't tell where an unapproved frame is: refuse rather than risk showing it.
       if (!r || !base)
-        throw new Error(`Can't take a screenshot of tab ${tab.id} right now: it embeds a frame from ${hidden.get(id)}, which the user hasn't approved, and Zenko couldn't work out where that frame is on the page. Use read_page instead.`);
+        throw new Error(`Can't take a screenshot of tab ${tab.id} right now: it embeds a frame from ${hidden.get(id)}, which the user hasn't approved, and Foxwright couldn't work out where that frame is on the page. Use read_page instead.`);
       if (r.w > 0 && r.h > 0)
         rects.push({ x: base.x + r.x, y: base.y + r.y, w: r.w, h: r.h });
     }
@@ -293,7 +293,7 @@ async function waitForLoad(tabId, timeoutMs = 30000, since = Date.now() - 50) {
 async function dialogNotes(tabId) {
   try {
     const list = await sendContent(tabId, 0, 'dialogs', {}, 3000);
-    return list.map(d => `The page opened a JavaScript ${d.type}(${JSON.stringify(d.message)}); Zenko answered: ${d.answer}.${d.type === 'confirm' && d.answer === 'Cancel' ? ' To answer OK instead, call handle_dialog {accept: true} and repeat the action.' : ''}`);
+    return list.map(d => `The page opened a JavaScript ${d.type}(${JSON.stringify(d.message)}); Foxwright answered: ${d.answer}.${d.type === 'confirm' && d.answer === 'Cancel' ? ' To answer OK instead, call handle_dialog {accept: true} and repeat the action.' : ''}`);
   } catch {
     return [];
   }
@@ -313,9 +313,9 @@ async function afterAction(tab, before, r) {
       const url = normalizeUrl(r.openUrl);
       await ensureOriginPermission(url);
       const nt = await createAgentTab(url, false);
-      extra.push(`The link opens in a new tab: created tab ${nt.id} (${url}) in the Zenko group.`);
+      extra.push(`The link opens in a new tab: created tab ${nt.id} (${url}) in the Foxwright group.`);
     } catch (e) {
-      extra.push(`The link wanted to open ${String(r.openUrl).slice(0, 200)} in a new tab, but Zenko didn't: ${e.message}`);
+      extra.push(`The link wanted to open ${String(r.openUrl).slice(0, 200)} in a new tab, but Foxwright didn't: ${e.message}`);
     }
   }
   const navigated = started(navState.get(tab.id) || {});
@@ -340,11 +340,11 @@ function normalizeUrl(url) {
   const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(u);
   if (scheme) {
     if (!/^https?$/i.test(scheme[1]))
-      throw new Error(`Zenko only navigates to http(s) pages (not ${scheme[1]}:).`);
+      throw new Error(`Foxwright only navigates to http(s) pages (not ${scheme[1]}:).`);
     return u;
   }
   if (/^(javascript|data|file|about|moz-extension|chrome|resource|view-source|blob):/i.test(u))
-    throw new Error(`Zenko won't navigate to ${u.split(':')[0]}: URLs.`);
+    throw new Error(`Foxwright won't navigate to ${u.split(':')[0]}: URLs.`);
   // "localhost:3000", "127.0.0.1:8080/x", "example.com/path"
   const host = u.split(/[/?#]/)[0].replace(/:\d+$/, '');
   const local = host === 'localhost' || /^127\.|^\[?::1\]?$|^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[01])\.|\.local$|\.localhost$/.test(host);
@@ -505,7 +505,7 @@ export const tools = {
   async tabs_context_mcp(args) {
     const tabs = await ensureGroup(!!args.createIfEmpty);
     if (!tabs.length)
-      return text('The Zenko tab group is empty. Call tabs_context_mcp with createIfEmpty: true, or tabs_create_mcp, to get a tab.');
+      return text('The Foxwright tab group is empty. Call tabs_context_mcp with createIfEmpty: true, or tabs_create_mcp, to get a tab.');
     // A tab on a site the user hasn't approved (e.g. a sign-in popup the page opened) shows only
     // its site: the full address can carry tokens, and the title is whatever the page chose.
     const lines = tabs.map((t) => {
@@ -513,12 +513,12 @@ export const tools = {
       const what = o && !isAllowed(o) ? `${o} (site not approved yet: title and full address hidden)` : `${JSON.stringify(t.title || '')} ${t.url}`;
       return `- tabId ${t.id}: ${what}${t.active ? ' (active in its window)' : ''}`;
     });
-    return text(`Zenko tab group (${tabs.length} tab${tabs.length > 1 ? 's' : ''}):\n${lines.join('\n')}\n\nOnly tabs in this group can be used. The user can share an existing tab by dragging it into the orange "Zenko" group.`);
+    return text(`Foxwright tab group (${tabs.length} tab${tabs.length > 1 ? 's' : ''}):\n${lines.join('\n')}\n\nOnly tabs in this group can be used. The user can share an existing tab by dragging it into the orange "Foxwright" group.`);
   },
 
   async tabs_create_mcp() {
     const tab = await createAgentTab('about:blank', true);
-    return text(`Created tab ${tab.id} in the Zenko group.`);
+    return text(`Created tab ${tab.id} in the Foxwright group.`);
   },
 
   async tabs_close_mcp(args) {
@@ -536,7 +536,7 @@ export const tools = {
         throw new Error('tabId is required for back/forward.');
       const tabs = await ensureGroup(true);
       tabId = tabs[0].id;
-      prefix = `(Using tab ${tabId} from the Zenko group.)\n`;
+      prefix = `(Using tab ${tabId} from the Foxwright group.)\n`;
     }
     const tab = await requireTab(tabId);
     let navSince = Date.now();
@@ -670,7 +670,7 @@ export const tools = {
       try {
         body = JSON.stringify(JSON.parse(body), null, 2);
       } catch { /* not JSON after all */ }
-      return text(`URL: ${t.url}\n(Shown in Firefox's JSON viewer, which extensions can't read, so Zenko fetched the URL again with a GET request; status ${r.status}.)\n\n${body.length > 100000 ? body.slice(0, 100000) + '\n… [truncated]' : body}`);
+      return text(`URL: ${t.url}\n(Shown in Firefox's JSON viewer, which extensions can't read, so Foxwright fetched the URL again with a GET request; status ${r.status}.)\n\n${body.length > 100000 ? body.slice(0, 100000) + '\n… [truncated]' : body}`);
     }
     if (checkAccessible(tab) === 'blank')
       return text(`Tab ${tab.id} is blank.`);
@@ -793,13 +793,13 @@ export const tools = {
 
   async javascript_tool(args) {
     // eslint-disable-next-line no-undef
-    if (__ZENKO_FULL__) {
+    if (__FOXWRIGHT_FULL__) {
       const tab = await tabForPageTool(args);
       if (typeof args.text !== 'string' || !args.text.trim())
         throw new Error('text (the JavaScript to run) is required.');
       const expectOrigin = await frameOriginOf(tab.id, 0).catch(() => null);
       if (expectOrigin && !isAllowed(expectOrigin))
-        throw new Error(`Zenko is not allowed to access ${expectOrigin}.`);
+        throw new Error(`Foxwright is not allowed to access ${expectOrigin}.`);
       const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, world: 'MAIN', func: runUserCode, args: [args.text, expectOrigin && /^https?:/.test(expectOrigin) ? expectOrigin : null] });
       if (res?.error)
         throw new Error(String(res.error.message || res.error));
@@ -810,7 +810,7 @@ export const tools = {
         throw new Error(out.error);
       return text(out.value.length > 50000 ? out.value.slice(0, 50000) + '\n… [truncated]' : out.value);
     }
-    throw new Error('javascript_tool is not available in the Firefox Add-ons store edition of Zenko (Mozilla policy forbids running code strings from outside the add-on). Install the "Zenko (Full)" build to enable it, or use read_page / find / get_page_text / computer instead.');
+    throw new Error('javascript_tool is not available in the Firefox Add-ons store edition of Foxwright (Mozilla policy forbids running code strings from outside the add-on). Install the "Foxwright (Full)" build to enable it, or use read_page / find / get_page_text / computer instead.');
   },
 
   async read_console_messages(args) {
@@ -872,7 +872,7 @@ export const tools = {
     if (args.clear)
       netLog.set(tab.id, []);
     if (!shown.length)
-      return text('No network requests recorded for this tab yet. Requests are recorded only while the tab is in the Zenko group.' + hiddenLine);
+      return text('No network requests recorded for this tab yet. Requests are recorded only while the tab is in the Foxwright group.' + hiddenLine);
     return text(shown.map(r => `${r.method} ${r.status ?? r.error ?? '…'} ${r.type} ${r.url}`).join('\n') + hiddenLine);
   },
 
@@ -961,7 +961,7 @@ export const tools = {
     await ensurePermission(tab);
     await browser.scripting.executeScript({
       target: { tabId: tab.id, frameIds: [args.frameId || 0] },
-      func: (token) => { document.documentElement.setAttribute('data-zenko-probe', token); },
+      func: (token) => { document.documentElement.setAttribute('data-foxwright-probe', token); },
       args: [String(args.token)],
     });
     return { data: true };
@@ -970,7 +970,7 @@ export const tools = {
   async _unmark(args) {
     await requireTab(args.tabId);
     try {
-      await browser.scripting.executeScript({ target: { tabId: args.tabId, frameIds: [args.frameId || 0] }, func: () => { document.documentElement.removeAttribute('data-zenko-probe'); } });
+      await browser.scripting.executeScript({ target: { tabId: args.tabId, frameIds: [args.frameId || 0] }, func: () => { document.documentElement.removeAttribute('data-foxwright-probe'); } });
     } catch { /* ignore */ }
     return { data: true };
   },
@@ -1051,7 +1051,7 @@ export const tools = {
     }
     if (args.watermark) {
       g.font = '600 11px ui-sans-serif, system-ui, sans-serif';
-      const t = '狐 Zenko';
+      const t = '狐 Foxwright';
       const tw = g.measureText(t).width;
       g.fillStyle = 'rgba(20, 16, 14, 0.55)';
       g.fillRect(w - tw - 18, h - 26, tw + 12, 18);
@@ -1094,7 +1094,7 @@ export async function adoptOpenedTab(tabId) {
 
 async function ensureConsoleHook(tabId) {
   try {
-    const [r] = await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: () => (globalThis.__zenkoHooks ? (globalThis.__zenkoHooks.early ? 'existing' : 'late') : '') });
+    const [r] = await browser.scripting.executeScript({ target: { tabId, frameIds: [0] }, func: () => (globalThis.__foxwrightHooks ? (globalThis.__foxwrightHooks.early ? 'existing' : 'late') : '') });
     if (r?.result)
       return r.result;
   } catch { /* ignore */ }

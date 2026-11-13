@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Zenko test: trusted-only</title><script src="src/events.js"></script></head>
+<!doctype html><html><head><meta charset="utf-8"><title>Foxwright test: trusted-only</title><script src="src/events.js"></script></head>
 <body><h1>Anti-bot checks</h1>
 <button id="strict" onclick="this.textContent = event.isTrusted ? 'TRUSTED CLICK' : 'rejected: untrusted click'">Strict button</button>
 <input id="strictinput" onkeydown="if(!event.isTrusted){event.preventDefault(); document.getElementById('kmsg').textContent='rejected untrusted key'}" placeholder="strict input">

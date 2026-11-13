@@ -2,7 +2,7 @@
 //
 // If Firefox was started with --remote-debugging-port (e.g. 9222), its WebDriver
 // BiDi endpoint can dispatch real, isTrusted=true mouse/keyboard/wheel input into
-// the user's existing tabs. Zenko uses it automatically when it's reachable, and
+// the user's existing tabs. Foxwright uses it automatically when it's reachable, and
 // falls back to the extension's synthetic events when it isn't.
 import WebSocket from 'ws';
 import crypto from 'node:crypto';
@@ -40,8 +40,8 @@ function parseModifiers(s) {
 
 export class Bidi {
   constructor() {
-    this.url = process.env.ZENKO_BIDI_URL || `ws://127.0.0.1:${process.env.ZENKO_BIDI_PORT || 9222}/session`;
-    this.disabled = process.env.ZENKO_TRUSTED === '0';
+    this.url = process.env.FOXWRIGHT_BIDI_URL || `ws://127.0.0.1:${process.env.FOXWRIGHT_BIDI_PORT || 9222}/session`;
+    this.disabled = process.env.FOXWRIGHT_TRUSTED === '0';
     this.ws = null;
     this.ready = false;
     this.lastFail = 0;
@@ -206,8 +206,8 @@ export class Bidi {
       for (const context of candidates) {
         try {
           const r = await this.cmd('script.evaluate', {
-            expression: 'document.documentElement.getAttribute("data-zenko-probe")',
-            target: { context, sandbox: 'zenko' }, // isolated realm: page scripts can't see or tamper with the probe
+            expression: 'document.documentElement.getAttribute("data-foxwright-probe")',
+            target: { context, sandbox: 'foxwright' }, // isolated realm: page scripts can't see or tamper with the probe
             awaitPromise: false,
             resultOwnership: 'none',
           });
@@ -239,17 +239,17 @@ export class Bidi {
     const pointer = [{ type: 'pointerMove', x, y, origin: 'viewport', duration: 0 }];
     for (let i = 0; i < count; i++)
       pointer.push({ type: 'pointerDown', button }, { type: 'pointerUp', button });
-    const actions = [{ type: 'pointer', id: 'zenko-mouse', parameters: { pointerType: 'mouse' }, actions: pointer }];
+    const actions = [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions: pointer }];
     if (mods.length) {
       const keys = [...mods.map(v => ({ type: 'keyDown', value: v })), ...pointer.map(() => ({ type: 'pause' })), ...mods.reverse().map(v => ({ type: 'keyUp', value: v }))];
       actions[0].actions = [...mods.map(() => ({ type: 'pause' })), ...pointer];
-      actions.push({ type: 'key', id: 'zenko-keys', actions: keys });
+      actions.push({ type: 'key', id: 'foxwright-keys', actions: keys });
     }
     await this.perform(context, actions);
   }
 
   async hover(context, x, y) {
-    await this.perform(context, [{ type: 'pointer', id: 'zenko-mouse', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(x), y: Math.round(y), origin: 'viewport', duration: 0 }] }]);
+    await this.perform(context, [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(x), y: Math.round(y), origin: 'viewport', duration: 0 }] }]);
   }
 
   async drag(context, sx, sy, ex, ey) {
@@ -258,11 +258,11 @@ export class Bidi {
     for (let i = 1; i <= steps; i++)
       acts.push({ type: 'pointerMove', x: Math.round(sx + (ex - sx) * i / steps), y: Math.round(sy + (ey - sy) * i / steps), origin: 'viewport', duration: 20 });
     acts.push({ type: 'pointerUp', button: 0 });
-    await this.perform(context, [{ type: 'pointer', id: 'zenko-mouse', parameters: { pointerType: 'mouse' }, actions: acts }]);
+    await this.perform(context, [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions: acts }]);
   }
 
   async scroll(context, x, y, dx, dy) {
-    await this.perform(context, [{ type: 'wheel', id: 'zenko-wheel', actions: [{ type: 'scroll', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy), origin: 'viewport' }] }]);
+    await this.perform(context, [{ type: 'wheel', id: 'foxwright-wheel', actions: [{ type: 'scroll', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy), origin: 'viewport' }] }]);
   }
 
   /**
@@ -277,7 +277,7 @@ export class Bidi {
     }
     for (let i = 0; i < acts.length; i += 40) {
       check();
-      await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: acts.slice(i, i + 40) }]);
+      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: acts.slice(i, i + 40) }]);
     }
   }
 
@@ -296,7 +296,7 @@ export class Bidi {
     for (let r = 0; r < repeat; r += per) {
       check();
       const n = Math.min(per, repeat - r);
-      await this.perform(context, [{ type: 'key', id: 'zenko-keys', actions: Array.from({ length: n }, () => once).flat() }]);
+      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: Array.from({ length: n }, () => once).flat() }]);
     }
   }
 }

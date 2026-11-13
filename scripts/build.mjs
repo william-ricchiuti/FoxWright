@@ -1,4 +1,4 @@
-// Builds the Zenko extension into dist/store and dist/full.
+// Builds the Foxwright extension into dist/store and dist/full.
 //
 //   store: for addons.mozilla.org (listed). No arbitrary-JavaScript tool, per AMO policy §4.
 //   full:  self-distributed (AMO "unlisted" signing). Adds the javascript_tool.
@@ -17,8 +17,8 @@ const zip = args.includes('--zip');
 const only = args.find(a => a.startsWith('--target='))?.split('=')[1];
 
 export const TARGETS = {
-  store: { id: 'kitsune@william-ricchiuti.com', name: 'Zenko', full: false },
-  full: { id: 'kitsune-full@william-ricchiuti.com', name: 'Zenko (Full)', full: true },
+  store: { id: 'kitsune@william-ricchiuti.com', name: 'Foxwright', full: false },
+  full: { id: 'kitsune-full@william-ricchiuti.com', name: 'Foxwright (Full)', full: true },
 };
 
 const alias = { '@isomorphic': path.join(root, 'vendor/playwright/isomorphic') };
@@ -29,24 +29,24 @@ const PATCHES = [
   {
     file: 'vendor/playwright/injected/roleUtils.ts',
     find: 'function computeAriaRole(element: Element): AriaRole | null {\n  const explicitRole = getExplicitAriaRole(element);\n  if (!explicitRole)\n    return getImplicitAriaRole(element);',
-    replace: 'function computeAriaRole(element: Element): AriaRole | null {\n  const explicitRole = getExplicitAriaRole(element);\n  // [zenko patch] expose contenteditable roots as textboxes, as Firefox/Chrome accessibility trees do.\n  if (!explicitRole && (element as HTMLElement).isContentEditable && !(element.parentElement as HTMLElement | null)?.isContentEditable)\n    return \'textbox\';\n  if (!explicitRole)\n    return getImplicitAriaRole(element);',
+    replace: 'function computeAriaRole(element: Element): AriaRole | null {\n  const explicitRole = getExplicitAriaRole(element);\n  // [foxwright patch] expose contenteditable roots as textboxes, as Firefox/Chrome accessibility trees do.\n  if (!explicitRole && (element as HTMLElement).isContentEditable && !(element.parentElement as HTMLElement | null)?.isContentEditable)\n    return \'textbox\';\n  if (!explicitRole)\n    return getImplicitAriaRole(element);',
   },
   {
     file: 'vendor/playwright/injected/ariaSnapshot.ts',
     find: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      result.children = [element.value];",
-    replace: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      // [zenko patch] never show password values to the agent (Firefox autofills saved logins into the DOM).\n      result.children = [(element.type === 'password' || (globalThis as any).__zenkoSecret?.(element)) ? (element.value ? `(password, ${element.value.length} characters)` : '') : element.value];",
+    replace: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      // [foxwright patch] never show password values to the agent (Firefox autofills saved logins into the DOM).\n      result.children = [(element.type === 'password' || (globalThis as any).__foxwrightSecret?.(element)) ? (element.value ? `(password, ${element.value.length} characters)` : '') : element.value];",
   },
-  // [zenko patch] see closed shadow roots too. Firefox gives content scripts `openOrClosedShadowRoot`.
+  // [foxwright patch] see closed shadow roots too. Firefox gives content scripts `openOrClosedShadowRoot`.
   ...['ariaSnapshot.ts', 'roleUtils.ts'].map(f => ({
     file: `vendor/playwright/injected/${f}`,
     find: /if \(element\.shadowRoot\) \{\n(\s*)for \(let child = element\.shadowRoot\.firstChild;/,
-    replace: 'if (zenkoShadowRoot(element)) {\n$1for (let child = zenkoShadowRoot(element)!.firstChild;',
-    append: '\n// [zenko patch]\nfunction zenkoShadowRoot(e: Element): ShadowRoot | null {\n  return (e as any).openOrClosedShadowRoot ?? e.shadowRoot;\n}\n',
+    replace: 'if (foxwrightShadowRoot(element)) {\n$1for (let child = foxwrightShadowRoot(element)!.firstChild;',
+    append: '\n// [foxwright patch]\nfunction foxwrightShadowRoot(e: Element): ShadowRoot | null {\n  return (e as any).openOrClosedShadowRoot ?? e.shadowRoot;\n}\n',
   })),
 ];
 
 const patchPlugin = {
-  name: 'zenko-vendor-patches',
+  name: 'foxwright-vendor-patches',
   setup(build) {
     build.onLoad({ filter: /vendor[\\/]playwright[\\/].*\.ts$/ }, async (args) => {
       let src = fs.readFileSync(args.path, 'utf8');
@@ -84,11 +84,11 @@ async function buildTarget(key) {
     bundle: true,
     target: 'firefox128',
     legalComments: 'inline',
-    minifySyntax: true, // drops dead `if (__ZENKO_FULL__)` branches; names and whitespace stay readable
+    minifySyntax: true, // drops dead `if (__FOXWRIGHT_FULL__)` branches; names and whitespace stay readable
     logLevel: 'warning',
     alias,
     plugins: [patchPlugin],
-    define: { __ZENKO_FULL__: JSON.stringify(t.full), __ZENKO_VERSION__: JSON.stringify(readVersion()) },
+    define: { __FOXWRIGHT_FULL__: JSON.stringify(t.full), __FOXWRIGHT_VERSION__: JSON.stringify(readVersion()) },
   };
   const inputs = {};
   for (const [entry, outfile] of [['src/content/index.ts', 'content/content.js'], ['src/content/hooks.ts', 'content/hooks.js'], ['src/content/page-hooks.ts', 'content/page-hooks.js'], ['src/background/index.js', 'background.js']]) {
@@ -96,7 +96,7 @@ async function buildTarget(key) {
     Object.assign(inputs, r.metafile.inputs);
   }
 
-  // License files the shipped add-on must carry: Zenko's own, and Playwright's (Apache-2.0 §4),
+  // License files the shipped add-on must carry: Foxwright's own, and Playwright's (Apache-2.0 §4),
   // plus any npm packages that got bundled.
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(out, 'LICENSE'));
   fs.copyFileSync(path.join(root, 'NOTICE'), path.join(out, 'NOTICE'));
@@ -117,10 +117,10 @@ async function buildTarget(key) {
     fs.mkdirSync(zipDir, { recursive: true });
     // Remove zips of other versions, so an old one can't be uploaded by mistake.
     for (const f of fs.readdirSync(zipDir)) {
-      if (f.startsWith(`zenko-${key}-`) && f !== `zenko-${key}-${m.version}.zip`)
+      if (f.startsWith(`foxwright-${key}-`) && f !== `foxwright-${key}-${m.version}.zip`)
         fs.rmSync(path.join(zipDir, f));
     }
-    execFileSync(path.join(root, 'node_modules/.bin/web-ext'), ['build', '--source-dir', out, '--artifacts-dir', zipDir, '--filename', `zenko-${key}-${m.version}.zip`, '--overwrite-dest'], { stdio: 'inherit' });
+    execFileSync(path.join(root, 'node_modules/.bin/web-ext'), ['build', '--source-dir', out, '--artifacts-dir', zipDir, '--filename', `foxwright-${key}-${m.version}.zip`, '--overwrite-dest'], { stdio: 'inherit' });
   }
   console.log(`built ${key} -> ${path.relative(root, out)}`);
 }

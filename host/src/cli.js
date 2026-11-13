@@ -1,4 +1,4 @@
-// zenko CLI entry point (bundled to dist/zenko.mjs).
+// foxwright CLI entry point (bundled to dist/foxwright.mjs).
 import { runHost } from './host.js';
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -8,7 +8,7 @@ const launchedByFirefox = cmd && (cmd.endsWith('.json') || cmd.includes('@'));
 
 async function main() {
   if (cmd === '--version' || cmd === '-v' || cmd === 'version') {
-    console.log(typeof __ZENKO_VERSION__ !== 'undefined' ? __ZENKO_VERSION__ : '0.0.0');
+    console.log(typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0');
     return;
   }
   if (cmd === 'host' || launchedByFirefox) {
@@ -35,16 +35,16 @@ async function main() {
     await uninstall();
     return;
   }
-  console.log(`zenko: let AI agents drive your real Firefox.
+  console.log(`foxwright: let AI agents drive your real Firefox.
 
 Usage:
-  zenko setup [--claude-code] [--claude-desktop] [--all]
+  foxwright setup [--claude-code] [--claude-desktop] [--all]
                       Install the helper Firefox talks to, and optionally register
                       the MCP server with Claude Code / Claude Desktop.
-  zenko doctor      Check the installation and the live connection to Firefox.
-  zenko mcp         Run the MCP server on stdio (what your AI client launches).
-  zenko uninstall   Remove the helper.
-  zenko --version   Print the version.
+  foxwright doctor      Check the installation and the live connection to Firefox.
+  foxwright mcp         Run the MCP server on stdio (what your AI client launches).
+  foxwright uninstall   Remove the helper.
+  foxwright --version   Print the version.
 `);
   process.exit(cmd && cmd !== 'help' && cmd !== '--help' ? 1 : 0);
 }

@@ -194,7 +194,7 @@ export async function chromeEval(driver, expression) {
   return r.result?.value;
 }
 
-/** moz-extension://<uuid>/ of the Zenko build under test, read from Firefox itself. */
+/** moz-extension://<uuid>/ of the Foxwright build under test, read from Firefox itself. */
 export async function extBaseOf(driver) {
   const host = await chromeEval(driver, `(WebExtensionPolicy.getByID('kitsune-full@william-ricchiuti.com') || WebExtensionPolicy.getByID('kitsune@william-ricchiuti.com')).mozExtensionHostname`);
   return `moz-extension://${host}/`;

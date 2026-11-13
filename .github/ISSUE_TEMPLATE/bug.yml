@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in Zenko doesn't work as it should
+description: Something in Foxwright doesn't work as it should
 labels: [bug]
 body:
   - type: markdown
@@ -21,7 +21,7 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Zenko version (toolbar popup) and helper version (`npx zenko-firefox --version`)
+      label: Foxwright version (toolbar popup) and helper version (`npx foxwright-firefox --version`)
     validations:
       required: true
   - type: input
@@ -49,5 +49,5 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `npx zenko-firefox doctor`
+      label: Output of `npx foxwright-firefox doctor`
       render: text

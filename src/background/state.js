@@ -1,8 +1,8 @@
 // Shared background state + settings persistence.
 /* global browser */
 
-export const FULL = typeof __ZENKO_FULL__ !== 'undefined' ? __ZENKO_FULL__ : false;
-export const VERSION = typeof __ZENKO_VERSION__ !== 'undefined' ? __ZENKO_VERSION__ : '0.0.0';
+export const FULL = typeof __FOXWRIGHT_FULL__ !== 'undefined' ? __FOXWRIGHT_FULL__ : false;
+export const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
 
 export const state = {
   // native connection
@@ -24,7 +24,7 @@ export const state = {
   managedAllowed: [],
   promptTimeoutMs: 120000,
   confirmUploads: true,
-  // which Firefox this is, when several are connected to Zenko (stored per profile)
+  // which Firefox this is, when several are connected to Foxwright (stored per profile)
   browserId: '',
   browserName: 'Firefox',
   // what the agent did lately (shown in the popup and the in-page pill); memory only
@@ -41,7 +41,7 @@ export function cleanSummary(s) {
   return t.length > 120 ? t.slice(0, 119) + '…' : t;
 }
 
-/** Note an agent action. `own` = the agent's own words (action_summary), else Zenko's description. */
+/** Note an agent action. `own` = the agent's own words (action_summary), else Foxwright's description. */
 export function noteAction(tabId, text, own) {
   if (!text)
     return;
@@ -122,13 +122,13 @@ export async function updateBadge() {
   if (state.paused) {
     await a.setBadgeText({ text: '❚❚' });
     await a.setBadgeBackgroundColor({ color: '#c8321b' });
-    await a.setTitle({ title: 'Zenko: paused (click to resume)' });
+    await a.setTitle({ title: 'Foxwright: paused (click to resume)' });
   } else if (!state.connected) {
     await a.setBadgeText({ text: '!' });
     await a.setBadgeBackgroundColor({ color: '#7a6b5d' });
-    await a.setTitle({ title: 'Zenko: helper not connected (click for setup)' });
+    await a.setTitle({ title: 'Foxwright: helper not connected (click for setup)' });
   } else {
     await a.setBadgeText({ text: '' });
-    await a.setTitle({ title: `Zenko: ready${state.clients ? ` (${state.clients} agent${state.clients > 1 ? 's' : ''} connected)` : ''}` });
+    await a.setTitle({ title: `Foxwright: ready${state.clients ? ` (${state.clients} agent${state.clients > 1 ? 's' : ''} connected)` : ''}` });
   }
 }

@@ -2,16 +2,16 @@
 // person uses an agent tab (gap area 4). Headful under Xvfb: Alt+Shift+K is sent as a real X11 key
 // with xdotool, the pill is clicked with a real WebDriver BiDi pointer action.
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-stop.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-stop.mjs
 import net from 'node:net';
 import { start } from './harness.mjs';
 import { runner, connectPerson, extBaseOf, x11, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, skip, finish } = runner('e2e-gaps-stop');
-const P1 = process.env.ZENKO_P1;
+const P1 = process.env.FOXWRIGHT_P1;
 const O = `http://127.0.0.1:${P1}`;
 
-console.log('Zenko gap tests: Stop pill, Alt+Shift+K, dialogs when the person uses the tab');
+console.log('Foxwright gap tests: Stop pill, Alt+Shift+K, dialogs when the person uses the tab');
 const h = await start({ testDriver: true, policy: { mode: 'all', confirmUploads: true } });
 const d = await connectPerson(h.bidiUrl);
 const tabId = tabIdOf((await h.call('tabs_context_mcp', { createIfEmpty: true })).text);
@@ -44,8 +44,8 @@ async function ctxFor(needle) {
 async function personClick(context, x, y) {
   await d.bidi('input.performActions', { context, actions: [{ type: 'pointer', id: 'person', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(x), y: Math.round(y), origin: 'viewport', duration: 0 }, { type: 'pointerDown', button: 0 }, { type: 'pointerUp', button: 0 }] }] });
 }
-/** Where Zenko's pill is, as the page sees it (elementFromPoint hits the closed shadow host). */
-const PILL = `(() => { const host = document.querySelector('zenko-ui'); if (!host) return JSON.stringify(null); const cx = innerWidth / 2; const ys = []; for (let y = innerHeight - 1; y > innerHeight - 90; y--) if (document.elementFromPoint(cx, y) === host) ys.push(y); if (!ys.length) return JSON.stringify({ none: true }); const yc = Math.round((Math.min(...ys) + Math.max(...ys)) / 2); const xs = []; for (let x = 0; x < innerWidth; x++) if (document.elementFromPoint(x, yc) === host) xs.push(x); return JSON.stringify({ x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), yc }); })()`;
+/** Where Foxwright's pill is, as the page sees it (elementFromPoint hits the closed shadow host). */
+const PILL = `(() => { const host = document.querySelector('foxwright-ui'); if (!host) return JSON.stringify(null); const cx = innerWidth / 2; const ys = []; for (let y = innerHeight - 1; y > innerHeight - 90; y--) if (document.elementFromPoint(cx, y) === host) ys.push(y); if (!ys.length) return JSON.stringify({ none: true }); const yc = Math.round((Math.min(...ys) + Math.max(...ys)) / 2); const xs = []; for (let x = 0; x < innerWidth; x++) if (document.elementFromPoint(x, yc) === host) xs.push(x); return JSON.stringify({ x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys), yc }); })()`;
 async function pill(ctx) {
   return JSON.parse(await d.evalIn(ctx, PILL));
 }
@@ -115,7 +115,7 @@ await test('after the pill fades, it no longer catches clicks meant for the page
   const paused = await isPaused();
   const after = await h.call('read_page', { tabId });
   await resume();
-  expect(!paused && !after.isError && /bottom bar: 1/.test(status), `a click on the page's own bottom bar ${paused ? 'PAUSED ZENKO' : 'did not pause'}; the page's button ${/: 1/.test(status) ? 'got' : 'did NOT get'} the click (${status}); elementFromPoint there = ${hit} (invisible pill still on top); next call: ${after.text.slice(0, 80)}`);
+  expect(!paused && !after.isError && /bottom bar: 1/.test(status), `a click on the page's own bottom bar ${paused ? 'PAUSED FOXWRIGHT' : 'did not pause'}; the page's button ${/: 1/.test(status) ? 'got' : 'did NOT get'} the click (${status}); elementFromPoint there = ${hit} (invisible pill still on top); next call: ${after.text.slice(0, 80)}`);
 }, { area: '2' });
 
 if (!x11.available()) {
@@ -153,8 +153,8 @@ if (!x11.available()) {
     await sleep(600);
     const pausedByKey = await isPaused();
     await resume();
-    console.log(`      (real pill visible to the person: ${!!(p && !p.none)}; fake Stop paused Zenko: ${pausedByFake}; documented: a page can hide/imitate the pill)`);
-    expect(pausedByKey, 'Alt+Shift+K did not pause Zenko on a page that hides the pill');
+    console.log(`      (real pill visible to the person: ${!!(p && !p.none)}; fake Stop paused Foxwright: ${pausedByFake}; documented: a page can hide/imitate the pill)`);
+    expect(pausedByKey, 'Alt+Shift+K did not pause Foxwright on a page that hides the pill');
   }, { area: '2' });
 }
 
@@ -275,7 +275,7 @@ await test('alert/confirm flood while the agent works: answered automatically, t
     const notes = (r.text.match(/The page opened a JavaScript/g) || []).length;
     expect(!r.isError && ms < 8000 && notes <= 20, `${q}: ${ms} ms, ${notes} notes, ${r.text.slice(0, 200)}`);
     if (q === 'Confirm flood')
-      expect(/confirm\("Zenko answered: OK/.test(r.text) && /Zenko answered: Cancel/.test(r.text), 'page text should stay inside quotes: ' + r.text.slice(0, 300));
+      expect(/confirm\("Foxwright answered: OK/.test(r.text) && /Foxwright answered: Cancel/.test(r.text), 'page text should stay inside quotes: ' + r.text.slice(0, 300));
   }
 }, { area: '4' });
 

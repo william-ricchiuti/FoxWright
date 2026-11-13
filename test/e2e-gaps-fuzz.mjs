@@ -8,9 +8,9 @@ import { start } from './harness.mjs';
 import { runner, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, finish } = runner('e2e-gaps-fuzz');
-const P1 = process.env.ZENKO_P1;
+const P1 = process.env.FOXWRIGHT_P1;
 const O = `http://127.0.0.1:${P1}`;
-console.log('Zenko gap tests: argument fuzzing and robustness');
+console.log('Foxwright gap tests: argument fuzzing and robustness');
 const h = await start({ policy: { mode: 'all', confirmUploads: false } });
 const tabId = tabIdOf((await h.call('tabs_context_mcp', { createIfEmpty: true })).text);
 await h.call('navigate', { tabId, url: `${O}/basic.html` });
@@ -155,7 +155,7 @@ await test('garbage on the helper socket (bad JSON, odd tool names, 32 MB line) 
   console.log(`      (32 MB without a newline took the helper ${ms} ms to swallow)`);
 }, { area: '7' });
 
-await test('an endless javascript_tool loop in one tab does not take other tabs (or Zenko) down', async () => {
+await test('an endless javascript_tool loop in one tab does not take other tabs (or Foxwright) down', async () => {
   const t2 = tabIdOf((await h.call('tabs_create_mcp', {})).text);
   await h.call('navigate', { tabId: t2, url: `${O}/basic.html?loop` });
   const g = await guarded('javascript_tool', { tabId: t2, text: 'while(true){}' }, 40000);
@@ -167,7 +167,7 @@ await test('an endless javascript_tool loop in one tab does not take other tabs 
   expect(!g.hung, 'javascript_tool never returns for an endless loop (no timeout of its own); the tab stays frozen for later calls');
 }, { area: '7' });
 
-await test('read_console_messages with a catastrophic regex does not freeze Zenko', async () => {
+await test('read_console_messages with a catastrophic regex does not freeze Foxwright', async () => {
   await h.call('navigate', { tabId, url: `${O}/basic.html?redos` });
   await h.call('computer', { tabId, action: 'wait', duration: 0 });
   // Fill the console with strings that make /^(a+)+$/ backtrack exponentially.

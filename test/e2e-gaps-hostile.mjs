@@ -1,7 +1,7 @@
-// Hostile pages vs Zenko's permission flow (gap area 1). The test is "the person at the computer"
+// Hostile pages vs Foxwright's permission flow (gap area 1). The test is "the person at the computer"
 // through its own WebDriver BiDi session: it reads and presses the real permission window.
 //
-//   FIREFOX=... ZENKO_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-hostile.mjs
+//   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-hostile.mjs
 // Needs a.test, sub.a.test, b.test, c.test, xn--pple-43d.test -> 127.0.0.1 in /etc/hosts.
 import fs from 'node:fs';
 import { start } from './harness.mjs';
@@ -9,14 +9,14 @@ import { connectDriver } from './bidi-driver.mjs';
 import { runner, extraServer, person, readPrompt, promptOpen, sleep, expect, refOf, tabIdOf } from './gap-lib.mjs';
 
 const { test, finish } = runner('e2e-gaps-hostile');
-const P1 = process.env.ZENKO_P1, P2 = process.env.ZENKO_P2;
+const P1 = process.env.FOXWRIGHT_P1, P2 = process.env.FOXWRIGHT_P2;
 const xs = await extraServer(P1, P2);
 const { P3 } = xs;
 const A = `http://a.test:${P3}`; // approved by policy
 const B = `http://b.test:${P3}`; // never approved
 const C = `http://c.test:${P3}`; // asked about in tests
 
-console.log('Zenko gap tests: hostile pages vs the permission flow');
+console.log('Foxwright gap tests: hostile pages vs the permission flow');
 const h = await start({ testDriver: true, policy: { mode: 'ask', promptTimeoutSec: 20, confirmUploads: true, allowed: [A] } });
 const driver = await connectDriver(h.bidiUrl);
 const me = person(driver);
@@ -241,7 +241,7 @@ await test('screenshot of an approved page does not show an unapproved embedded 
   console.log(`      (cross-origin B frame pixel rgb(${r},${g},${b}); same-origin control frame pixel rgb(${cr},${cg},${cb}))`);
   void ctl;
   void magenta;
-  // Hidden means Zenko greyed the frame out (dark grey with stripes, never the frame's own light
+  // Hidden means Foxwright greyed the frame out (dark grey with stripes, never the frame's own light
   // button) and said so in the result.
   const masked = r < 160 && g < 160 && b < 160 && Math.abs(r - g) < 20 && Math.abs(g - b) < 20;
   const visibleInControl = cr > 180 && cg > 180 && cb > 180;
@@ -318,10 +318,10 @@ await test('a page-made look-alike window cannot answer the real permission wind
   const group = (await h.call('tabs_context_mcp', {})).text;
   expect(fake, 'the page could not even open its window (popup blocked)');
   expect(stillPending && r.isError, `the fake window's "Always allow" affected the real request: ${r.text}`);
-  console.log(`      (the page's popup ${/fake-prompt/.test(group) ? 'joined' : 'did not join'} the Zenko tab group)`);
+  console.log(`      (the page's popup ${/fake-prompt/.test(group) ? 'joined' : 'did not join'} the Foxwright tab group)`);
 }, { area: '1b' });
 
-await test('hostile page: prototype pollution, JSON/Promise/addEventListener overrides and forged hook state do not break or fool Zenko', async () => {
+await test('hostile page: prototype pollution, JSON/Promise/addEventListener overrides and forged hook state do not break or fool Foxwright', async () => {
   await h.call('navigate', { tabId, url: `${A}/hostile-hooks.html` });
   const page = await h.call('read_page', { tabId });
   expect(!page.isError && page.text.includes('Delete everything'), page.text.slice(0, 300));
@@ -336,10 +336,10 @@ await test('hostile page: prototype pollution, JSON/Promise/addEventListener ove
   const still = await h.call('read_page', { tabId });
   const ctx = await me.tabContext('hostile-hooks.html');
   const detect = await driver.evalIn(ctx, 'detect()');
-  console.log(`      (what the page can see of Zenko: ${JSON.stringify(detect)})`);
+  console.log(`      (what the page can see of Foxwright: ${JSON.stringify(detect)})`);
   expect(!click.isError && ms < 5000, `click: ${ms} ms ${click.text}`);
   expect(!/FORGED/.test(click.text + con.text), 'forged dialog/console entries reached the agent: ' + click.text + con.text);
-  expect(!still.isError && !/paused/i.test(still.text), 'spoofed messages paused or broke Zenko: ' + still.text.slice(0, 200));
+  expect(!still.isError && !/paused/i.test(still.text), 'spoofed messages paused or broke Foxwright: ' + still.text.slice(0, 200));
   expect(/textbox "Name"[^\n]*Ada/.test(still.text), 'form_input value not visible: ' + still.text.slice(0, 500));
 }, { area: '1g' });
 

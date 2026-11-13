@@ -1,4 +1,4 @@
-// Checks that Zenko still answers after the extension has been idle for longer
+// Checks that Foxwright still answers after the extension has been idle for longer
 // than Firefox's event-page idle timeout (~30 s).
 import { start } from './harness.mjs';
 const h = await start({});

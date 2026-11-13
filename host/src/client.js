@@ -1,4 +1,4 @@
-// MCP-server side connection to the Zenko helper's local socket.
+// MCP-server side connection to the Foxwright helper's local socket.
 import net from 'node:net';
 import { socketPath } from './paths.js';
 import { socketFor } from './browsers.js';
@@ -31,7 +31,7 @@ export class HelperClient {
     if (this.browserId) {
       target = socketFor(this.browserId);
       if (!target)
-        return Promise.reject(new Error(`The Firefox you selected${this.browserName ? ` ("${this.browserName}")` : ''} isn't connected to Zenko right now. Ask the user to open it, or call list_connected_browsers and select another.`));
+        return Promise.reject(new Error(`The Firefox you selected${this.browserName ? ` ("${this.browserName}")` : ''} isn't connected to Foxwright right now. Ask the user to open it, or call list_connected_browsers and select another.`));
     }
     this.connecting = new Promise((resolve, reject) => {
       const s = net.connect(target);
@@ -142,6 +142,6 @@ export class HelperClient {
 function notRunning(err) {
   const code = err && err.code;
   if (code === 'ENOENT' || code === 'ECONNREFUSED')
-    return new Error('Firefox with the Zenko extension is not running (no helper socket found). Ask the user to open Firefox and make sure the Zenko extension is installed and enabled. If it is, they should run `npx zenko-firefox doctor`.');
-  return new Error(`Could not reach the Zenko helper: ${err && err.message}`);
+    return new Error('Firefox with the Foxwright extension is not running (no helper socket found). Ask the user to open Firefox and make sure the Foxwright extension is installed and enabled. If it is, they should run `npx foxwright-firefox doctor`.');
+  return new Error(`Could not reach the Foxwright helper: ${err && err.message}`);
 }

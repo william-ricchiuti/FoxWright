@@ -1,4 +1,4 @@
-// Records network requests for tabs in the Zenko group (for read_network_requests).
+// Records network requests for tabs in the Foxwright group (for read_network_requests).
 /* global browser */
 import { state } from './state.js';
 import { originOf } from './tabs.js';

@@ -1,4 +1,4 @@
-// Zenko's in-page activity indicator: a glow around the tab plus a "Stop" pill.
+// Foxwright's in-page activity indicator: a glow around the tab plus a "Stop" pill.
 // Lives in a closed shadow root and only reacts to trusted (human) clicks.
 // It is a convenience only: a hostile page could hide or imitate it, so the
 // authoritative controls are extension-owned (toolbar popup, Alt+Shift+K,
@@ -6,13 +6,13 @@
 
 declare const browser: any;
 
-const HOST_TAG = 'zenko-ui';
+const HOST_TAG = 'foxwright-ui';
 let host: HTMLElement | null = null;
 let root: ShadowRoot | null = null;
 let hideTimer: any = null;
 
-export function isZenkoUi(el: Element | null): boolean {
-  // Identity only: a page could name its own elements <zenko-ui> to be skipped as decoys.
+export function isFoxwrightUi(el: Element | null): boolean {
+  // Identity only: a page could name its own elements <foxwright-ui> to be skipped as decoys.
   return !!el && el === host;
 }
 
@@ -98,9 +98,9 @@ export function showActivity(ms = 6000, label?: string) {
     r.appendChild(glow);
   }
   if (!pill) {
-    pill = el('div', 'pill', undefined, [foxMark(), el('span', 'what', 'Zenko is driving this tab')]);
+    pill = el('div', 'pill', undefined, [foxMark(), el('span', 'what', 'Foxwright is driving this tab')]);
     const stop = el('button', '', 'Stop');
-    stop.title = 'Pause Zenko. The AI can\'t act again until you resume it from the toolbar button.';
+    stop.title = 'Pause Foxwright. The AI can\'t act again until you resume it from the toolbar button.';
     stop.addEventListener('click', (e) => {
       if (!e.isTrusted)
         return;
@@ -113,10 +113,10 @@ export function showActivity(ms = 6000, label?: string) {
   const what = pill.querySelector('.what') as HTMLElement;
   what.textContent = '';
   if (label) {
-    what.append(el('b', '', 'Zenko: '), document.createTextNode(label));
+    what.append(el('b', '', 'Foxwright: '), document.createTextNode(label));
     what.title = label;
   } else {
-    what.textContent = 'Zenko is driving this tab';
+    what.textContent = 'Foxwright is driving this tab';
     what.removeAttribute('title');
   }
   requestAnimationFrame(() => {

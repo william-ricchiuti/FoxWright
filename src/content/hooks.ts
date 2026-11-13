@@ -1,19 +1,19 @@
-// Console capture and non-blocking dialogs, installed from Zenko's isolated content-script
+// Console capture and non-blocking dialogs, installed from Foxwright's isolated content-script
 // world (injected at document start in agent tabs, on approved sites only).
 //
 // The replacement functions are exported into the page with Firefox's exportFunction, but
 // their state (the console buffer, the dialog log, the "answer the next dialog" policy) lives
 // here, where page scripts can't read, disable or forge it. (An earlier version kept this state
-// in the page's own world, so a hostile page could switch the hooks off or answer Zenko's
+// in the page's own world, so a hostile page could switch the hooks off or answer Foxwright's
 // requests with made-up dialog reports.)
 //
 //  1. Records console output and uncaught errors (read_console_messages).
 //  2. While the agent is working in the tab, replaces blocking alert/confirm/prompt with
 //     stand-ins: alert -> dismissed, confirm -> Cancel, prompt -> null, unless the agent
-//     called handle_dialog first. A real modal dialog would freeze the page (and Zenko's
+//     called handle_dialog first. A real modal dialog would freeze the page (and Foxwright's
 //     content script with it) until a human clicks it. When the agent hasn't acted in the tab
 //     recently, the page's real dialogs are shown, so a person using the tab sees them.
-// Nothing leaves the tab unless the agent calls a Zenko tool.
+// Nothing leaves the tab unless the agent calls a Foxwright tool.
 
 declare const exportFunction: (fn: Function, target: any, opts?: { defineAs?: string }) => any;
 declare const XPCNativeWrapper: { unwrap<T>(x: T): T };
@@ -32,10 +32,10 @@ export const AGENT_WINDOW_MS = 8000;
 
 (() => {
   const g = globalThis as any;
-  if (g.__zenkoHooks)
+  if (g.__foxwrightHooks)
     return;
   const hooks: Hooks = { console: [], dialogs: [], next: null, agentUntil: 0, early: document.readyState === 'loading' };
-  g.__zenkoHooks = hooks;
+  g.__foxwrightHooks = hooks;
   const pw = (window as any).wrappedJSObject;
   if (!pw || typeof exportFunction !== 'function')
     return;

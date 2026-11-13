@@ -25,6 +25,6 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Zenko version, Firefox version and OS
+      label: Foxwright version, Firefox version and OS
     validations:
       required: true
