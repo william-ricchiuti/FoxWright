@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+**Upgrading.** The MCP server and the helper now check each other with a key and encrypt what they exchange, so both must be on this version. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client. A helper and an MCP server from different sides of this release refuse to talk and say which one to update.
+
+**Getting started**
+- A setup page opens when you first install Foxwright. It shows the setup command for your system and a live status that switches to "Connected" by itself once the helper is installed, with no Firefox restart. Reopen it from the toolbar popup ("Setup help").
+- `foxwright doctor` says what is wrong and what to do: not set up, Firefox not running, extension not installed (with the store link), disabled or not connected, a helper that doesn't answer, the launcher's Node.js gone, Snap or Flatpak Firefox, or Firefox's remote-control session held by something else. It removes entries left by crashed helpers and prints the installed helper's version next to its own.
+- The helper launcher survives Node.js upgrades: it prefers a path that outlives `brew upgrade` and version-manager cleanups, then the exact path, then any Node.js on PATH, and writes a clear message to the helper log if none works.
+- When the helper isn't connected, the toolbar popup says why and how to fix it. It also shows the helper's version, warns when helper and extension versions differ, and shows whether input is real or simulated.
+
+**Approvals**
+- **Read only.** Tick "Read only (no clicking or typing)" in the permission window and the agent can read, take screenshots, scroll, hover and navigate a site, but not click, type, fill in forms, upload, accept dialogs or run scripts. If it tries, Foxwright asks you once whether to allow that. Embedded frames get the same choice. Policy: new `allowedReadOnly` list.
+- **Allow for 1 hour**, between "this session" and "always". It survives restarts and the popup shows when it ends.
+- **Ask before sending, buying or deleting** (off by default; toolbar popup, policy `confirmActions`). Foxwright confirms form submissions and clicks on things named like Send, Pay or Delete. It judges the real element on the page, never the agent's description. A safety net, not a guarantee: it can't catch every action a site treats as "send".
+- The agent never uses private windows: new agent tabs open in a normal window, and private tabs are refused. Creating an agent tab with a private window in front used to fail.
+- An embedded frame whose site can't be determined is treated as unapproved.
+- Re-downloading a JSON or PDF document no longer follows redirects and is refused for container tabs, which have a different cookie jar.
+- A website permission you switched off in Firefox's add-on settings is reported as such, with how to turn it back on.
+- A tab dragged into the Foxwright group from another window is usable at once (Firefox leaves it out of its tab list for a while).
+
+**Activity log**
+- A new Activity page (toolbar popup) lists what the agent did and how you answered permission questions: time, site, tab, a short description and the result. It keeps the last 500 entries on this computer, filters by site, exports as JSON, can be cleared and can be turned off. It never stores typed text, form values, page content, file names or full addresses.
+
+**Real input (remote debugging)**
+- Real input stops when the page leaves the approved site mid-action, for example when Enter submits a form that redirects elsewhere. Before this, the rest of a typed text could land in a field on a site you hadn't approved. The agent is told how much was delivered.
+- Real input no longer goes to another Firefox profile's tab after `select_browser`, `switch_browser` or a failover.
+- A real click that lands on something else, such as an overlay or an element that moved, is reported as that instead of as a click on the target.
+- Stop interrupts real drags and scrolls part-way, as it does typing.
+
+**Helper**
+- The connection between the MCP server and the helper requires a shared-key handshake (`~/.foxwright/auth-token`) and is encrypted. On Windows, another local user who grabs the named pipe can no longer read or forge traffic; they can still block it.
+- `file_upload` shows you the paths first and reads the files only after you approve. With an extension older than this release it works as before.
+- `javascript_tool` is listed only while the Full build is connected.
+- Windows: `setup --claude-code` works with an npm-installed Claude Code. If registering with Claude Code fails, setup prints the command to run instead of stopping halfway.
+- Linux: `setup --claude-desktop` no longer writes a config for a Claude Desktop that isn't installed. `uninstall` removes the empty files and folders setup created. LibreWolf and Floorp profiles under `~/.config` are detected.
+
+**For agents**
+- `computer {action: "wait"}` can wait for something instead of a fixed time: `text`, `text_gone`, `ref_gone` or `until: "idle"`, with a `timeout`. `find` and `read_page` take `wait_for`.
+- Clicks and key presses report dialogs, menus and listboxes that opened or closed and where focus went. Menu buttons wait briefly for their menu. `type` right after a click waits for a late dialog's field to take focus.
+- `read_page {diff: true}` returns only what changed since the previous read (on a long Wikipedia article, about 200 characters instead of 527,000).
+- `get_page_text` reads PDFs open in Firefox's viewer. Encrypted and scanned PDFs get a clear message. Plain-text pages are returned exactly and in full.
+- `javascript_tool` (Full build) gives up after `timeout` seconds (default 10). A tab stuck in an endless loop fails fast until it is navigated or closed, instead of hanging every later call.
+- `find` says when a match is inside a collapsed section and which control expands it. `form_input` handles `<select multiple>` and rich-text editors. Emoji, right-to-left and CJK text type correctly in the default input mode.
+
+**Tests**
+- CI runs the seven gap suites on Firefox latest and 152, the store build in depth in both input modes, the signed store file when its version matches, and Node 20. New non-blocking jobs: a Windows smoke test, macOS, and Snap and Flatpak probes. These four have not run yet.
+- One test harness instead of two. It stops the test Firefox from updating itself, times out a hung suite with a diagnostic dump, and can read page state without `javascript_tool`, so the main suite runs on the store build.
+- `scripts/mac-test.sh` reports failures instead of always succeeding.
+- New suites: `e2e-storebuild`, `e2e-onboarding`, `e2e-permission-modes`, `e2e-smoke`, `setup-doctor`, `socket-auth`, `mcp-offline`, `pdf-text`.
+
+**Known limits**
+- A page whose login form submits with GET puts the password in a URL, which `read_network_requests` shows.
+- Windows, Snap and Flatpak have still not been run end to end.
+- PDFs: text comes in drawing order; fonts without a Unicode map can't be read.
+
 ## 0.7.1 (2026-11-13)
 
 **Fix: the helper works with the 0.6 extension again.** Until Firefox updates the add-on to 0.7, the store's extension is still the Zenko 0.6 one, which asks Firefox for a helper named "zenko". The 0.7.0 helper only answered to "foxwright", so a new install didn't connect, and running `npx foxwright-firefox setup` on a working Zenko install disconnected it. `setup` now registers the helper under both names. `uninstall` removes both.

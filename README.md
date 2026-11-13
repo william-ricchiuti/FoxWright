@@ -87,10 +87,12 @@ You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
    npx foxwright-firefox setup --claude-code --claude-desktop
    ```
    Setup copies one self-contained file to `~/.foxwright/app/` (on Windows, `%USERPROFILE%\.foxwright\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
-2. **Install the extension** from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/foxwright/). The fox in your toolbar loses its `!` badge once it finds the helper.
+2. **Install the extension** from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/foxwright/). It opens a setup page with the command for your system, which shows "Connected" as soon as the helper is found (no Firefox restart needed). The fox in your toolbar loses its `!` badge at the same time.
 3. **Ask Claude to use it**, e.g. *"Use Foxwright to open my GitHub notifications and summarize them."*
 
 Run `npx foxwright-firefox doctor` any time to check every link in the chain. `npx foxwright-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
+
+**Upgrading to 0.8 or later.** The MCP server and the helper check each other with a key stored in `~/.foxwright/auth-token` (readable only by you) and encrypt what they exchange. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client so both sides are on the same version.
 
 ### Install from source
 
@@ -145,8 +147,13 @@ Without it, Foxwright works on most sites. The things that need real input are l
 - **You approve every site.** Before the agent opens, reads or touches a site you haven't approved, Foxwright shows you a small window owned by the extension, not by the web page. That means a page can't hide it, restyle it, or trick you into clicking it, and neither the page nor the AI can press its buttons. The choices are *Deny*, *Allow this session* and *Always allow*.
   - This covers embedded frames from other sites too: they stay hidden from the agent until you approve that site.
   - You can review and revoke sites in the toolbar popup, or switch to "Allow all sites" if you prefer.
+- **Read only or full access.** When you approve a site you can tick *Read only*. The agent can then read, take screenshots, scroll, hover, use PageUp/PageDown, Home/End, the arrow keys and Escape (not on a form field), and navigate. It can't click, type, fill in forms, upload files, accept dialogs or run scripts. If it tries, Foxwright asks you once whether to allow that on this site.
+- **Allow for 1 hour** sits between *this session* and *always*. The popup shows when it ends.
+- **Ask before sending, buying or deleting** (off by default, in the toolbar popup). Foxwright asks before the agent submits a form, presses Enter in a form field, or clicks a button or link named like Send, Post, Pay, Buy, Order, Delete, Remove, Confirm, Transfer or Sign. The window shows the element's name as the website labels it and the agent's own description, each labelled as such. It's a safety net, not a guarantee: it can't catch every action a site treats as "send", such as Enter in a chat box, and the word list is English.
+- **Private windows** are never used by the agent, even if you allow Foxwright in private windows.
+- **Activity log.** The Activity page (toolbar popup → Activity) lists the agent's actions and your permission answers, newest first: time, site (origin only), tab, a short description and the result. Export it as JSON or clear it there; you can also turn it off.
 - **Commands stay on the approved site.** Every command is tied to the site you approved. If the page has since navigated to another site, the content script refuses it.
-- **File uploads need your OK each time.** Foxwright shows you the file names and sizes and waits for your confirmation. Key and credential files are always refused: `~/.ssh`, `.env`, `*.pem`, cloud CLI credentials, browser profiles (saved passwords and cookies), shell history, and Claude's own settings.
+- **File uploads need your OK each time.** Foxwright shows you the file names and sizes and waits for your confirmation. The files are read from disk only after you approve. Key and credential files are always refused: `~/.ssh`, `.env`, `*.pem`, cloud CLI credentials, browser profiles (saved passwords and cookies), shell history, and Claude's own settings.
 - **Passwords stay hidden.** Password fields appear to the agent as `(password, N characters)`, never their contents, even when Firefox has filled in a saved login.
 - **The permission window can't be clicked by accident.** Its buttons only work after it has been on screen for a moment, so a window that pops up under your cursor mid-click can't catch that click. The default button is *Allow this session*, not *Always allow*. The page's title is shown, labelled as coming from the website.
 - **Stopping the agent.** Any of these pauses it:
@@ -158,6 +165,7 @@ Without it, Foxwright works on most sites. The things that need real input are l
 
   While the agent is working, the tab group title changes to **Foxwright ● working** and the page gets an orange glow. The in-page pill and glow are only a convenience, because a hostile page could hide or imitate them. The toolbar and the keyboard shortcut are the controls the page can't touch.
 - **See what the agent is doing.** The in-page pill shows the agent's description of its latest action ("Foxwright: Sends the reply to pat@example.com"), and the toolbar popup lists its recent actions: in quotes when they're the agent's own words, otherwise Foxwright's plain description ("Opened example.com", "Typed 12 characters"). The agent's words are a convenience, not a guarantee: a manipulated agent could describe an action wrongly.
+- **The local connection is authenticated.** The MCP server and the helper prove to each other that they hold the key in `~/.foxwright/auth-token` and encrypt everything after that, so another user on the same computer can't read or inject commands.
 - **No open ports.** The helper talks to AI clients through a Unix socket in `~/.foxwright` that only your user can open (directory mode 0700, socket 0600). On Windows it uses a named pipe with an unguessable name. Nothing listens on TCP unless you turn on real input yourself.
 - **Prompt injection is still possible.** Web pages can contain text written to manipulate an AI. Foxwright's permission windows limit the damage, but review what your agent is about to do on sensitive sites.
 
@@ -208,6 +216,8 @@ Also:
 - **Console capture starts when Foxwright's hooks load.** Messages logged by scripts in the page's `<head>`, before that, can be missed; reload the page to capture them.
 - **Windows** hasn't been tested as thoroughly as macOS and Linux (see [docs/MANUAL-CHECKS.md](docs/MANUAL-CHECKS.md)).
 - **`find`** uses word matching, not a language model, so describe elements by their visible text or role.
+- **PDFs.** PDFs in Firefox's viewer are read by downloading the file again (with your cookies; not for container or private tabs) and extracting its text with a small built-in reader. Encrypted PDFs, scanned or image-only pages, and fonts without a Unicode map can't be read. Text comes in drawing order, which is usually but not always the reading order.
+- **`javascript_tool` (Full build).** A script that never ends can't be stopped from an extension. After the timeout the tab is unresponsive until the agent navigates or closes it.
 
 ## Development
 
