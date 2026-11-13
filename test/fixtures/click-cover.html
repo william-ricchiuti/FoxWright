@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Click targets</title>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  button { position: absolute; width: 160px; height: 40px; }
+  #target { left: 40px; top: 60px; }
+  #cover { position: absolute; left: 20px; top: 40px; width: 220px; height: 80px; background: rgba(255, 255, 255, 0.01); z-index: 5; }
+  #runaway { left: 40px; top: 200px; }
+  #plain { left: 40px; top: 320px; }
+</style></head><body>
+<!-- A near-invisible overlay over "Target"; "Runaway" jumps away when the pointer arrives; "Plain" is a normal button. -->
+<button id="target" onclick="fetch('/log?target=1')">Target</button>
+<div id="cover" onclick="fetch('/log?cover=1')"></div>
+<button id="runaway">Runaway</button>
+<button id="plain" onclick="fetch('/log?plain=1')"><span>Plain</span> button</button>
+<script>
+const r = document.getElementById('runaway');
+r.addEventListener('pointerover', () => { r.style.left = '600px'; r.getBoundingClientRect(); });
+</script>
+</body></html>

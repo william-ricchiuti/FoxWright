@@ -1085,7 +1085,100 @@ export const tools = {
     const extra = await afterAction(tab, { url: args.beforeUrl, t0: typeof args.t0 === 'number' ? args.t0 : undefined }, {});
     return { data: extra };
   },
+
+  // ----- added in 0.8 for the MCP server's trusted input and file_upload (older MCP servers don't call them) -----
+
+  /** Before a trusted click: note what the next real pointerdown in this frame lands on (see _click_check). */
+  async _click_arm(args) {
+    const tab = await requireTab(args.tabId);
+    await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [args.frameId || 0] }, func: armClickProbe });
+    return { data: true };
+  },
+
+  /** After a trusted click: descriptions of the element the click landed on and its ancestors (approved sites only). */
+  async _click_check(args) {
+    const tab = await requireTab(args.tabId);
+    const [r] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [args.frameId || 0] }, func: readClickProbe });
+    const out = r?.result;
+    return { data: out && out.hit && isAllowed(out.origin) ? { hit: out.hit } : null };
+  },
+
+  /** file_upload step 1: the user approves the paths (shown with sizes) before the MCP server reads any file. */
+  async _upload_ask(args) {
+    const tab = await tabForPageTool(args);
+    const frameId = args.ref ? frameForRef(tab.id, args.ref) : 0;
+    let x, y;
+    if (!args.ref && Array.isArray(args.coordinate)) {
+      const p = await toCss(tab, args.coordinate);
+      x = p.x;
+      y = p.y;
+    }
+    if (!Array.isArray(args.paths) || !args.paths.length)
+      throw new Error('No files to upload.');
+    const origin = (await frameOriginOf(tab.id, frameId)) || originOf(tab.url) || tab.url;
+    const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths }) : 'once';
+    if (ok !== 'once')
+      throw new Error('The user did not approve uploading these files.');
+    const token = crypto.randomUUID();
+    approvedUploads.set(token, { tabId: tab.id, frameId, origin, ref: args.ref, x, y, count: args.paths.length, at: Date.now() });
+    return { data: { token } };
+  },
+
+  /** file_upload step 2: the contents, for an approval from _upload_ask (single use, 2 minutes, same page). */
+  async _upload_send(args) {
+    const u = approvedUploads.get(args.token);
+    approvedUploads.delete(args.token);
+    if (!u || Date.now() - u.at > 120000 || u.tabId !== args.tabId)
+      throw new Error('This upload\'s approval is missing or expired. Call file_upload again.');
+    if (!Array.isArray(args.files) || args.files.length !== u.count)
+      throw new Error('The files don\'t match what the user approved. Call file_upload again.');
+    const tab = await tabForPageTool({ tabId: u.tabId });
+    const now = (await frameOriginOf(tab.id, u.frameId)) || originOf(tab.url) || tab.url;
+    if (now !== u.origin)
+      throw new Error(`The page changed to ${now} after the user approved the upload to ${u.origin}. Nothing was uploaded.`);
+    const r = await sendContent(tab.id, u.frameId, 'upload', { ref: u.ref, x: u.x, y: u.y, files: args.files });
+    return text(`Attached ${r.files.join(', ')} to ${r.target}.${(r.notes || []).map(n => '\n' + n).join('')}`);
+  },
 };
+
+const approvedUploads = new Map(); // token -> what the user approved in _upload_ask
+
+/* Injected (isolated world) by _click_arm / _click_check; self-contained. Descriptions follow the
+   content script's describe(): `<tag#id role=x> "label"`, without the values of password fields. */
+function armClickProbe() {
+  const g = globalThis;
+  if (g.__foxwrightClickProbe)
+    for (const t of ['pointerdown', 'mousedown']) removeEventListener(t, g.__foxwrightClickProbe.fn, true);
+  const describe = (el) => {
+    const tag = el.tagName.toLowerCase();
+    const role = el.getAttribute('role');
+    const secret = tag === 'input' && (el.type === 'password' || /cc-|password/.test(el.getAttribute('autocomplete') || ''));
+    const text = tag === 'body' || tag === 'html' ? '' : (el.textContent || '').slice(0, 200);
+    const label = (el.getAttribute('aria-label') || text.trim() || (secret ? '' : el.value) || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+    return `<${tag}${el.id ? `#${el.id}` : ''}${role ? ` role=${role}` : ''}>${label ? ` "${label}"` : ''}`;
+  };
+  const probe = { hit: null, at: Date.now() };
+  probe.fn = (e) => {
+    if (!e.isTrusted || probe.hit || Date.now() - probe.at > 10000)
+      return;
+    const chain = [];
+    for (let el = e.composedPath()[0]; el && el.nodeType === 1 && chain.length < 12; el = el.parentElement || el.getRootNode()?.host)
+      chain.push(describe(el));
+    probe.hit = chain;
+  };
+  for (const t of ['pointerdown', 'mousedown']) addEventListener(t, probe.fn, true);
+  g.__foxwrightClickProbe = probe;
+  return true;
+}
+
+function readClickProbe() {
+  const probe = globalThis.__foxwrightClickProbe;
+  if (!probe)
+    return null;
+  for (const t of ['pointerdown', 'mousedown']) removeEventListener(t, probe.fn, true);
+  delete globalThis.__foxwrightClickProbe;
+  return { hit: probe.hit, origin: location.origin };
+}
 
 export async function adoptOpenedTab(tabId) {
   // Tabs opened *by* an agent tab (e.g. target=_blank under trusted input) join the group.
