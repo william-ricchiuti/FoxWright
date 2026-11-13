@@ -2,6 +2,7 @@
 //   claude mcp add zenko -- npx -y zenko-firefox mcp
 // Tool names and arguments deliberately match Claude in Chrome's.
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -46,6 +47,17 @@ helper.onConnect = async () => {
   } catch { /* status is best-effort */ }
 };
 bidi.onChange = (ok) => helper.notifyBidi(ok);
+// Trusted input goes straight to Firefox, past the extension: count Stop presses here so a
+// long text or key repeat already under way can be cut short.
+let pauseCount = 0;
+helper.onEvent((msg) => {
+  if (msg.event === 'paused')
+    pauseCount++;
+});
+const PAUSED_MSG = 'Zenko is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Zenko toolbar popup if they want you to carry on.';
+function pausedError() {
+  return Object.assign(new Error(PAUSED_MSG), { fromHelper: true });
+}
 
 function errorResult(e) {
   return { content: [{ type: 'text', text: `Error: ${e?.message || e}` }], isError: true };
@@ -152,7 +164,8 @@ function keepShot(r, tab) {
   if (!img?.data)
     return;
   const id = `shot-${nextShot++}`;
-  shots.set(id, { data: img.data, at: Date.now(), tab });
+  shots.set(id, { data: img.data, at: Date.now(), tab, site: typeof r.site === 'string' ? r.site : '' });
+  delete r.site;
   for (const [k, v] of shots)
     if (shots.size > 20 || Date.now() - v.at > 10 * 60000)
       shots.delete(k);
@@ -190,7 +203,7 @@ const frameExtra = (a) => ({
 /** When an action navigated the page, append what's on the new page (saves a read_page call). */
 async function withNavSummary(r, tab) {
   const t = (r?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
-  if (!r?.isError && typeof tab === 'number' && /The page navigated to https?:/.test(t)) {
+  if (!r?.isError && typeof tab === 'number' && /The page navigated to https?:/.test(t) && !/hasn't approved/.test(t)) {
     const summary = await onScreenSummary(tab);
     if (summary)
       r.content.push({ type: 'text', text: summary });
@@ -232,7 +245,14 @@ async function trustedComputerInner(a, st) {
   if (a.action === 'key' && ZOOM_KEYS.test(String(a.text || '').trim()))
     throw Object.assign(new Error('Page zoom shortcuts are not supported; use the zoom action to magnify a region instead.'), { fromHelper: true });
   const top = await bidi.contextFor(a.tabId, helper, 0);
+  // The extension refuses _point/_focus while paused, so only a Stop pressed from here on matters.
+  const pausesAtStart = pauseCount;
+  const checkStop = () => {
+    if (pauseCount !== pausesAtStart)
+      throw pausedError();
+  };
   const send = (fn) => {
+    checkStop();
     if (!st.dispatched)
       st.t0 = Date.now();
     st.dispatched = true;
@@ -277,10 +297,12 @@ async function trustedComputerInner(a, st) {
       const f = (await helper.call('_focus', { tabId: a.tabId }))?.data || { frameId: 0 };
       const ctx = f.frameId ? await bidi.contextFor(a.tabId, helper, f.frameId) : top;
       if (a.action === 'type') {
-        await send(() => bidi.type(ctx, a.text ?? ''));
-        summary = `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.`;
+        await send(() => bidi.type(ctx, a.text ?? '', checkStop));
+        summary = f.editable === false
+          ? `Sent ${(a.text ?? '').length} key presses, but no text field was focused (focus is on ${f.target || 'the page'}), so nothing was typed into a field. Click the field first, then type.`
+          : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.`;
       } else {
-        await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1))));
+        await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1)), checkStop));
         summary = `Pressed ${a.text}${a.repeat > 1 ? ` x${a.repeat}` : ''} (focus was on ${f.target || 'the page'}).`;
       }
       break;
@@ -312,7 +334,10 @@ async function trustedComputerInner(a, st) {
     default:
       return null;
   }
+  // Stop pressed while the input was being delivered: don't report success for it.
+  checkStop();
   const after = await helper.call('_after', { tabId: a.tabId, beforeUrl, t0: st.t0 }).catch(() => null);
+  checkStop();
   const notes = after?.data || [];
   return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }] };
 }
@@ -410,7 +435,7 @@ export async function runMcp() {
         const port = /:(\d+)\//.exec(bidi.url)?.[1] || '9222';
         // A refused connection just means remote debugging is off; anything else means Firefox (or
         // something) answered on the port but real input couldn't start, which is worth saying.
-        const why = !trusted && bidi.lastError && !/ECONNREFUSED/.test(bidi.lastError) ? ` Something answered on port ${port}, but real input couldn't start: ${bidi.lastError}.` : '';
+        const why = !trusted && bidi.lastError && !/ECONNREFUSED/.test(bidi.lastError) ? ` Something answered on port ${port}, but real input couldn't start: ${bidi.lastError}.${/Maximum number of active sessions/i.test(bidi.lastError) ? ' Firefox allows one remote-control session and something still holds it (often a Zenko MCP server that was force-quit). Restarting Firefox frees it.' : ''}` : '';
         r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : `Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=${port} for real, trusted input).${why}` });
       }
       const warn = await versionWarning();
@@ -493,9 +518,12 @@ export async function runMcp() {
       tabId: tabId.optional(),
     },
   }, async (a) => {
-    const r = await call('navigate', a, 60000);
+    // Longer than the permission window (2 minutes) plus the page load, so an answer the user
+    // gives late in that window still reaches the agent as the result of this call.
+    const r = await call('navigate', a, 165000);
     if (!r.isError && lastTab != null) {
-      const summary = await onScreenSummary(lastTab);
+      const landedUnapproved = /hasn't approved/.test((r.content || []).map(c => c.text || '').join('\n'));
+      const summary = landedUnapproved ? '' : await onScreenSummary(lastTab);
       if (summary)
         r.content.push({ type: 'text', text: summary });
       await recordFrame(lastTab, undefined, { label: /^(back|forward)$/.test(a.url) ? `Went ${a.url}` : `Opened ${String(a.url).replace(/^https?:\/\//, '').slice(0, 80)}` });
@@ -675,6 +703,8 @@ Actions:
           throw new Error(`Refusing to upload ${abs}: it looks like a credential or key file. If the user really wants this, they should attach it themselves.`);
         // Check type and size before reading: /dev/zero, a FIFO or a huge file would hang or exhaust memory.
         const st = await fs.stat(abs);
+        if (await isHardLinkToSecret(st))
+          throw new Error(`Refusing to upload ${abs}: it looks like a credential or key file (it is a second name for a file in one of your private folders). If the user really wants this, they should attach it themselves.`);
         if (!st.isFile())
           throw new Error(`${abs} is not a regular file.`);
         total += st.size;
@@ -713,7 +743,7 @@ Actions:
     if (renamed)
       name = name.replace(/\.[^.]*$/, '') + '.jpg';
     const kb = Math.round(shot.data.length * 3 / 4 / 1024);
-    const r = await call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files: [{ name, type: 'image/jpeg', base64: shot.data }], paths: [`${name} (screenshot ${a.imageId}, ${kb} KB)`] }, 180000);
+    const r = await call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files: [{ name, type: 'image/jpeg', base64: shot.data }], paths: [`${name} (screenshot ${a.imageId}${shot.site ? ` of ${shot.site}` : ''}, ${kb} KB)`] }, 180000);
     if (renamed && !r.isError)
       r.content.push({ type: 'text', text: `Uploaded as ${name}: screenshots are JPEG images.` });
     return r;
@@ -741,6 +771,8 @@ Actions:
     if (tab == null)
       return errorResult('No tab to record.');
     try {
+      if (a.action === 'start_recording' || a.action === 'stop_recording')
+        await helper.call('_tab', { tabId: tab }, 10000);
       if (a.action === 'start_recording') {
         startRecording(tab);
         await recordFrame(tab);
@@ -838,6 +870,7 @@ Actions:
   transport.onclose = shutdown;
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+  process.on('SIGHUP', shutdown); // the terminal the AI client runs in was closed
   await server.connect(transport);
   helper.connect().then(() => bidi.available()).catch(() => {});
 }
@@ -845,7 +878,8 @@ Actions:
 // Never upload obvious secrets, even if asked (a prompt-injected agent might try).
 const SECRET_DIRS = [
   '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.zenko', '.password-store', '1password', 'keychains',
-  '.config/gcloud', '.config/gh',
+  '.config/gcloud', '.config/gh', '.config/op', '.config/rclone', '.local/share/keyrings', '.terraform.d', '.ssh2',
+  '.thunderbird', 'application support/thunderbird', 'microsoft/credentials', 'microsoft/protect',
   // Claude Code / Claude Desktop settings and credentials
   '.claude', '.config/claude', 'application support/claude', 'appdata/roaming/claude',
   // browser profiles: saved logins, cookies, session tokens
@@ -855,7 +889,8 @@ const SECRET_DIRS = [
   'system32/config', // Windows password hives
 ];
 const SECRET_FILES = new RegExp('(^|[\\\\/])(' + [
-  'id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?', '\\.env(\\..*)?', '\\.netrc', '\\.npmrc', '\\.pypirc', '\\.git-credentials',
+  'id_(rsa|dsa|ecdsa|ed25519)[^\\\\/]*', '\\.pgpass', '\\.vault-token', '\\.my\\.cnf', '\\.s3cfg', '\\.boto', 'rclone\\.conf', 'credentials\\.(toml|tfrc\\.json)',
+  '\\.env(\\..*)?', '\\.netrc', '\\.npmrc', '\\.pypirc', '\\.git-credentials',
   'credentials(\\.json)?', '.*\\.(pem|key|p12|pfx|kdbx|keychain-db|ovpn)',
   'logins\\.json', 'key[34]\\.db', 'cookies\\.sqlite', 'login data', // browser secret stores, wherever they are
   '\\.(bash|zsh|sh|python|node_repl|psql|mysql)_history', '\\.histfile', 'fish_history',
@@ -869,7 +904,46 @@ function isSecretPath(abs) {
     const segs = d.split('/');
     return parts.some((_, i) => segs.every((sg, j) => parts[i + j] === sg));
   });
-  return hit || SECRET_FILES.test(abs);
+  // /proc and /sys expose live secrets (e.g. /proc/self/environ holds this process's API keys).
+  return hit || SECRET_FILES.test(abs) || /^\/(proc|sys)\//.test(abs);
+}
+
+/**
+ * A hard link gives a secret file an innocent second name that realpath can't see through.
+ * For files with more than one name, compare against the files in the user's secret folders.
+ */
+async function isHardLinkToSecret(st) {
+  if (!(st.nlink > 1))
+    return false;
+  const home = os.homedir();
+  let budget = 3000;
+  const walk = async (dir, depth) => {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      if (--budget < 0)
+        return false;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (depth < 3 && await walk(p, depth + 1))
+          return true;
+      } else if (e.isFile()) {
+        const s = await fs.stat(p).catch(() => null);
+        if (s && s.ino === st.ino && s.dev === st.dev)
+          return true;
+      }
+    }
+    return false;
+  };
+  for (const d of SECRET_DIRS) {
+    if (await walk(path.join(home, d), 0))
+      return true;
+  }
+  return false;
 }
 
 function mimeFor(p) {

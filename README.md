@@ -87,12 +87,14 @@ You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
    npx zenko-firefox setup --claude-code --claude-desktop
    ```
    Setup copies one self-contained file to `~/.zenko/app/` (on Windows, `%USERPROFILE%\.zenko\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
-2. **Install the extension.** It's in review on addons.mozilla.org (submitted 2026-11-08); the link goes here once it's approved. Until then, build it and load it yourself: see [Install from source](#before-the-store-listing-is-live-install-from-source) below. (The helper in step 1 is already on npm.) The fox in your toolbar loses its `!` badge once it finds the helper.
+2. **Install the extension** from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/zenko/). The fox in your toolbar loses its `!` badge once it finds the helper.
 3. **Ask Claude to use it**, e.g. *"Use Zenko to open my GitHub notifications and summarize them."*
 
 Run `npx zenko-firefox doctor` any time to check every link in the chain. `npx zenko-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
 
-### Before the store listing is live: install from source
+### Install from source
+
+Only needed if you want to change Zenko or run the Full build; everyone else can use the store listing above.
 
 ```sh
 git clone https://github.com/william-ricchiuti/Zenko.git && cd Zenko
@@ -185,7 +187,7 @@ Zenko's tools are compatible with Claude in Chrome's: same names, same arguments
 
 ### Two builds
 
-- **Zenko** (addons.mozilla.org): everything except `javascript_tool`. Mozilla's policy doesn't allow extensions to run code strings that come from outside the add-on.
+- **Zenko** ([addons.mozilla.org](https://addons.mozilla.org/firefox/addon/zenko/)): everything except `javascript_tool`. Mozilla's policy doesn't allow extensions to run code strings that come from outside the add-on.
 - **Zenko (Full)**: adds `javascript_tool`. Distribute it yourself (signed as "unlisted" on AMO, or unsigned in Firefox Developer Edition / Nightly). Pages with a strict Content-Security-Policy can still block it.
 
 ## Limitations

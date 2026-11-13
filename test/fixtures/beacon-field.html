@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Beacon field</title></head><body style="margin:0;font-family:sans-serif">
+<h1>Typing target</h1>
+<label>Field <input id="field" style="width:600px"></label>
+<p id="status">tabs 0, bar 0</p>
+<button id="bar" style="position:fixed;left:0;right:0;bottom:0;height:90px;z-index:10;background:#cde" onclick="window.bar++; fetch('/log?bar=' + window.bar)">Bottom bar (page button)</button>
+<script>
+window.bar = 0; window.tabs = 0;
+if (location.search.includes('small')) document.getElementById('bar').style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:160px;height:28px;z-index:10;background:#cde';
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { window.tabs++; e.preventDefault(); } }, true);
+let last = '';
+setInterval(() => { const s = `len=${document.getElementById('field').value.length}&tabs=${window.tabs}&bar=${window.bar}`; if (s !== last) { last = s; fetch('/log?' + s); } }, 50);
+</script>
+</body></html>

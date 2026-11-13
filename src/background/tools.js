@@ -46,16 +46,108 @@ async function capture(tab, opts) {
   }
 }
 
+/**
+ * Embedded frames from sites the user hasn't approved, as rectangles in the top-level viewport
+ * (CSS px). read_page leaves such frames out; screenshots must not show them either.
+ */
+async function unapprovedFrameRects(tab) {
+  if (state.mode === 'all' || checkAccessible(tab) !== 'ok')
+    return { rects: [], origins: [] };
+  const frames = ((await browser.webNavigation.getAllFrames({ tabId: tab.id })) || []).filter(f => f.frameId !== 0);
+  if (!frames.length)
+    return { rects: [], origins: [] };
+  const hidden = new Map(); // frameId -> origin
+  for (const f of frames) {
+    const o = await frameOriginOf(tab.id, f.frameId).catch(() => null);
+    if (o && !isAllowed(o))
+      hidden.set(f.frameId, o);
+  }
+  if (!hidden.size)
+    return { rects: [], origins: [] };
+  const parentOf = new Map(frames.map(f => [f.frameId, f.parentFrameId]));
+  const underHidden = (id) => {
+    for (let cur = parentOf.get(id), i = 0; cur && i < 10; cur = parentOf.get(cur), i++) {
+      if (hidden.has(cur))
+        return true;
+    }
+    return false;
+  };
+  const byParent = new Map(); // parentFrameId -> [frameId]; frames inside a hidden frame are covered by it
+  for (const id of hidden.keys()) {
+    if (!underHidden(id))
+      byParent.set(parentOf.get(id), [...(byParent.get(parentOf.get(id)) || []), id]);
+  }
+  const rects = [];
+  for (const [parent, ids] of byParent) {
+    await ensureContent(tab.id, parent);
+    const base = await frameOrigin(tab.id, parent);
+    const found = await sendContent(tab.id, parent, 'frameRects', { frameIds: ids }, 5000);
+    for (const id of ids) {
+      const r = found?.[id];
+      // Can't tell where an unapproved frame is: refuse rather than risk showing it.
+      if (!r || !base)
+        throw new Error(`Can't take a screenshot of tab ${tab.id} right now: it embeds a frame from ${hidden.get(id)}, which the user hasn't approved, and Zenko couldn't work out where that frame is on the page. Use read_page instead.`);
+      if (r.w > 0 && r.h > 0)
+        rects.push({ x: base.x + r.x, y: base.y + r.y, w: r.w, h: r.h });
+    }
+  }
+  return { rects, origins: [...new Set(hidden.values())] };
+}
+
+/** Grey out rectangles (image pixels) in a captured image. */
+async function maskImage(dataUrl, rects, mime, quality) {
+  if (!rects.length)
+    return dataUrl;
+  const raw = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  const buf = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++)
+    buf[i] = raw.charCodeAt(i);
+  const bmp = await createImageBitmap(new Blob([buf], { type: dataUrl.slice(5, dataUrl.indexOf(';')) }));
+  const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+  const g = canvas.getContext('2d');
+  g.drawImage(bmp, 0, 0);
+  for (const r of rects) {
+    const x = Math.floor(r.x) - 1, y = Math.floor(r.y) - 1, w = Math.ceil(r.w) + 2, h = Math.ceil(r.h) + 2;
+    g.save();
+    g.beginPath();
+    g.rect(x, y, w, h);
+    g.clip();
+    g.fillStyle = '#8a8580';
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = '#5c5753';
+    g.lineWidth = 2;
+    g.beginPath();
+    for (let d = -h; d < w; d += 16) {
+      g.moveTo(x + d, y + h);
+      g.lineTo(x + d + h, y);
+    }
+    g.stroke();
+    g.restore();
+  }
+  const blob = await canvas.convertToBlob({ type: mime, quality });
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+function hiddenNote(origins) {
+  return origins.length ? ` Greyed-out areas are embedded frames from sites the user hasn't approved (${origins.join(', ')}); acting on one asks the user.` : '';
+}
+
 async function screenshot(tab) {
   const vp = await viewportOf(tab);
   const s = scaleFor(vp.width, vp.height);
-  const dataUrl = await capture(tab, { format: 'jpeg', quality: 80, scale: s });
+  const hide = await unapprovedFrameRects(tab);
+  const dataUrl = await maskImage(await capture(tab, { format: 'jpeg', quality: 80, scale: s }), hide.rects.map(r => ({ x: r.x * s, y: r.y * s, w: r.w * s, h: r.h * s })), 'image/jpeg', 0.8);
   const w = Math.round(vp.width * s), h = Math.round(vp.height * s);
   return {
     content: [
-      { type: 'text', text: `Screenshot of tab ${tab.id} (${w}x${h}). Use coordinates in this image's pixel grid for clicks.` },
+      { type: 'text', text: `Screenshot of tab ${tab.id} (${w}x${h}). Use coordinates in this image's pixel grid for clicks.${hiddenNote(hide.origins)}` },
       { type: 'image', data: dataUrl.split(',')[1], mimeType: 'image/jpeg' },
     ],
+    site: originOf(tab.url) || '',
   };
 }
 
@@ -71,16 +163,35 @@ async function zoom(tab, region, scaleArg) {
     throw new Error('zoom region is empty.');
   const target = 1024 * (typeof scaleArg === 'number' ? Math.max(0.1, Math.min(1, scaleArg)) : 1);
   const z = Math.min((vp.dpr || 1) * 2, target / Math.max(rect.width, rect.height));
-  const dataUrl = await capture(tab, { format: 'png', rect, scale: z });
+  const hide = await unapprovedFrameRects(tab);
+  // Frame rectangles are in viewport pixels; the captured region starts at rect.x/y in the document.
+  const dataUrl = await maskImage(await capture(tab, { format: 'png', rect, scale: z }), hide.rects.map(r => ({ x: (r.x + (vp.scrollX || 0) - rect.x) * z, y: (r.y + (vp.scrollY || 0) - rect.y) * z, w: r.w * z, h: r.h * z })), 'image/png');
   return {
     content: [
-      { type: 'text', text: `Zoomed view of region (${region.join(', ')}). Keep using full-screenshot coordinates for clicks.` },
+      { type: 'text', text: `Zoomed view of region (${region.join(', ')}). Keep using full-screenshot coordinates for clicks.${hiddenNote(hide.origins)}` },
       { type: 'image', data: dataUrl.split(',')[1], mimeType: 'image/png' },
     ],
+    site: originOf(tab.url) || '',
   };
 }
 
 // ---------- helpers ----------
+
+/** True for patterns like (a+)+ or (a|aa)*: a repeated group containing a repeat or alternatives,
+ *  which can freeze the extension for minutes on the wrong input. */
+function slowRegex(src) {
+  let s = src.replace(/\\./g, 'x').replace(/\[[^\]]*\]/g, 'x');
+  for (let i = 0; i < 100; i++) {
+    const m = /\(([^()]*)\)([+*]|\{\d*,?\d*\})?/.exec(s);
+    if (!m)
+      break;
+    const inner = /[+*|§]|\{\d*,\d*\}/.test(m[1]);
+    if (inner && m[2])
+      return true;
+    s = s.slice(0, m.index) + (inner ? '§' : 'x') + s.slice(m.index + m[0].length);
+  }
+  return false;
+}
 
 function fmtResult(verb, r) {
   const lines = [];
@@ -395,7 +506,13 @@ export const tools = {
     const tabs = await ensureGroup(!!args.createIfEmpty);
     if (!tabs.length)
       return text('The Zenko tab group is empty. Call tabs_context_mcp with createIfEmpty: true, or tabs_create_mcp, to get a tab.');
-    const lines = tabs.map(t => `- tabId ${t.id}: ${JSON.stringify(t.title || '')} ${t.url}${t.active ? ' (active in its window)' : ''}`);
+    // A tab on a site the user hasn't approved (e.g. a sign-in popup the page opened) shows only
+    // its site: the full address can carry tokens, and the title is whatever the page chose.
+    const lines = tabs.map((t) => {
+      const o = originOf(t.url);
+      const what = o && !isAllowed(o) ? `${o} (site not approved yet: title and full address hidden)` : `${JSON.stringify(t.title || '')} ${t.url}`;
+      return `- tabId ${t.id}: ${what}${t.active ? ' (active in its window)' : ''}`;
+    });
     return text(`Zenko tab group (${tabs.length} tab${tabs.length > 1 ? 's' : ''}):\n${lines.join('\n')}\n\nOnly tabs in this group can be used. The user can share an existing tab by dragging it into the orange "Zenko" group.`);
   },
 
@@ -422,17 +539,35 @@ export const tools = {
       prefix = `(Using tab ${tabId} from the Zenko group.)\n`;
     }
     const tab = await requireTab(tabId);
-    const navSince = Date.now();
-    if (args.url === 'back') {
-      await browser.tabs.goBack(tab.id);
-    } else if (args.url === 'forward') {
-      await browser.tabs.goForward(tab.id);
+    let navSince = Date.now();
+    let requested = null;
+    if (args.url === 'back' || args.url === 'forward') {
+      const go = dir => (dir === 'back' ? browser.tabs.goBack(tab.id) : browser.tabs.goForward(tab.id));
+      const other = args.url === 'back' ? 'forward' : 'back';
+      await go(args.url);
+      // An extension can't see where history leads before going there. If it leads to a site
+      // the user hasn't approved, step straight back out, ask, and only then go again.
+      const landed = await waitForLoad(tab.id, 30000, navSince);
+      const lo = originOf(landed.url);
+      if (lo && !isAllowed(lo) && landed.url !== tab.url) {
+        const t1 = Date.now();
+        await go(other);
+        await waitForLoad(tab.id, 30000, t1);
+        await ensureOriginPermission(landed.url);
+        navSince = Date.now();
+        await go(args.url);
+      }
     } else {
       const url = normalizeUrl(args.url);
       await ensureOriginPermission(url); // ask before sending the user's cookies anywhere new (no tab title: it's the page being left, not the site asked about)
       await browser.tabs.update(tab.id, { url });
+      requested = url;
     }
     const done = await waitForLoad(tab.id, 30000, navSince);
+    // No page load began and the tab still shows the old page: Firefox is most likely asking
+    // "Leave page?" (the page set a beforeunload handler), which only the user can answer.
+    if (requested && done.url === tab.url && requested.split('#')[0] !== tab.url.split('#')[0] && ((navState.get(tab.id) || {}).start || 0) < navSince)
+      throw new Error(`${prefix}Tab ${tab.id} did not leave ${tab.url}. The page is probably showing a "Leave page?" confirmation, which only the user can answer. Ask them to choose, then check the tab again.`);
     const all = await groupTabs();
     const ctx = all.length > 1 ? `\nTabs in group: ${all.map(t => t.id).join(', ')}` : '';
     const o = originOf(done.url);
@@ -687,6 +822,8 @@ export const tools = {
       list = list.filter(e => e.level === 'error' || e.level === 'exception');
     if (args.pattern) {
       let re;
+      if (String(args.pattern).length > 300 || slowRegex(String(args.pattern)))
+        throw new Error('That pattern could take very long to evaluate (a repeated group that itself contains a repeat or alternatives). Use a simpler pattern, e.g. plain words.');
       try {
         re = new RegExp(args.pattern, 'i');
       } catch {
@@ -712,6 +849,22 @@ export const tools = {
     const tab = await requireTab(args.tabId);
     await ensurePermission(tab);
     let list = netLog.get(tab.id) || [];
+    // Embedded frames from sites the user hasn't approved stay hidden here too: neither the
+    // frame's own address nor what it loads is listed.
+    const total = list.length;
+    list = list.filter((r) => {
+      if (r.type === 'sub_frame') {
+        const o = originOf(r.url);
+        return !!o && isAllowed(o);
+      }
+      if (r.frameId) {
+        const o = originOf(r.doc || '');
+        return !!o && isAllowed(o);
+      }
+      return true;
+    });
+    const hiddenCount = total - list.length;
+    const hiddenLine = hiddenCount ? `\n(${hiddenCount} request${hiddenCount > 1 ? 's' : ''} from embedded frames the user hasn't approved ${hiddenCount > 1 ? 'are' : 'is'} not shown.)` : '';
     if (args.urlPattern)
       list = list.filter(r => r.url.includes(args.urlPattern));
     const limit = args.limit || 100;
@@ -719,8 +872,8 @@ export const tools = {
     if (args.clear)
       netLog.set(tab.id, []);
     if (!shown.length)
-      return text('No network requests recorded for this tab yet. Requests are recorded only while the tab is in the Zenko group.');
-    return text(shown.map(r => `${r.method} ${r.status ?? r.error ?? '…'} ${r.type} ${r.url}`).join('\n'));
+      return text('No network requests recorded for this tab yet. Requests are recorded only while the tab is in the Zenko group.' + hiddenLine);
+    return text(shown.map(r => `${r.method} ${r.status ?? r.error ?? '…'} ${r.type} ${r.url}`).join('\n') + hiddenLine);
   },
 
   async resize_window(args) {
@@ -777,6 +930,9 @@ export const tools = {
     let shot;
     try {
       const o = frameId ? await frameOrigin(tab.id, frameId) : { x: 0, y: 0 };
+      // The Stop pill sits on top of the page: get it out of the way of a real click aimed under it.
+      if (o)
+        await sendContent(tab.id, 0, 'dodgePill', { x: p.x + o.x, y: p.y + o.y }, 3000).catch(() => {});
       const vp = await viewportOf(tab);
       const s = scaleFor(vp.width, vp.height);
       if (o)
@@ -785,13 +941,18 @@ export const tools = {
     return { data: { x: p.x, y: p.y, target: p.target, draggable: !!p.draggable, frameId, shot } };
   },
 
+  async _tab(args) {
+    await requireTab(args.tabId);
+    return { data: true };
+  },
+
   async _focus(args) {
     // Which frame has keyboard focus (so trusted key input can target its BiDi context).
     const tab = await tabForPageTool(args);
     if (checkAccessible(tab) === 'blank')
       return { data: { frameId: 0 } };
     const f = await sendContent(tab.id, 0, 'focusInfo', {});
-    return { data: { frameId: frameIdFromPrefix(tab.id, f.prefix), target: f.target } };
+    return { data: { frameId: frameIdFromPrefix(tab.id, f.prefix), target: f.target, editable: f.editable } };
   },
 
   async _mark(args) {

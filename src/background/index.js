@@ -29,7 +29,12 @@ onRequest(async (tool, args) => {
   try {
     // One command at a time per tab: two agents (or parallel tool calls) acting on the same tab
     // would otherwise interleave focus, typing and refs.
-    result = await inTabQueue(tool, args?.tabId, () => fn(args));
+    result = await inTabQueue(tool, args?.tabId, () => {
+      // Stop may have been pressed while this command waited behind another one.
+      if (state.paused && tool !== '_status' && tool !== '_pair_cancel')
+        throw new Error(PAUSED_MSG);
+      return fn(args);
+    });
   } catch (e) {
     throw friendlyTabError(e, args?.tabId);
   } finally {

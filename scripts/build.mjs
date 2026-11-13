@@ -34,7 +34,7 @@ const PATCHES = [
   {
     file: 'vendor/playwright/injected/ariaSnapshot.ts',
     find: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      result.children = [element.value];",
-    replace: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      // [zenko patch] never show password values to the agent (Firefox autofills saved logins into the DOM).\n      result.children = [element.type === 'password' ? (element.value ? `(password, ${element.value.length} characters)` : '') : element.value];",
+    replace: "if (element.type !== 'checkbox' && element.type !== 'radio' && element.type !== 'file')\n      // [zenko patch] never show password values to the agent (Firefox autofills saved logins into the DOM).\n      result.children = [(element.type === 'password' || (globalThis as any).__zenkoSecret?.(element)) ? (element.value ? `(password, ${element.value.length} characters)` : '') : element.value];",
   },
   // [zenko patch] see closed shadow roots too. Firefox gives content scripts `openOrClosedShadowRoot`.
   ...['ariaSnapshot.ts', 'roleUtils.ts'].map(f => ({

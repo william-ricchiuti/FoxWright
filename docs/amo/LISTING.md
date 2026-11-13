@@ -27,6 +27,14 @@ Zenko connects an AI agent that you run on your own computer, such as Claude Cod
 
 Zenko has two parts: this extension, and a small helper program you install once with `npx zenko-firefox setup` (it needs Node.js). The helper is also the MCP server your AI client talks to. Page content only goes from the extension to that helper on your computer and on to the AI client you connected. Zenko itself has no servers and collects nothing.
 
+**About the permissions and data notice on this page**
+
+Firefox lists "Browsing activity", "Website activity" and "Website content" as data collection because Zenko passes what's on a page (its text, screenshots, addresses and the agent's clicks) to another program: the AI client you set up on your own computer. That is the whole point of the add-on, so Mozilla requires it to be declared. None of it goes to Zenko's developer or to any Zenko server, because there isn't one. What your AI client does with it is covered by that client's own privacy terms.
+
+- "Access your data for all websites" lets the agent work on whichever site you approve. Zenko still asks you about each site first, and you can turn this permission off for a site, or entirely, in Firefox's add-on settings.
+- "Exchange messages with programs other than Firefox" is how the extension talks to the helper on your computer.
+- "Access browser tabs" and "Access browser activity during navigation" let Zenko keep the agent in its own tab group and know when a page has finished loading.
+
 Several Firefox profiles can be connected at once: name each one in the toolbar popup, and the agent can pick one or ask you to choose.
 
 Optional: start Firefox with `--remote-debugging-port=9222` and Zenko sends real mouse and keyboard input, which some sites require.

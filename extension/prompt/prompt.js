@@ -17,7 +17,8 @@ function answer(a) {
   // The title is chosen by the web page, so label it as such and keep it short: a hostile page
   // could otherwise use it to talk the user into allowing.
   if (req.tabTitle) {
-    const t = req.tabTitle.replace(/\s+/g, ' ').trim();
+    // No control, zero-width or text-direction characters: they can reorder or hide what is shown.
+    const t = req.tabTitle.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
     $('tabline').textContent = `Page title (set by the website): “${t.length > 70 ? t.slice(0, 70) + '…' : t}”`;
   }
   if (req.type === 'upload') {

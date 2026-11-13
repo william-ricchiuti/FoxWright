@@ -11,4 +11,4 @@ npx zenko-firefox doctor                                  # check the connection
 - `mcp`: runs the MCP server on stdio. Your AI client starts this.
 - `doctor` / `uninstall`: check the installation, or remove the helper.
 
-Requires Node.js 20+ and Firefox 140+ with the Zenko extension installed. See the main README for the tools, the safety model and the optional trusted-input mode.
+Requires Node.js 20+ and Firefox 152+ with the [Zenko extension](https://addons.mozilla.org/firefox/addon/zenko/) installed. See the main README for the tools, the safety model and the optional trusted-input mode.
