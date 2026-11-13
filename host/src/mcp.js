@@ -365,16 +365,15 @@ async function trustedComputerInner(a, st) {
       const p = await locate();
       if (!p)
         return null;
-      await bind(top);
-      await bind(p.context);
       const count = a.action === 'double_click' ? 2 : a.action === 'triple_click' ? 3 : 1;
       // Watch what the real click lands on (an overlay or a moving element can take it).
       const frameId = p.frameId || 0;
-      const armed = await helper.call('_click_arm', { tabId: a.tabId, frameId }, 5000).then(r => !!r?.data, () => false);
-      await send(async () => {
-        await guard();
-        await bidi.click(p.context, p.x, p.y, { button: a.action === 'right_click' ? 2 : 0, count, modifiers: a.modifiers });
-      });
+      const arming = helper.call('_click_arm', { tabId: a.tabId, frameId }, 5000).then(r => !!r?.data, () => false);
+      // The site check last, right before the click (one URL read per context).
+      const armed = await arming;
+      await bind(top);
+      await bind(p.context);
+      await send(() => bidi.click(p.context, p.x, p.y, { button: a.action === 'right_click' ? 2 : 0, count, modifiers: a.modifiers }));
       const verb = { left_click: 'Clicked', right_click: 'Right-clicked', double_click: 'Double-clicked', triple_click: 'Triple-clicked' }[a.action];
       summary = `${verb} ${where(p)}.`;
       if (armed) {

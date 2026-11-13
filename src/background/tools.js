@@ -1161,8 +1161,16 @@ function armClickProbe() {
   probe.fn = (e) => {
     if (!e.isTrusted || probe.hit || Date.now() - probe.at > 10000)
       return;
+    // A closed shadow root retargets the event to its host here: look inside, as the content script's elementAt does.
+    let start = e.composedPath()[0];
+    for (let i = 0; i < 10 && start?.openOrClosedShadowRoot; i++) {
+      const inner = start.openOrClosedShadowRoot.elementFromPoint(e.clientX, e.clientY);
+      if (!inner || inner === start)
+        break;
+      start = inner;
+    }
     const chain = [];
-    for (let el = e.composedPath()[0]; el && el.nodeType === 1 && chain.length < 12; el = el.parentElement || el.getRootNode()?.host)
+    for (let el = start; el && el.nodeType === 1 && chain.length < 12; el = el.parentElement || el.getRootNode()?.host)
       chain.push(describe(el));
     probe.hit = chain;
   };
