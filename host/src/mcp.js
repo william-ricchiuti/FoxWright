@@ -380,7 +380,8 @@ async function trustedComputerInner(a, st) {
         afterCalls.push(helper.call('_click_check', { tabId: a.tabId, frameId }, 5000).then((r) => {
           const hit = r?.data?.hit;
           const under = Array.isArray(r?.data?.under) ? r.data.under : [];
-          if (Array.isArray(hit) && hit.length && p.target && ![...hit, ...under].some(d => sameElement(d, p.target))) {
+          // p.partOf: another part of the same small control sits on top of the target there (see refPoint).
+          if (Array.isArray(hit) && hit.length && p.target && ![...hit, ...under].some(d => sameElement(d, p.target) || (p.partOf && sameElement(d, p.partOf)))) {
             landedElsewhere = true;
             summary = `${verb} at ${where(p)}, but the click landed on ${hit[0]} instead (something covered or moved the element). The click did happen: check the page (screenshot or read_page) before retrying.`;
           }

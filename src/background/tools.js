@@ -1515,7 +1515,7 @@ export const tools = {
       if (o)
         shot = [Math.round((p.x + o.x) * s), Math.round((p.y + o.y) * s)];
     } catch { /* not needed for input */ }
-    return { data: { x: p.x, y: p.y, target: p.target, draggable: !!p.draggable, frameId, shot } };
+    return { data: { x: p.x, y: p.y, target: p.target, partOf: p.partOf, draggable: !!p.draggable, frameId, shot } };
   },
 
   async _tab(args) {

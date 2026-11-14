@@ -37,7 +37,7 @@ dialog{border:1px solid #333}
 <!-- Data that loads with fetch after a delay, with a spinner meanwhile. -->
 <button id="load" onclick="
   document.getElementById('status').textContent = 'Loading…';
-  fetch('data.json?delay=900').then(r => r.json()).then(() => setTimeout(() => { document.getElementById('status').textContent = 'Loaded 3 items'; }, 50));
+  fetch('data.json?delay=900').then(r => r.json()).then(() => { document.getElementById('status').textContent = 'Loaded 3 items'; });
 ">Load data</button>
 <p id="status">Nothing loaded</p>
 

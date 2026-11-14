@@ -159,6 +159,24 @@ const handlers: Record<string, (args: any) => any> = {
   upload: (a) => input.uploadFiles(a),
   refPoint: (a) => {
     const r = input.refPoint(a);
+    // Some controls stack a sibling over the part the outline names (a select's placeholder under
+    // its input box): a click there goes to the sibling, as it would for a person. Say so, so the
+    // click check doesn't call that a miss. An unrelated overlay shares no small parent with it.
+    try {
+      const el = resolveRef(a.ref);
+      const hit = r && !r.forward ? input.elementAt(r.x, r.y) : null;
+      if (el && hit && hit !== el && !el.contains(hit) && !hit.contains(el)) {
+        let lca: Element | null = hit.parentElement;
+        while (lca && !lca.contains(el))
+          lca = lca.parentElement;
+        const area = (e: Element) => {
+          const b = e.getBoundingClientRect();
+          return b.width * b.height;
+        };
+        if (lca && lca !== document.body && lca !== document.documentElement && area(lca) <= 8 * Math.max(area(el), 400))
+          r.partOf = input.describe(hit);
+      }
+    } catch { /* only a hint */ }
     if (a.guard)
       r.conseq = clickConsequence(resolveRef(a.ref), hereOrigin());
     return r;
