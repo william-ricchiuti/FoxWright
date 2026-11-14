@@ -117,8 +117,16 @@ async function waitFor(tab, cond, timeoutMs) {
           return Date.now() - t0;
         const t = await browser.tabs.get(tab.id);
         const net = netState(tab.id);
-        if (t.status !== 'loading' && net.open === 0 && net.quietMs >= quietMs)
-          return Date.now() - t0;
+        if (t.status !== 'loading' && net.open === 0 && net.quietMs >= quietMs) {
+          // Look once more a moment later: on a busy machine a request's start can be reported
+          // late, and returning "idle" while one is about to show up would be wrong.
+          await sleep(150);
+          const again = netState(tab.id);
+          const quiet = await sendContent(tab.id, 0, 'waitCheck', { quietMs, sliceMs: 0 }).catch(() => ({ met: false }));
+          if (again.open === 0 && again.quietMs >= quietMs && quiet.met)
+            return Date.now() - t0;
+          continue;
+        }
         if (Date.now() >= deadline)
           throw Object.assign(new Error(`page still busy: ${t.status === 'loading' ? 'it is still loading' : `${net.open} fetch/XHR request${net.open === 1 ? '' : 's'} in flight`}`), { timeout: true });
         await sleep(Math.min(100, Math.max(0, deadline - Date.now())));
@@ -1683,7 +1691,7 @@ export const tools = {
     const tab = await requireTab(args.tabId);
     const [r] = await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [args.frameId || 0] }, func: readClickProbe });
     const out = r?.result;
-    return { data: out && out.hit && isAllowed(out.origin) ? { hit: out.hit } : null };
+    return { data: out && out.hit && isAllowed(out.origin) ? { hit: out.hit, under: out.under || [] } : null };
   },
 
   /** file_upload step 1: the user approves the paths (shown with sizes) before the MCP server reads any file. */
@@ -1756,6 +1764,19 @@ function armClickProbe() {
     for (let el = start; el && el.nodeType === 1 && chain.length < 12; el = el.parentElement || el.getRootNode()?.host)
       chain.push(describe(el));
     probe.hit = chain;
+    // A target that lets clicks through (pointer-events: none, e.g. a placeholder inside a
+    // control) is not in that chain: the click lands on the element around it. List what lies
+    // under the pointer inside the element that was hit, so that case isn't reported as a miss.
+    const under = [];
+    let seen = 0;
+    for (const el of start.querySelectorAll('*')) {
+      if (++seen > 500 || under.length >= 24)
+        break;
+      const r = el.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)
+        under.push(describe(el));
+    }
+    probe.under = under;
   };
   for (const t of ['pointerdown', 'mousedown']) addEventListener(t, probe.fn, true);
   g.__foxwrightClickProbe = probe;
@@ -1768,7 +1789,7 @@ function readClickProbe() {
     return null;
   for (const t of ['pointerdown', 'mousedown']) removeEventListener(t, probe.fn, true);
   delete globalThis.__foxwrightClickProbe;
-  return { hit: probe.hit, origin: location.origin };
+  return { hit: probe.hit, under: probe.under || [], origin: location.origin };
 }
 
 export async function adoptOpenedTab(tabId) {

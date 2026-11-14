@@ -822,6 +822,8 @@ async function main() {
   });
 
   await test('javascript_tool: a slow async script times out but the page stays usable', async () => {
+    if (h.isStore)
+      return; // javascript_tool only exists in the Full build
     await nav('/basic.html');
     const r = await h.call('javascript_tool', { tabId, text: 'await new Promise(r => setTimeout(r, 4000)); 1', timeout: 1 });
     expect(r.isError && /didn't finish within 1 s/.test(r.text) && /responsive/.test(r.text), r.text);
@@ -830,6 +832,8 @@ async function main() {
   });
 
   await test('javascript_tool: an endless loop times out, later calls fail fast, navigate recovers the tab', async () => {
+    if (h.isStore)
+      return; // javascript_tool only exists in the Full build
     await nav('/basic.html?loop');
     const t0 = Date.now();
     const r = await h.call('javascript_tool', { tabId, text: 'while (true) {}', timeout: 2 });
