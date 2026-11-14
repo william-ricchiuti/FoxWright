@@ -313,7 +313,9 @@ jobs:
           flatpak info --user org.mozilla.firefox | head -20
           # setup writes the native-messaging manifest into the Flatpak's folder only if it exists.
           mkdir -p "$HOME/.var/app/org.mozilla.firefox/.mozilla"
-          printf '#!/bin/sh\nexec flatpak run --user org.mozilla.firefox "$@"\n' > "$HOME/flatpak-firefox"
+          # The sandbox can't see the checkout: let it read the built extension (and nothing else),
+          # or web-ext can't load it and the probe never gets to the question it is asking.
+          printf '#!/bin/sh\nexec flatpak run --user --filesystem=%s/dist:ro org.mozilla.firefox "$@"\n' "$GITHUB_WORKSPACE" > "$HOME/flatpak-firefox"
           chmod +x "$HOME/flatpak-firefox"
           echo "FIREFOX=$HOME/flatpak-firefox" >> "$GITHUB_ENV"
       - name: Set up the helper (real HOME on this throwaway runner)

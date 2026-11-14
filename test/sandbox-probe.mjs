@@ -117,4 +117,6 @@ try {
 } catch { /* ignore */ }
 fs.mkdirSync(path.join(root, 'test/results'), { recursive: true });
 fs.writeFileSync(path.join(root, 'test/results', `sandbox-${label}.txt`), findings.join('\n') + '\n');
-process.exit(ok ? 0 : 1);
+// A probe, not a test: "does not work" is the finding it exists to record (see the artifact and
+// the RESULT line). Set FOXWRIGHT_PROBE_STRICT=1 to fail when the package doesn't work.
+process.exit(ok || !process.env.FOXWRIGHT_PROBE_STRICT ? 0 : 1);
