@@ -146,5 +146,94 @@ await test('trusted typing into an approved page does not leak keystrokes to an 
   }
 }, { area: '1-trusted' });
 
+// ---------- trusted input stays on the approved site ----------
+const sinkGot = (since) => xs.hits.filter(x => x.at >= since && x.host.startsWith('b.test') && /[?&]sink=/.test(x.query)).map(x => decodeURIComponent(/sink=([^&]*)/.exec(x.query)[1])).pop() || '';
+
+await test('trusted typing: Enter submits and the site redirects to an unapproved one; the rest of the text does not land there', async () => {
+  const { h, tabId } = await fresh({ mode: 'ask', promptTimeoutSec: 5, allowed: [A] });
+  try {
+    const since = Date.now();
+    await h.call('navigate', { tabId, url: `${A}/enter-redirect.html` });
+    await h.call('computer', { tabId, action: 'left_click', ref: refOf((await h.call('find', { tabId, query: 'User' })).text) });
+    const secret = 'password-like-text-'.repeat(12);
+    const r = await h.call('computer', { tabId, action: 'type', text: `user\n${secret}` });
+    await sleep(1500);
+    const stolen = sinkGot(since);
+    const reachedB = xs.hits.some(x => x.at >= since && x.host.startsWith('b.test') && x.path === '/autofocus-sink.html');
+    console.log(`      (type result: ${r.isError ? 'error' : 'success'}: ${r.text.replace(/\n/g, ' ').slice(0, 220)}; b.test page loaded: ${reachedB}; b.test field got ${stolen.length} characters)`);
+    expect(reachedB, 'the redirect to b.test never happened, so this test proves nothing');
+    expect(!stolen, `keystrokes meant for the approved site reached the unapproved b.test field: ${JSON.stringify(stolen.slice(0, 60))}`);
+    expect(r.isError && /after 5 of \d+ characters/.test(r.text) && /b\.test/.test(r.text), 'the agent should be told typing stopped after "user⏎" because the page moved: ' + r.text);
+  } finally {
+    await h.stop();
+  }
+}, { area: '1-trusted' });
+
+await test('trusted typing with newlines in a textarea (no navigation) still types everything', async () => {
+  const { h, tabId } = await fresh({ mode: 'ask', promptTimeoutSec: 5, allowed: [A] });
+  try {
+    await h.call('navigate', { tabId, url: `${A}/enter-redirect.html` });
+    await h.call('computer', { tabId, action: 'left_click', ref: refOf((await h.call('find', { tabId, query: 'Notes' })).text) });
+    const t0 = Date.now();
+    const r = await h.call('computer', { tabId, action: 'type', text: 'line one\nline two\nline three' });
+    const ms = Date.now() - t0;
+    const page = await h.call('read_page', { tabId });
+    console.log(`      (type took ${ms} ms: ${r.text.replace(/\n/g, ' ').slice(0, 100)})`);
+    expect(!r.isError && /Typed 28 characters/.test(r.text), r.text);
+    expect(/line three/.test(page.text), 'textarea should hold all three lines:\n' + page.text.slice(0, 400));
+  } finally {
+    await h.stop();
+  }
+}, { area: '1-trusted' });
+
+// ---------- what a trusted click really landed on ----------
+await test('trusted click on a ref covered by an overlay: the agent is told where it landed', async () => {
+  const { h, tabId } = await fresh();
+  try {
+    await h.call('navigate', { tabId, url: `${A}/click-cover.html` });
+    const ref = refOf((await h.call('find', { tabId, query: 'Target' })).text);
+    const r = await h.call('computer', { tabId, action: 'left_click', ref });
+    console.log(`      (${r.isError ? 'error' : 'success'}: ${r.text.replace(/\n/g, ' ').slice(0, 200)})`);
+    expect(r.isError && /landed on <div#cover>/.test(r.text), 'the agent should not be told the Target button was clicked: ' + r.text);
+  } finally {
+    await h.stop();
+  }
+}, { area: '3-trusted' });
+
+await test('trusted click on an element that moves away as the pointer arrives: reported, not "Clicked"', async () => {
+  const { h, tabId } = await fresh();
+  try {
+    await h.call('navigate', { tabId, url: `${A}/click-cover.html` });
+    const ref = refOf((await h.call('find', { tabId, query: 'Runaway' })).text);
+    const r = await h.call('computer', { tabId, action: 'left_click', ref });
+    console.log(`      (${r.isError ? 'error' : 'success'}: ${r.text.replace(/\n/g, ' ').slice(0, 200)})`);
+    expect(r.isError && /landed on/.test(r.text), 'expected "landed on": ' + r.text);
+  } finally {
+    await h.stop();
+  }
+}, { area: '3-trusted' });
+
+await test('trusted click on a plain button (a child span takes the event) is reported as a normal click', async () => {
+  const { h, tabId } = await fresh();
+  try {
+    const since = Date.now();
+    await h.call('navigate', { tabId, url: `${A}/click-cover.html` });
+    const ref = refOf((await h.call('find', { tabId, query: 'Plain button' })).text);
+    const times = [];
+    let r;
+    for (let i = 0; i < 5; i++) {
+      const t0 = Date.now();
+      r = await h.call('computer', { tabId, action: 'left_click', ref });
+      times.push(Date.now() - t0);
+    }
+    await sleep(300);
+    const clicks = xs.hits.filter(x => x.at >= since && /plain=1/.test(x.query)).length;
+    console.log(`      (${r.text.replace(/\n/g, ' ').slice(0, 120)}; click times ${times.join('/')} ms; page counted ${clicks})`);
+    expect(!r.isError && /^Clicked <button#plain>/.test(r.text) && !/landed on/.test(r.text) && clicks === 5, r.text);
+  } finally {
+    await h.stop();
+  }
+}, { area: '3-trusted' });
+
 xs.close();
 process.exit(finish());

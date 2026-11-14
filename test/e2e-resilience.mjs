@@ -9,6 +9,7 @@ import webExt from 'web-ext';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { start } from './harness.mjs';
+import { helperRequest } from './helper-socket.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`;
@@ -96,11 +97,7 @@ await test('latency under repetition (60 mixed calls)', async () => {
 
 await test('helper crash: extension restarts it and calls work again', async () => {
   const sock = h.sock;
-  const status = await new Promise((resolve) => {
-    const s = net.connect(sock);
-    s.on('connect', () => s.write(JSON.stringify({ type: 'status', id: 1 }) + '\n'));
-    s.on('data', d => { s.destroy(); resolve(JSON.parse(String(d).split('\n')[0])); });
-  });
+  const status = await helperRequest(sock, { type: 'status' });
   process.kill(status.pid, 'SIGKILL');
   await sleep(500);
   let r;

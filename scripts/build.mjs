@@ -49,7 +49,8 @@ const patchPlugin = {
   name: 'foxwright-vendor-patches',
   setup(build) {
     build.onLoad({ filter: /vendor[\\/]playwright[\\/].*\.ts$/ }, async (args) => {
-      let src = fs.readFileSync(args.path, 'utf8');
+      // Normalise line endings: a Windows checkout (core.autocrlf) has CRLF, and the patches match LF.
+      let src = fs.readFileSync(args.path, 'utf8').replace(/\r\n/g, '\n');
       for (const p of PATCHES) {
         if (args.path.endsWith(p.file.split('/').join(path.sep))) {
           const applies = typeof p.find === 'string' ? src.includes(p.find) : p.find.test(src);

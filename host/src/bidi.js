@@ -48,7 +48,15 @@ export class Bidi {
     this.opening = null; // the connection attempt in progress, shared by concurrent callers
     this.nextId = 1;
     this.pending = new Map();
-    this.contexts = new Map(); // tabId -> BiDi browsing context id
+    // "<browser scope>|<tabId>:<frameId>" -> BiDi browsing context id. The scope (which Firefox
+    // profile, which helper connection) is part of the key: tab ids restart in every profile, so
+    // tab 3 of "Personal" must never reuse the context found for tab 3 of "Work".
+    this.contexts = new Map();
+    this.scope = '';
+    // Navigation bookkeeping per browsing context, from BiDi events: lets trusted input notice that
+    // the page it is typing into is being replaced (see waitSettled).
+    this.navs = new Map(); // context -> { started, settled }
+    this.watching = false;
     this.onChange = () => {};
   }
 
@@ -82,11 +90,13 @@ export class Bidi {
 
   open() {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.url, { handshakeTimeout: 1500 });
+      // Generous: a Firefox that is still starting up can take a few seconds to answer, and a
+      // timeout here means the first actions of a session fall back to synthetic input.
+      const ws = new WebSocket(this.url, { handshakeTimeout: 4000 });
       const timer = setTimeout(() => {
         ws.terminate();
         reject(new Error('timeout'));
-      }, 2500);
+      }, 6000);
       ws.on('open', async () => {
         this.ws = ws;
         try {
@@ -95,6 +105,7 @@ export class Bidi {
           const name = r?.capabilities?.browserName;
           if (name && name.toLowerCase() !== 'firefox')
             throw new Error(`port answered as "${name}", not Firefox`);
+          await this.subscribe();
           this.ready = true;
           clearTimeout(timer);
           resolve();
@@ -109,6 +120,10 @@ export class Bidi {
         try {
           msg = JSON.parse(String(data));
         } catch {
+          return;
+        }
+        if (msg.type === 'event') {
+          this.onEvent(msg.method, msg.params || {});
           return;
         }
         if (msg.id !== undefined && this.pending.has(msg.id)) {
@@ -126,6 +141,7 @@ export class Bidi {
         this.ready = false;
         this.ws = null;
         this.contexts.clear();
+        this.navs.clear();
         for (const p of this.pending.values()) p.reject(new Error('BiDi connection closed'));
         this.pending.clear();
         if (was)
@@ -171,9 +187,24 @@ export class Bidi {
     } catch { /* ignore */ }
   }
 
+  /**
+   * Which browser the cached contexts belong to (browser id + helper connection). A new scope drops
+   * every cached context, so the next action re-probes: after select_browser, switch_browser, the
+   * shared socket moving to another profile, or any reconnect.
+   */
+  setScope(scope) {
+    scope = String(scope ?? '');
+    if (scope !== this.scope) {
+      this.scope = scope;
+      this.contexts.clear();
+    }
+  }
+
   /** Find the BiDi browsing context for a Firefox tab (and optionally one of its frames), using a probe attribute set by the extension. */
   async contextFor(tabId, helper, frameId = 0) {
-    const key = `${tabId}:${frameId}`;
+    if (typeof helper?.scopeKey === 'function')
+      this.setScope(helper.scopeKey());
+    const key = `${this.scope}|${tabId}:${frameId}`;
     const cached = this.contexts.get(key);
     if (cached) {
       try {
@@ -232,6 +263,64 @@ export class Bidi {
     return this.cmd('input.performActions', { context, actions });
   }
 
+  // ---------- navigation events ----------
+
+  /** Ask Firefox for navigation events, one at a time: an event a Firefox version doesn't know must not cost the others. */
+  async subscribe() {
+    const events = ['browsingContext.navigationStarted', 'browsingContext.navigationCommitted', 'browsingContext.domContentLoaded', 'browsingContext.load',
+      'browsingContext.navigationFailed', 'browsingContext.navigationAborted', 'browsingContext.fragmentNavigated', 'browsingContext.contextDestroyed'];
+    const ok = await Promise.all(events.map(e => this.cmd('session.subscribe', { events: [e] }).then(() => true, () => false)));
+    this.watching = ok[0];
+  }
+
+  onEvent(method, p) {
+    const c = p.context;
+    if (!c)
+      return;
+    if (method === 'browsingContext.contextDestroyed') {
+      this.navs.delete(c);
+      return;
+    }
+    const n = this.navs.get(c) || { started: 0, settled: 0, at: 0 };
+    if (method === 'browsingContext.navigationStarted') {
+      n.started++;
+      n.at = Date.now();
+    } else { // a new document is in place, or the navigation ended without one: the URL is final
+      n.settled = n.started;
+    }
+    this.navs.set(c, n);
+  }
+
+  /** How many navigations have started in these contexts so far (a marker for navigatedSince). */
+  navMark(contexts) {
+    return contexts.reduce((sum, c) => sum + (this.navs.get(c)?.started || 0), 0);
+  }
+
+  /** After an Enter key: wait briefly for a navigation it may have started (a form submit). True if one started. */
+  async navigatedSince(contexts, mark, ms = 150) {
+    if (!this.watching)
+      return false;
+    const t0 = Date.now();
+    while (this.navMark(contexts) === mark && Date.now() - t0 < ms)
+      await new Promise(r => setTimeout(r, 10));
+    return this.navMark(contexts) !== mark;
+  }
+
+  /** Wait (up to ms) for navigations under way in these contexts to put their new document in place. False if one is still loading. */
+  async waitSettled(contexts, ms = 5000) {
+    const t0 = Date.now();
+    const busy = () => contexts.some((c) => {
+      const n = this.navs.get(c);
+      return n && n.settled < n.started && Date.now() - n.at < 10000; // one that never ends (a download) stops counting
+    });
+    while (busy()) {
+      if (Date.now() - t0 > ms)
+        return false;
+      await new Promise(r => setTimeout(r, 15));
+    }
+    return true;
+  }
+
   async click(context, x, y, { button = 0, count = 1, modifiers } = {}) {
     x = Math.round(x);
     y = Math.round(y);
@@ -252,51 +341,105 @@ export class Bidi {
     await this.perform(context, [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions: [{ type: 'pointerMove', x: Math.round(x), y: Math.round(y), origin: 'viewport', duration: 0 }] }]);
   }
 
-  async drag(context, sx, sy, ex, ey) {
+  /**
+   * A drag in a few steps, with `guard` (async; throws to stop: Stop pressed, page moved) before
+   * each. If it stops part-way, the button is released where the pointer is, so the page isn't
+   * left with a button held down, and the error says the drag was cut short.
+   */
+  async drag(context, sx, sy, ex, ey, guard = async () => {}) {
     const steps = 12;
-    const acts = [{ type: 'pointerMove', x: Math.round(sx), y: Math.round(sy), origin: 'viewport', duration: 0 }, { type: 'pointerDown', button: 0 }];
-    for (let i = 1; i <= steps; i++)
-      acts.push({ type: 'pointerMove', x: Math.round(sx + (ex - sx) * i / steps), y: Math.round(sy + (ey - sy) * i / steps), origin: 'viewport', duration: 20 });
-    acts.push({ type: 'pointerUp', button: 0 });
-    await this.perform(context, [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions: acts }]);
+    const move = (i, duration) => ({ type: 'pointerMove', x: Math.round(sx + (ex - sx) * i / steps), y: Math.round(sy + (ey - sy) * i / steps), origin: 'viewport', duration });
+    const parts = [[move(0, 0), { type: 'pointerDown', button: 0 }]];
+    for (let i = 1; i <= steps; i += 4)
+      parts.push([i, i + 1, i + 2, i + 3].filter(k => k <= steps).map(k => move(k, 20)));
+    parts[parts.length - 1].push({ type: 'pointerUp', button: 0 });
+    const pointer = (actions) => [{ type: 'pointer', id: 'foxwright-mouse', parameters: { pointerType: 'mouse' }, actions }];
+    for (let i = 0; i < parts.length; i++) {
+      try {
+        await guard();
+      } catch (e) {
+        if (i > 0) {
+          await this.perform(context, pointer([{ type: 'pointerUp', button: 0 }])).catch(() => {});
+          e.message = `${e.message} (The drag was cut short: the mouse button was released part-way, so the page may have seen a partial drag.)`;
+        }
+        throw e;
+      }
+      await this.perform(context, pointer(parts[i]));
+    }
   }
 
-  async scroll(context, x, y, dx, dy) {
-    await this.perform(context, [{ type: 'wheel', id: 'foxwright-wheel', actions: [{ type: 'scroll', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx), deltaY: Math.round(dy), origin: 'viewport' }] }]);
+  /** A scroll as one wheel action per few ticks, with `guard` before each, so Stop ends a long scroll. */
+  async scroll(context, x, y, dx, dy, guard = async () => {}) {
+    const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 300));
+    for (let i = 0; i < n; i++) {
+      await guard();
+      await this.perform(context, [{ type: 'wheel', id: 'foxwright-wheel', actions: [{ type: 'scroll', x: Math.round(x), y: Math.round(y), deltaX: Math.round(dx / n), deltaY: Math.round(dy / n), origin: 'viewport' }] }]);
+    }
   }
 
   /**
-   * `check` is called between small chunks and throws when the user pressed Stop, so a long
-   * text or key repeat ends within a few keystrokes instead of running to the end.
+   * Types in small chunks. `guard({ afterEnter })` (async) runs before each chunk and throws to stop
+   * (Stop pressed, or the page is no longer the approved site), so a long text ends within a few
+   * keystrokes. A chunk always ends after a newline (Enter), because Enter may submit a form and
+   * load another page: the next guard gets afterEnter so it can look for that first.
+   * `progress.sent` counts the characters delivered so far.
    */
-  async type(context, text, check = () => {}) {
-    const acts = [];
-    for (const ch of text.replace(/\r\n?/g, '\n')) {
-      const v = ch === '\n' ? KEY.Enter : ch;
-      acts.push({ type: 'keyDown', value: v }, { type: 'keyUp', value: v });
-    }
-    for (let i = 0; i < acts.length; i += 40) {
-      check();
-      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: acts.slice(i, i + 40) }]);
+  async type(context, text, guard = async () => {}, progress = {}) {
+    const chars = [...text.replace(/\r\n?/g, '\n')];
+    progress.sent = 0;
+    progress.total = chars.length;
+    let afterEnter = false;
+    for (let i = 0; i < chars.length;) {
+      let j = i;
+      while (j < chars.length && j - i < 20) {
+        j++;
+        if (chars[j - 1] === '\n')
+          break;
+      }
+      await guard({ afterEnter });
+      const acts = [];
+      for (const ch of chars.slice(i, j)) {
+        const v = ch === '\n' ? KEY.Enter : ch;
+        acts.push({ type: 'keyDown', value: v }, { type: 'keyUp', value: v });
+      }
+      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: acts }]);
+      afterEnter = chars[j - 1] === '\n';
+      progress.sent = j;
+      i = j;
     }
   }
 
-  async keys(context, combos, repeat = 1, check = () => {}) {
-    const once = [];
+  /** Key combos, repeated, in small chunks with `guard` before each; a chunk ends after a combo with Enter (see type). */
+  async keys(context, combos, repeat = 1, guard = async () => {}, progress = {}) {
+    const seq = [];
     for (const combo of combos) {
       const parts = combo.split('+').filter(p => p !== '');
       if (combo.endsWith('++'))
         parts.push('+');
       const values = parts.map(keyValue);
-      for (const v of values) once.push({ type: 'keyDown', value: v });
-      for (const v of [...values].reverse()) once.push({ type: 'keyUp', value: v });
+      const acts = [];
+      for (const v of values) acts.push({ type: 'keyDown', value: v });
+      for (const v of [...values].reverse()) acts.push({ type: 'keyUp', value: v });
+      seq.push({ acts, enter: values.includes(KEY.Enter) });
     }
-    // A few repeats per command, so Stop is noticed between them.
-    const per = Math.max(1, Math.floor(20 / Math.max(1, once.length)));
-    for (let r = 0; r < repeat; r += per) {
-      check();
-      const n = Math.min(per, repeat - r);
-      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: Array.from({ length: n }, () => once).flat() }]);
+    const all = Array.from({ length: repeat }, () => seq).flat();
+    progress.sent = 0;
+    progress.total = all.length;
+    let afterEnter = false;
+    for (let i = 0; i < all.length;) {
+      // About ten key presses per command, so Stop is noticed between them.
+      let j = i, n = 0;
+      while (j < all.length && (n === 0 || n + all[j].acts.length <= 20)) {
+        n += all[j].acts.length;
+        j++;
+        if (all[j - 1].enter)
+          break;
+      }
+      await guard({ afterEnter });
+      await this.perform(context, [{ type: 'key', id: 'foxwright-keys', actions: all.slice(i, j).flatMap(k => k.acts) }]);
+      afterEnter = all[j - 1].enter;
+      progress.sent = j;
+      i = j;
     }
   }
 }

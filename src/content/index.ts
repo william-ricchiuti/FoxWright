@@ -1,7 +1,9 @@
 // Foxwright content script: injected on demand into tabs the agent controls.
-import { takeSnapshot, findElements, setRefPrefix, getRefPrefix } from './snapshot';
+import { takeSnapshot, findElements, setRefPrefix, getRefPrefix, resolveRef } from './snapshot';
+import { clickConsequence, keysConsequence, typeConsequence, sameConsequence } from './consequence';
 import * as input from './input';
 import { pageText } from './text';
+import { waitCheck, uiAfter } from './wait';
 import { showActivity, hideActivity, dodgePill } from './overlay';
 import { watchSecrets } from './secrets';
 
@@ -100,24 +102,103 @@ function frameRects(args: { frameIds: number[] }) {
   return out;
 }
 
+// ---------- permission checks reported to the background (it decides; see tabs.js/tools.js) ----------
+
+const isFrameEl = (el: Element | null) => !!el && (el.tagName === 'IFRAME' || el.tagName === 'FRAME');
+const hereOrigin = () => currentOrigin() || location.href;
+
+/** Focus on a form control: there, reading keys (arrows, Home/End, PageUp/Down) change a value. */
+function isControl(el: Element | null): boolean {
+  if (!el)
+    return false;
+  if ((el as HTMLElement).isContentEditable)
+    return true;
+  return !!el.matches?.('input, select, textarea, [role=slider], [role=spinbutton], [role=radio], [role=radiogroup], [role=listbox], [role=combobox], [role=textbox], [role=option], [role=menuitemradio]');
+}
+
+/** With args.guard set: a consequential target that the person hasn't approved stops the command. */
+function guardClick(a: any): any {
+  if (!a.guard)
+    return null;
+  let el: Element | null;
+  if (a.ref)
+    el = resolveRef(a.ref);
+  else {
+    el = input.elementAt(a.x, a.y);
+    if (isFrameEl(el))
+      return null; // forwarded into the frame, which checks its own element
+  }
+  const c = clickConsequence(el, hereOrigin());
+  return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
+}
+
+function guardFocused(a: any, kind: 'key' | 'type'): any {
+  if (!a.guard)
+    return null;
+  const el = input.deepActiveElement();
+  if (isFrameEl(el))
+    return null;
+  const c = kind === 'key' ? keysConsequence(a.text, a.repeat, el, hereOrigin()) : typeConsequence(a.text, el, hereOrigin());
+  return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
+}
+
 const handlers: Record<string, (args: any) => any> = {
   ping: () => ({ pong: true, url: location.href, prefix: getRefPrefix() }),
   viewport: () => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scrollX: scrollX, scrollY: scrollY }),
   snapshot: (a) => takeSnapshot(a),
   // The viewport comes along so the background doesn't need a second round trip to scale coordinates.
   find: (a) => ({ ...findElements(a.query), viewport: { width: innerWidth, height: innerHeight } }),
-  click: (a) => input.click(a),
+  click: (a) => guardClick(a) || input.click(a),
   hover: (a) => input.hover(a),
-  type: (a) => input.typeText(a),
-  key: (a) => input.pressKeys(a),
+  type: (a) => guardFocused(a, 'type') || input.typeText(a),
+  key: (a) => guardFocused(a, 'key') || input.pressKeys(a),
   scroll: (a) => input.scroll(a),
   scrollTo: (a) => input.scrollTo(a),
   drag: (a) => input.drag(a),
   formInput: (a) => input.formInput(a),
   upload: (a) => input.uploadFiles(a),
-  refPoint: (a) => input.refPoint(a),
-  locate: (a) => input.locate(a),
-  focusInfo: () => input.focusInfo(),
+  refPoint: (a) => {
+    const r = input.refPoint(a);
+    // Some controls stack a sibling over the part the outline names (a select's placeholder under
+    // its input box): a click there goes to the sibling, as it would for a person. Say so, so the
+    // click check doesn't call that a miss. An unrelated overlay shares no small parent with it.
+    try {
+      const el = resolveRef(a.ref);
+      const hit = r && !r.forward ? input.elementAt(r.x, r.y) : null;
+      if (el && hit && hit !== el && !el.contains(hit) && !hit.contains(el)) {
+        let lca: Element | null = hit.parentElement;
+        while (lca && !lca.contains(el))
+          lca = lca.parentElement;
+        const area = (e: Element) => {
+          const b = e.getBoundingClientRect();
+          return b.width * b.height;
+        };
+        if (lca && lca !== document.body && lca !== document.documentElement && area(lca) <= 8 * Math.max(area(el), 400))
+          r.partOf = input.describe(hit);
+      }
+    } catch { /* only a hint */ }
+    if (a.guard)
+      r.conseq = clickConsequence(resolveRef(a.ref), hereOrigin());
+    return r;
+  },
+  locate: (a) => {
+    const r = input.locate(a);
+    if (a.guard && !r.forward)
+      r.conseq = clickConsequence(input.elementAt(a.x, a.y), hereOrigin());
+    return r;
+  },
+  focusInfo: async (a) => {
+    const r = await input.focusInfo(a);
+    if (r.forward)
+      return r;
+    const el = input.deepActiveElement();
+    r.control = isControl(el);
+    if (a.guard)
+      r.conseq = a.guard.action === 'type' ? typeConsequence(a.guard.text, el, hereOrigin()) : keysConsequence(a.guard.text, a.guard.repeat, el, hereOrigin());
+    return r;
+  },
+  waitCheck: (a) => waitCheck(a),
+  uiAfter: () => uiAfter(),
   frameOffset: (a) => frameOffset(a),
   frameRects: (a) => frameRects(a),
   dodgePill: (a) => dodgePill(a.x, a.y),

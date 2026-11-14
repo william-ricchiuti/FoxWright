@@ -22,7 +22,7 @@ Please **don't open a public issue** for security problems. Instead:
 - use GitHub's private reporting: [Report a vulnerability](https://github.com/william-ricchiuti/FoxWright/security/advisories/new), or
 - email will.ricchiuti@gmail.com with "Foxwright security" in the subject.
 
-Include the Foxwright version (`npx foxwright-firefox --version` and the version in the toolbar popup), Firefox version, OS, the input mode (synthetic or trusted), and steps to reproduce. You should get a reply within a week. Fixes are released as soon as they're ready, with credit if you'd like it.
+Include the Foxwright version (the toolbar popup shows it, and `npx foxwright-firefox doctor` prints both the installed helper's version and its own), Firefox version, OS, the input mode (synthetic or trusted), and steps to reproduce. You should get a reply within a week. Fixes are released as soon as they're ready, with credit if you'd like it.
 
 ## Supported versions
 

@@ -56,7 +56,8 @@ async function refFor(query, role) {
 }
 
 async function js(code) {
-  return (await call('javascript_tool', { action: 'javascript_exec', text: code })).text;
+  // javascript_tool on the Full build; the harness's page probe on the store build.
+  return h.js(tabId, code);
 }
 
 async function nav(url) {
@@ -625,6 +626,224 @@ async function main() {
         bad.push(`${sel} from ${pos}, ${keys.join(' ')}: selected ${JSON.stringify(got.sel)} caret ${got.at}; expected ${JSON.stringify(wantSel)} caret ${wantAt}`);
     }
     expect(!bad.length, `${bad.length}/${cases.length} wrong:\n      ${bad.join('\n      ')}`);
+  });
+
+  // ---- waiting for the page (instead of fixed sleeps) ----
+  const jsv = async (code) => JSON.parse(await js(code));
+
+  await test('wait {text}: returns as soon as fetched data shows up', async () => {
+    await nav('/waits.html');
+    await call('computer', { action: 'left_click', ref: (await refFor('Load data', 'button')).ref });
+    const t0 = Date.now();
+    const r = await call('computer', { action: 'wait', text: 'Loaded 3 items', timeout: 8 });
+    const ms = Date.now() - t0;
+    expect(/^Waited \d+\.\d s for "Loaded 3 items" to appear/.test(r.text), r.text);
+    expect(ms < 4000, `took ${ms} ms`);
+    expect((await call('get_page_text')).text.includes('Loaded 3 items'), 'text not on the page afterwards');
+  });
+
+  await test('wait {text_gone} and {until: "idle"}', async () => {
+    await call('computer', { action: 'left_click', ref: (await refFor('Load data', 'button')).ref });
+    const r = await call('computer', { action: 'wait', text_gone: 'Loading', timeout: 8 });
+    expect(/to go away/.test(r.text), r.text);
+    await call('computer', { action: 'left_click', ref: (await refFor('Load data', 'button')).ref });
+    const r2 = await call('computer', { action: 'wait', until: 'idle', timeout: 10 });
+    expect(/settle/.test(r2.text), r2.text);
+    const s = await jsv('document.getElementById("status").textContent');
+    expect(s === 'Loaded 3 items', `idle returned while the page still showed ${JSON.stringify(s)} (${r2.text})`);
+  });
+
+  await test('wait times out with a clear error and what is on screen', async () => {
+    const r = await h.call('computer', { tabId, action: 'wait', text: 'this text never appears', timeout: 1 });
+    expect(r.isError && /Timed out after 1 s waiting for "this text never appears" to appear/.test(r.text) && /On screen now/.test(r.text) && /Load data/.test(r.text), r.text);
+    const plain = await call('computer', { action: 'wait', duration: 0.2 });
+    expect(/Waited 0.2s/.test(plain.text), plain.text);
+  });
+
+  await test('find {wait_for}: finds the field of a dialog that opens late, then typing reaches it', async () => {
+    await nav('/waits.html');
+    await call('computer', { action: 'left_click', ref: (await refFor('Search', 'button')).ref });
+    const f = await call('find', { query: 'search docs box', wait_for: 'dialog "Search docs"', timeout: 5 });
+    expect(/after waiting \d+\.\d s for dialog "Search docs"/.test(f.text) && /searchbox "Search docs" \[ref=/.test(f.text), f.text);
+    await call('computer', { action: 'type', text: 'useState' });
+    expect((await jsv('document.getElementById("typed").textContent')) === 'typed: useState', 'text did not reach the search box');
+  });
+
+  await test('type right after a click waits for a late dialog to take focus', async () => {
+    await nav('/waits.html');
+    await call('computer', { action: 'left_click', ref: (await refFor('Search', 'button')).ref });
+    const r = await call('computer', { action: 'type', text: 'hooks' });
+    // The note appears when the dialog was still on its way (the usual case); under load it may already be there.
+    if (!/Waited \d+ ms for focus/.test(r.text)) console.log(`      (no wait was needed: ${r.text.split("\n")[0]})`);
+    expect((await jsv('document.getElementById("typed").textContent')) === 'typed: hooks', `typed text went elsewhere: ${r.text}`);
+  });
+
+  await test('read_page {wait_for} and wait {ref_gone}', async () => {
+    const r = await call('read_page', { filter: 'interactive', wait_for: 'searchbox "Search docs"' });
+    expect(/^\(Waited \d+\.\d s for searchbox "Search docs"\.\)/.test(r.text), r.text.slice(0, 300));
+    const dlg = /dialog "Search docs" \[ref=([^\]]+)\]/.exec((await call('read_page', {})).text)?.[1];
+    expect(dlg, 'dialog ref not found');
+    await call('computer', { action: 'left_click', ref: (await refFor('Close', 'button')).ref });
+    const g = await call('computer', { action: 'wait', ref_gone: dlg, timeout: 5 });
+    expect(/to go away/.test(g.text), g.text);
+  });
+
+  await test('clicking a menu button waits for the menu and reports it', async () => {
+    const r = await call('computer', { action: 'left_click', ref: (await refFor('Actions', 'button')).ref });
+    expect(/Opened: menu/.test(r.text), r.text);
+    const o = await call('read_page', { filter: 'interactive' });
+    expect(/menuitem "Rename"/.test(o.text), 'menu not in the next read_page:\n' + o.text.slice(0, 800));
+  });
+
+  await test('clicking a button that opens a dialog reports it and the focused field', async () => {
+    const r = await call('computer', { action: 'left_click', ref: (await refFor('Edit profile', 'button')).ref });
+    expect(/Opened: dialog "Edit profile" \[ref=/.test(r.text) && /Focus is now on <input#dlg-name>[^\n]*\[ref=/.test(r.text), r.text);
+    const k = await call('computer', { action: 'key', text: 'Escape' });
+    expect(/Closed: dialog "Edit profile"/.test(k.text), k.text);
+  });
+
+  await test('ordinary clicks get no popup notes', async () => {
+    const r = await call('computer', { action: 'left_click', ref: (await refFor('Count 0', 'button')).ref });
+    expect(!/Opened:|Closed:|Focus is now/.test(r.text), r.text);
+  });
+
+  // ---- read_page diffs ----
+  await test('read_page {diff}: refs stay stable and only changes come back', async () => {
+    await nav('/waits.html');
+    const first = await call('read_page', { diff: true });
+    // An earlier test read this URL before the reload: either reason means "full outline".
+    expect(/Full outline: (there is no earlier read_page|the page navigated)/.test(first.text), first.text.slice(0, 300));
+    const before = /button "Count 0" \[ref=([^\]]+)\]/.exec(first.text)?.[1];
+    expect(before, 'counter not found');
+    await call('computer', { action: 'left_click', ref: before });
+    await call('computer', { action: 'left_click', ref: before });
+    const d = await call('read_page', { diff: true });
+    expect(new RegExp(`~ +- button "Count 2"[^\\n]*\\[ref=${before}\\]`).test(d.text) && /\(was: - button "Count 0"/.test(d.text), d.text);
+    expect(d.text.length < first.text.length / 2, `diff (${d.text.length} chars) not much smaller than the outline (${first.text.length})`);
+    const same = await call('read_page', { diff: true });
+    expect(/No changes since the previous read_page/.test(same.text), same.text);
+    await call('computer', { action: 'left_click', ref: (await refFor('Advanced settings', 'button')).ref });
+    const d2 = await call('read_page', { diff: true });
+    expect(/\+ +- button "Delete account"/.test(d2.text) && /button "Advanced settings"[^\n]*\[expanded\]/.test(d2.text), d2.text);
+    await nav('/waits.html?again');
+    const d3 = await call('read_page', { diff: true });
+    expect(/Full outline: the page navigated/.test(d3.text), d3.text.slice(0, 300));
+  });
+
+  // ---- find: collapsed sections ----
+  await test('find says when a match is inside a collapsed section', async () => {
+    await nav('/waits.html');
+    const a = await call('find', { query: 'Delete account' });
+    expect(/button "Delete account" \(hidden: inside a collapsed section; expand it first with button "Advanced settings" \[ref=/.test(a.text), a.text);
+    const b = await call('find', { query: 'Hidden pricing link' });
+    expect(/link "Hidden pricing link" \(hidden: inside a collapsed section; expand it first with button "Pricing details"/.test(b.text), b.text);
+    const c = await call('find', { query: 'Zero height link' });
+    expect(/link "Zero height link" \[ref=[^\]]+\][^\n]*\(inside a collapsed section; expand it first with button "More links"/.test(c.text), c.text);
+  });
+
+  // ---- form_input papercuts ----
+  await test('form_input on <select multiple>: array and comma list', async () => {
+    const ref = (await refFor('Colors', 'listbox')).ref;
+    const r = await call('form_input', { ref, value: ['Red', 'Blue'] });
+    expect((await jsv('document.getElementById("picked").textContent')) === 'picked: r,b', r.text);
+    await call('form_input', { ref, value: 'Green, Yellow' });
+    expect((await jsv('document.getElementById("picked").textContent')) === 'picked: g,y', 'comma list not applied');
+  });
+
+  await test('form_input on contenteditable editors (plain and ProseMirror)', async () => {
+    const ref = (await refFor('Notes', 'textbox')).ref;
+    await call('form_input', { ref, value: 'First line\nSecond line' });
+    const t = await jsv('document.getElementById("plain-ed").innerText');
+    expect(/^First line\n+Second line$/.test(t.trim()), JSON.stringify(t));
+    await nav('/editor.html');
+    const pm = /textbox \[ref=(e\d+)\]/.exec((await call('read_page', { filter: 'interactive' })).text)?.[1];
+    await call('form_input', { ref: pm, value: 'Replaced text\nwith two paragraphs' });
+    const model = await js('pmView.state.doc.toJSON().content.map(p => (p.content||[]).map(t=>t.text).join("")).join("|")');
+    expect(model.includes('Replaced text|with two paragraphs'), model);
+  });
+
+  // ---- get_page_text papercuts ----
+  await test('get_page_text on a giant <pre>: exact text, all of it reachable', async () => {
+    await nav('/pre.html');
+    const r = await call('get_page_text', { max_chars: 5000 });
+    expect(/Source: pre/.test(r.text), r.text.slice(0, 300));
+    const total = Number(/of (\d+)\./.exec(r.text)?.[1]);
+    expect(total > 1500000, `total ${total}`);
+    const mid = await call('get_page_text', { offset: 2000, max_chars: 8000 });
+    expect(mid.text.includes('    indented:   value with   spaces\n\n\n    after three blank lines'), 'whitespace not preserved:\n' + mid.text.slice(0, 1500));
+    const end = await call('get_page_text', { offset: total - 200, max_chars: 1000 });
+    expect(end.text.includes('LAST LINE OF THE LOG'), end.text.slice(-400));
+    const q = await call('get_page_text', { query: 'checksum mismatch' });
+    expect(/12345 ERROR worker-3 checksum mismatch/.test(q.text) && /matching lines/.test(q.text), q.text.slice(0, 600));
+  });
+
+  // ---- typing non-ASCII text ----
+  await test('typing emoji, RTL and CJK text: exact value, input events, React state', async () => {
+    const s = 'héllo 👋🏽 שלום عربي 日本語 👨‍👩‍👧 🇫🇷 é';
+    await nav('/waits.html');
+    await call('computer', { action: 'left_click', ref: (await refFor('Message', 'textbox')).ref });
+    await call('computer', { action: 'type', text: s });
+    const v = await jsv('document.getElementById("msg").value');
+    expect(v === s, `plain input: ${JSON.stringify(v)}`);
+    const n = await jsv('window.inputs');
+    expect(n >= 10, `only ${n} input events`);
+    await nav('/react.html');
+    await call('computer', { action: 'left_click', ref: (await refFor('Your name', 'textbox')).ref });
+    await call('computer', { action: 'type', text: s });
+    const rv = await jsv('document.getElementById("rname").value');
+    const echo = await jsv('document.getElementById("echo").textContent');
+    expect(rv === s && echo === `Hello, ${s}`, `React: value ${JSON.stringify(rv)}, echo ${JSON.stringify(echo)}`);
+  });
+
+  // ---- PDFs in Firefox's viewer ----
+  await test('get_page_text reads PDFs (simple, multipage paging/query, object streams)', async () => {
+    await nav('/pdf/simple.pdf');
+    const a = await call('get_page_text');
+    expect(/Source: PDF, 1 page/.test(a.text) && a.text.includes('The quick brown fox jumps over the lazy dog.') && a.text.includes('café'), a.text.slice(0, 800));
+    await nav('/pdf/multipage.pdf');
+    const b = await call('get_page_text', { max_chars: 1000 });
+    expect(/PDF, 3 pages/.test(b.text) && b.text.includes('[Page 1]') && b.text.includes('naïve – “ok” ✓ 日本'), b.text.slice(0, 1200));
+    const q = await call('get_page_text', { query: 'population estimate' });
+    expect(q.text.includes('Population estimate: 4,500 foxes.'), q.text);
+    const off = await call('get_page_text', { offset: 300, max_chars: 1000 });
+    expect(/Showing characters 300–/.test(off.text) || off.text.includes('Text inside a form XObject'), off.text.slice(0, 600));
+    await nav('/pdf/objstm.pdf');
+    const c = await call('get_page_text');
+    expect(c.text.includes('The first flag – a déjà vu moment.'), c.text.slice(0, 600));
+  });
+
+  await test('get_page_text explains encrypted and image-only PDFs', async () => {
+    await nav('/pdf/encrypted.pdf');
+    const e = await h.call('get_page_text', { tabId });
+    expect(e.isError && /encrypted/.test(e.text) && !/Secret text/.test(e.text), e.text);
+    await nav('/pdf/image-only.pdf');
+    const i = await h.call('get_page_text', { tabId });
+    expect(i.isError && /no text layer/.test(i.text), i.text);
+  });
+
+  await test('javascript_tool: a slow async script times out but the page stays usable', async () => {
+    if (h.isStore)
+      return; // javascript_tool only exists in the Full build
+    await nav('/basic.html');
+    const r = await h.call('javascript_tool', { tabId, text: 'await new Promise(r => setTimeout(r, 4000)); 1', timeout: 1 });
+    expect(r.isError && /didn't finish within 1 s/.test(r.text) && /responsive/.test(r.text), r.text);
+    const after = await call('find', { query: 'Full name' });
+    expect(/textbox "Full name"/.test(after.text), after.text);
+  });
+
+  await test('javascript_tool: an endless loop times out, later calls fail fast, navigate recovers the tab', async () => {
+    if (h.isStore)
+      return; // javascript_tool only exists in the Full build
+    await nav('/basic.html?loop');
+    const t0 = Date.now();
+    const r = await h.call('javascript_tool', { tabId, text: 'while (true) {}', timeout: 2 });
+    expect(r.isError && /still running after 2 s/.test(r.text) && Date.now() - t0 < 15000, r.text);
+    const t1 = Date.now();
+    const busy = await h.call('read_page', { tabId });
+    expect(busy.isError && /still running a javascript_tool script/.test(busy.text) && Date.now() - t1 < 10000, busy.text);
+    await nav('/page2.html');
+    const ok = await call('read_page', {});
+    expect(/page two/i.test(ok.text), ok.text.slice(0, 300));
   });
 
   await test('tab outside the Foxwright group is refused', async () => {
