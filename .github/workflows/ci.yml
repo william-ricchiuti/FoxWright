@@ -246,12 +246,22 @@ jobs:
           node-version: 22
           cache: npm
       - name: Install Firefox
+        id: firefox
         uses: browser-actions/setup-firefox@v1
         with:
           firefox-version: latest
       - name: Locate Firefox, install dependencies, build, set up the helper
         run: |
-          FF="$(command -v firefox || echo /Applications/Firefox.app/Contents/MacOS/firefox)"
+          # The real binary inside the bundle the action installed, not `firefox` on PATH: on this
+          # runner that is Homebrew's wrapper script for an older preinstalled Firefox, and the
+          # harness has to write policies.json next to the bundle it actually starts.
+          FF="${{ steps.firefox.outputs.firefox-path }}"
+          if [ ! -x "$FF" ]; then
+            for f in "$RUNNER_TOOL_CACHE"/firefox/*/*/Contents/MacOS/firefox; do
+              if [ -x "$f" ]; then FF="$f"; break; fi
+            done
+          fi
+          [ -x "$FF" ] || FF=/Applications/Firefox.app/Contents/MacOS/firefox
           FF="$(node -e 'console.log(require("fs").realpathSync(process.argv[1]))' "$FF")"
           echo "Firefox: $FF"; "$FF" --version
           echo "FIREFOX=$FF" >> "$GITHUB_ENV"

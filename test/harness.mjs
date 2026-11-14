@@ -219,7 +219,8 @@ function waitForSocket(p, ms = 30000) {
 
 export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
   // Enterprise policies live next to the binary on Linux/Windows, in Contents/Resources on macOS.
-  const mac = /\.app\/Contents\/MacOS\//.test(firefoxBin);
+  // (The bundle isn't always named *.app: setup-firefox on CI unpacks it as .../arm64/Contents/MacOS/firefox.)
+  const mac = /\/Contents\/MacOS\/[^/]+$/.test(firefoxBin);
   const dist = mac ? path.join(path.dirname(firefoxBin), '..', 'Resources', 'distribution') : path.join(path.dirname(firefoxBin), 'distribution');
   if (/^\/Applications\//.test(firefoxBin) && !process.env.FOXWRIGHT_E2E_ALLOW_SYSTEM_FIREFOX)
     throw new Error('The tests write a policies.json into the Firefox install. Point FIREFOX at a copy of Firefox.app (scripts/mac-test.sh does this) instead of /Applications/Firefox.app.');
