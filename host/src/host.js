@@ -11,6 +11,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { socketPath, foxwrightDir, logPath, browsersDir, browserSocketPath } from './paths.js';
+import { AUTH_VERSION, OLD_CLIENT_MSG, readToken, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
 
 const MAX_TO_EXTENSION = 1024 * 1024; // Firefox limit for host -> extension messages
 const CHUNK_BYTES = 600 * 1024;
@@ -101,12 +102,17 @@ function updateBidi() {
 
 function sendClient(clientId, obj) {
   const c = clients.get(clientId);
-  if (c && !c.socket.destroyed)
-    c.socket.write(JSON.stringify(obj) + '\n');
+  if (c?.chan && !c.socket.destroyed)
+    c.socket.write(c.chan.seal(obj) + '\n');
+}
+
+/** MCP servers that completed the handshake (a connection that hasn't is not a client yet). */
+function clientCount() {
+  return [...clients.values()].filter(c => c.chan).length;
 }
 
 function broadcastClientCount() {
-  writeToExtension({ type: 'clients', count: clients.size });
+  writeToExtension({ type: 'clients', count: clientCount() });
 }
 
 function onClientMessage(clientId, msg) {
@@ -115,7 +121,7 @@ function onClientMessage(clientId, msg) {
     pending.set(gid, { clientId, id: msg.id });
     writeToExtension({ type: 'request', id: gid, tool: msg.tool, args: msg.args || {} });
   } else if (msg.type === 'status') {
-    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clients.size, pid: process.pid, browser: { ...browserInfo, primary: ownsSocket } });
+    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clientCount(), pid: process.pid, browser: { ...browserInfo, primary: ownsSocket } });
   } else if (msg.type === 'bidi') {
     // Per client: Firefox allows one BiDi session, so a second MCP server may not have one
     // while the first still does.
@@ -137,7 +143,7 @@ function onExtensionMessage(msg) {
     browserInfo = { browserId: /^[a-f0-9]{12}$/.test(msg.browserId || '') ? msg.browserId : '', name: cleanName(msg.name) || 'Firefox' };
     writeRegistry();
     log('extension connected', extensionInfo, browserInfo);
-    writeToExtension({ type: 'hello-ack', error: serverError });
+    writeToExtension({ type: 'hello-ack', error: serverError, version: VERSION });
     broadcastClientCount();
     return;
   }
@@ -151,7 +157,7 @@ function onExtensionMessage(msg) {
   }
   if (msg.type === 'event') {
     for (const id of clients.keys())
-      sendClient(id, { type: 'event', event: msg.event });
+      sendClient(id, { type: 'event', event: msg.event }); // only reaches clients past the handshake
   }
 }
 
@@ -211,38 +217,97 @@ function listenOwn() {
   });
 }
 
+/**
+ * Before anything else, a client must prove it knows the key in ~/.foxwright/auth-token, and this
+ * helper proves it too (see auth.js); after that every line is encrypted. Until then the only
+ * answers are the challenge and, for an MCP server from before 0.8, an error saying to update it.
+ */
 function onClientSocket(socket) {
   const clientId = nextClient++;
-  clients.set(clientId, { socket });
-  log(`client ${clientId} connected`);
-  broadcastClientCount();
+  const c = { socket, chan: null };
+  clients.set(clientId, c);
   let buf = '';
+  const ns = nonce();
   socket.setEncoding('utf8');
+  const authTimer = setTimeout(() => socket.destroy(), 15000);
+  socket.write(JSON.stringify({ type: 'auth-challenge', v: AUTH_VERSION, ns: ns.toString('base64') }) + '\n');
+  const preAuth = (line) => {
+    let msg;
+    try {
+      msg = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (msg?.type === 'auth') {
+      const nc = b64(msg.nc, 32), mac = b64(msg.mac, 32);
+      let key = null;
+      try {
+        key = readToken();
+      } catch (e) {
+        log('could not read the auth key', String(e));
+      }
+      if (msg.v !== AUTH_VERSION || !nc || !mac || !key || !sameMac(mac, proof(key, 'client', ns, nc))) {
+        log(`client ${clientId} failed authentication`);
+        socket.end(JSON.stringify({ type: 'auth-failed', error: msg.v !== AUTH_VERSION ? `handshake version ${msg.v} is not supported by this helper (${VERSION}); run \`npx foxwright-firefox@latest setup\` and restart Firefox` : 'wrong key (the MCP server and the helper read different ~/.foxwright/auth-token files?)' }) + '\n');
+        return;
+      }
+      socket.write(JSON.stringify({ type: 'auth-ok', mac: proof(key, 'helper', ns, nc).toString('base64') }) + '\n');
+      c.chan = new SecureChannel(key, ns, nc, 'helper');
+      clearTimeout(authTimer);
+      log(`client ${clientId} connected`);
+      broadcastClientCount();
+      return;
+    }
+    // An MCP server from before 0.8 talks without the handshake: tell it (and its agent) to update.
+    if (msg?.type === 'request')
+      socket.write(JSON.stringify({ type: 'response', id: msg.id, error: OLD_CLIENT_MSG }) + '\n');
+    else if (msg?.type === 'status')
+      socket.write(JSON.stringify({ type: 'status', id: msg.id, error: OLD_CLIENT_MSG, helper: { version: VERSION } }) + '\n');
+  };
   socket.on('data', (d) => {
     buf += d;
+    if (!c.chan && buf.length > 64 * 1024) { // nothing legitimate is this long before the handshake
+      socket.destroy();
+      return;
+    }
     let nl;
     while ((nl = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, nl);
       buf = buf.slice(nl + 1);
       if (!line.trim())
         continue;
+      if (!c.chan) {
+        preAuth(line);
+        continue;
+      }
+      let msg;
       try {
-        onClientMessage(clientId, JSON.parse(line));
+        msg = c.chan.open(line);
+      } catch (e) {
+        log(`client ${clientId}: message failed to decrypt (${String(e?.message || e)}); closing`);
+        socket.destroy();
+        return;
+      }
+      try {
+        onClientMessage(clientId, msg);
       } catch (e) {
         log('bad client message', String(e));
       }
     }
   });
   const bye = () => {
+    clearTimeout(authTimer);
     if (!clients.has(clientId))
       return;
     clients.delete(clientId);
     for (const [gid, p] of pending)
       if (p.clientId === clientId)
         pending.delete(gid);
-    log(`client ${clientId} disconnected`);
-    broadcastClientCount();
-    updateBidi();
+    if (c.chan) {
+      log(`client ${clientId} disconnected`);
+      broadcastClientCount();
+      updateBidi();
+    }
   };
   socket.on('close', bye);
   socket.on('error', bye);
@@ -299,7 +364,7 @@ function listen() {
     ownsSocket = true;
     if (serverError) {
       serverError = null;
-      writeToExtension({ type: 'hello-ack', error: null });
+      writeToExtension({ type: 'hello-ack', error: null, version: VERSION });
     }
   }
   server.listen(sp, onListening);
@@ -325,6 +390,11 @@ export function runHost() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
   readExtension();
+  try {
+    readToken(); // create the shared key now, so MCP servers find it (auth.js)
+  } catch (e) {
+    log('could not create the auth key', String(e));
+  }
   listen();
   listenOwn();
   // Keep the extension's event page busy so Firefox never idles it out while we're connected.

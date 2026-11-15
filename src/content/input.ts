@@ -10,6 +10,7 @@
 import { resolveRef, getRefPrefix } from './snapshot';
 import { isFoxwrightUi } from './overlay';
 import { isSecretInput } from './secrets';
+import { uiBaseline, uiSettle, uiNotes, rememberBaseline, lastUiAction, waitForEditableFocus } from './wait';
 
 declare const browser: any;
 
@@ -70,7 +71,7 @@ function iframeForward(el: Element | null, x: number, y: number): Forward | null
   return { forward: { frameId, x: x - ox, y: y - oy } };
 }
 
-function deepActiveElement(): Element | null {
+export function deepActiveElement(): Element | null {
   let a: Element | null = document.activeElement;
   while (a && shadowOf(a)?.activeElement)
     a = shadowOf(a)!.activeElement;
@@ -427,7 +428,7 @@ export function clickTarget(target: Element, x: number, y: number, opts: ClickOp
   return { target: describe(target), prevented, openUrl, notes, mayNavigate };
 }
 
-export function click(args: { x?: number; y?: number; ref?: string; button?: 'left' | 'right' | 'middle'; clickCount?: number; modifiers?: string }): any {
+export async function click(args: { x?: number; y?: number; ref?: string; button?: 'left' | 'right' | 'middle'; clickCount?: number; modifiers?: string }): Promise<any> {
   const mods = parseModifiers(args.modifiers);
   let target: Element | null;
   let x: number, y: number;
@@ -448,8 +449,14 @@ export function click(args: { x?: number; y?: number; ref?: string; button?: 'le
   }
   if (!target)
     throw new Error(`There is no element at (${Math.round(x)}, ${Math.round(y)}).`);
+  const base = uiBaseline(target);
   const res = clickTarget(target, x, y, { button: args.button, clickCount: args.clickCount, mods });
   res.notes.unshift(...notes);
+  // A click that loads another page needs no report on popups; for the rest, say what opened.
+  if (res.mayNavigate !== 'likely' && !res.openUrl) {
+    await uiSettle(base);
+    res.notes.push(...uiNotes(base));
+  }
   return res;
 }
 
@@ -599,6 +606,11 @@ function keyEvent(type: string, key: string, mods: Mods, repeat = false) {
     keyCode: type === 'keypress' ? charCode : keyCode, charCode, which: type === 'keypress' ? charCode : keyCode,
   };
   return new KeyboardEvent(type, init);
+}
+
+/** Key event as an IME sends it while composing (Firefox: key "Process"/"Unidentified", keyCode 229). */
+function imeKeyEvent(type: string) {
+  return new KeyboardEvent(type, { key: 'Unidentified', code: '', keyCode: 229, which: 229, bubbles: true, cancelable: true, composed: true, view: window } as any);
 }
 
 function tabbables(): HTMLElement[] {
@@ -759,6 +771,20 @@ function defaultAction(key: string, mods: Mods, target: Element | null): string 
     return null;
   }
   switch (key) {
+    case 'Escape': {
+      // A real Escape closes the topmost modal <dialog> (after a cancelable "cancel" event).
+      const modals = Array.from(document.querySelectorAll('dialog[open]')).filter((d) => {
+        try {
+          return d.matches(':modal');
+        } catch {
+          return false;
+        }
+      }) as HTMLDialogElement[];
+      const top = modals.find(d => t && d.contains(t)) || modals[modals.length - 1];
+      if (top && top.dispatchEvent(new Event('cancel', { cancelable: true })))
+        top.close();
+      return null;
+    }
     case 'Enter':
       if (t instanceof HTMLTextAreaElement) {
         insertText(t, '\n');
@@ -942,6 +968,9 @@ let cancelled = false;
 export function setCancelled(v: boolean) {
   cancelled = v;
 }
+export function isCancelled() {
+  return cancelled;
+}
 
 /** Let the page's microtasks/timers run between keystrokes. Editors like Lexical and
  * ProseMirror update their model asynchronously; typing a whole string inside one task
@@ -969,6 +998,8 @@ export async function pressKeys(args: { text: string; repeat?: number }): Promis
   const combos = args.text.trim().split(/\s+/).filter(Boolean);
   const repeat = Math.max(1, Math.min(100, args.repeat || 1));
   const notes: string[] = [];
+  const base = uiBaseline(deepActiveElement());
+  base.trigger = null; // keys don't wait for popups; they only report them
   for (let r = 0; r < repeat; r++) {
     for (const c of combos) {
       const n = pressOne(c);
@@ -980,6 +1011,8 @@ export async function pressKeys(args: { text: string; repeat?: number }): Promis
   const a = deepActiveElement();
   // Only these keys load pages by default (submit, activate a link/button, history, reload).
   const mayNavigate = combos.some(c => /^(enter|return|space|\s|f5)$|^(alt|meta|cmd)\+(left|right|arrowleft|arrowright|\[|\])$|^(ctrl|cmd|meta)\+r$/i.test(c)) ? undefined : false;
+  // Tab/arrow navigation moves focus all the time; only popups opening or closing are news here.
+  notes.push(...uiNotes(base).filter(n => !n.startsWith('Focus is now')));
   return { focused: describe(a), value: valueOf(a), notes, mayNavigate };
 }
 
@@ -993,20 +1026,44 @@ function valueOf(el: Element | null): string | undefined {
   return undefined;
 }
 
+/** User-perceived characters: an emoji with skin tone or a ZWJ family, a flag, a letter with combining marks. */
+function graphemes(text: string): string[] {
+  const Seg = (Intl as any).Segmenter;
+  if (Seg)
+    return Array.from(new Seg(undefined, { granularity: 'grapheme' }).segment(text), (s: any) => s.segment as string);
+  return Array.from(text);
+}
+
+/** How long `type` waits for focus to reach a text field after a click or key that just ran. */
+const FOCUS_WAIT_MS = 1500;
+const FOCUS_WAIT_RECENT_MS = 5000;
+
 export async function typeText(args: { text: string }): Promise<any> {
-  const fwd = focusedFrameForward();
+  let fwd = focusedFrameForward();
   if (fwd)
     return fwd;
-  const target = deepActiveElement();
+  let target = deepActiveElement();
   const text = args.text;
   const notes: string[] = [];
+  if (!(target && isEditable(target)) && Date.now() - lastUiAction() < FOCUS_WAIT_RECENT_MS) {
+    // Typing right after a click that opens a search dialog or similar: its field may get focus a
+    // moment later (lazily loaded dialogs). Wait briefly for it rather than typing into nothing.
+    const waited = await waitForEditableFocus(isEditable, FOCUS_WAIT_MS);
+    if (waited >= 0) {
+      fwd = focusedFrameForward();
+      if (fwd)
+        return fwd;
+      target = deepActiveElement();
+      notes.push(`Waited ${waited} ms for focus to move into ${describe(target)} before typing (the page was still opening it).`);
+    }
+  }
   if (target && isEditable(target)) {
     if ((target as any).readOnly || (target as any).disabled)
       throw new Error(`The focused element ${describe(target)} is read-only or disabled.`);
     const perChar = text.length <= 300;
-    const chunks = perChar ? Array.from(text) : [text];
+    const chunks = perChar ? graphemes(text) : [text];
     for (const ch of chunks) {
-      if (ch === '\n' || ch === '\r') {
+      if (ch === '\n' || ch === '\r' || ch === '\r\n') {
         if (ch === '\r')
           continue;
         const n = pressOne('Enter');
@@ -1016,12 +1073,16 @@ export async function typeText(args: { text: string }): Promise<any> {
         continue;
       }
       // The editor may have re-rendered; keep typing into whatever now has focus.
-      const t = (deepActiveElement() && isEditable(deepActiveElement())) ? deepActiveElement()! : target;
-      const k = ch.length === 1 ? ch : ch[ch.length - 1];
-      const down = fire(t, keyEvent('keydown', k, NO_MODS));
-      if (down && fire(t, keyEvent('keypress', k, NO_MODS)))
+      const t = (deepActiveElement() && isEditable(deepActiveElement())) ? deepActiveElement()! : target!;
+      // A key on a keyboard produces one code unit (BMP character). Emoji, flags and combined
+      // characters come from an IME or emoji picker, which reports key "Unidentified"
+      // (keyCode 229) and inserts the whole character at once.
+      const single = ch.length === 1;
+      const k = single ? ch : 'Unidentified';
+      const down = fire(t, single ? keyEvent('keydown', k, NO_MODS) : imeKeyEvent('keydown'));
+      if (down && (!single || fire(t, keyEvent('keypress', k, NO_MODS))))
         insertText(t, ch);
-      fire(t, keyEvent('keyup', k, NO_MODS));
+      fire(t, single ? keyEvent('keyup', k, NO_MODS) : imeKeyEvent('keyup'));
       if (perChar)
         await tick();
     }
@@ -1219,7 +1280,58 @@ async function setCombobox(el: HTMLElement, value: string): Promise<any> {
   return { target: describe(el), value: isTextField(el) ? el.value : optionText(el) || undefined, notes };
 }
 
-export async function formInput(args: { ref: string; value: string | boolean | number }): Promise<any> {
+const flatText = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/**
+ * Replace the content of a contenteditable editor (ProseMirror, Lexical, Slate, Quill, plain
+ * contenteditable). Lines go in as separate paragraphs, the way typing Enter between them would.
+ * Falls back to a synthetic paste, which these editors all handle, and says so if the editor still
+ * shows something else (some reformat what they get).
+ */
+async function setRichText(el: HTMLElement, text: string): Promise<any> {
+  let host = el; // the ref may point inside the editor: replace the whole editing host's content
+  while (host.parentElement && (host.parentElement as HTMLElement).isContentEditable)
+    host = host.parentElement;
+  const notes: string[] = [];
+  const selectAll = () => {
+    host.focus();
+    const sel = document.getSelection()!;
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  };
+  selectAll();
+  await tick();
+  const lines = text.split(/\r?\n/);
+  if (text === '' || !lines[0])
+    document.execCommand('delete');
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) {
+      pressOne('Enter');
+      await tick();
+    }
+    if (lines[i]) {
+      insertText(host, lines[i]);
+      await tick();
+    }
+  }
+  if (flatText(host.innerText) !== flatText(text) && text) {
+    selectAll();
+    const dt = new DataTransfer();
+    dt.setData('text/plain', text);
+    host.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, composed: true, clipboardData: dt } as any));
+    await tick();
+    if (flatText(host.innerText) === flatText(text))
+      notes.push('Set by pasting the text (the editor ignored typed input).');
+  }
+  const shown = flatText(host.innerText);
+  if (shown !== flatText(text))
+    notes.push(`The editor now shows ${JSON.stringify(shown.slice(0, 200))}, which is not exactly the requested text; it may reformat what it gets. Check with read_page or a screenshot.`);
+  return { target: describe(host), value: valueOf(host), notes };
+}
+
+export async function formInput(args: { ref: string; value: string | boolean | number | string[] }): Promise<any> {
   const el = resolveRef(args.ref) as HTMLElement;
   const v = args.value;
   el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
@@ -1232,12 +1344,27 @@ export async function formInput(args: { ref: string; value: string | boolean | n
     return setCombobox(el, String(v));
 
   if (el instanceof HTMLSelectElement) {
-    const wanted = Array.isArray(v) ? v.map(String) : [String(v)];
     const opts = Array.from(el.options);
     const pick = (w: string) => opts.find(o => o.value === w) || opts.find(o => o.text.trim() === w) || opts.find(o => o.text.trim().toLowerCase() === w.toLowerCase()) || opts.find(o => o.text.toLowerCase().includes(w.toLowerCase()));
+    let wanted: string[];
+    if (Array.isArray(v)) {
+      wanted = (v as unknown[]).map(String);
+    } else {
+      const s = String(v);
+      let arr: unknown = null;
+      if (/^\s*\[/.test(s)) {
+        try {
+          arr = JSON.parse(s);
+        } catch { /* not JSON */ }
+      }
+      // <select multiple>: several options as an array, or as "A, B" / one per line.
+      wanted = Array.isArray(arr) ? arr.map(String) : el.multiple && !pick(s) ? s.split(/\s*[,\n;]\s*/).filter(Boolean) : [s];
+    }
+    if (!el.multiple && wanted.length > 1)
+      throw new Error(`${describe(el)} allows only one choice; got ${wanted.length}.`);
     const chosen = wanted.map(pick);
-    if (chosen.some(c => !c))
-      throw new Error(`No option matching "${wanted.join(', ')}". Options: ${opts.slice(0, 40).map(o => `"${o.text.trim()}" (value=${o.value})`).join(', ')}`);
+    if (chosen.some(c => !c) || !chosen.length)
+      throw new Error(`No option matching "${wanted.filter((_, i) => !chosen[i]).join(', ') || wanted.join(', ')}". Options: ${opts.slice(0, 40).map(o => `"${o.text.trim()}" (value=${o.value})`).join(', ')}`);
     el.focus();
     if (el.multiple)
       for (const o of opts) o.selected = chosen.includes(o);
@@ -1245,7 +1372,8 @@ export async function formInput(args: { ref: string; value: string | boolean | n
       nativeValueSetter(el).call(el, chosen[0]!.value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
-    return { target: describe(el), value: Array.from(el.selectedOptions).map(o => o.text.trim()).join(', ') };
+    const selected = Array.from(el.selectedOptions).map(o => o.text.trim());
+    return { target: describe(el), value: el.multiple ? selected : selected.join(', '), ...(el.multiple ? { notes: [`${selected.length} option${selected.length === 1 ? '' : 's'} selected; all others were deselected.`] } : {}) };
   }
 
   const role = el.getAttribute('role');
@@ -1295,15 +1423,7 @@ export async function formInput(args: { ref: string; value: string | boolean | n
       else
         el.dispatchEvent(new Event('change', { bubbles: true }));
     } else {
-      const sel = document.getSelection()!;
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      if (text === '')
-        document.execCommand('delete');
-      else
-        insertText(el, text);
+      return setRichText(el, text);
     }
     return { target: describe(el), value: valueOf(el) };
   }
@@ -1347,16 +1467,28 @@ function isHtml5Draggable(el: Element | null) {
 /** Viewport point of a ref, in this frame's CSS pixels (used by trusted/BiDi input). */
 export function refPoint(args: { ref: string }) {
   const p = pointForRef(args.ref);
+  rememberBaseline(p.el);
   return { x: p.x, y: p.y, target: describe(p.el), prefix: getRefPrefix(), draggable: isHtml5Draggable(p.el) };
 }
 
 /** Which frame currently has keyboard focus (forwards into focused iframes). */
-export function focusInfo(): any {
-  const fwd = focusedFrameForward();
+export async function focusInfo(args: { waitEditable?: boolean } = {}): Promise<any> {
+  let fwd = focusedFrameForward();
   if (fwd)
     return fwd;
-  const a = deepActiveElement();
-  return { prefix: getRefPrefix(), target: describe(a), editable: !!isEditable(a) };
+  let a = deepActiveElement();
+  let waited = -1;
+  // Trusted typing right after a click: give a dialog's field a moment to take focus (see typeText).
+  if (args.waitEditable && !isEditable(a) && Date.now() - lastUiAction() < FOCUS_WAIT_RECENT_MS) {
+    waited = await waitForEditableFocus(isEditable, FOCUS_WAIT_MS);
+    fwd = focusedFrameForward();
+    if (fwd)
+      return fwd;
+    a = deepActiveElement();
+  }
+  if (!args.waitEditable)
+    rememberBaseline(a);
+  return { prefix: getRefPrefix(), target: describe(a), editable: !!isEditable(a), ...(waited >= 0 ? { waited } : {}) };
 }
 
 /** Which frame and element a viewport point lands on (forwards into iframes). */
@@ -1365,6 +1497,7 @@ export function locate(args: { x: number; y: number }): any {
   const fwd = iframeForward(el, args.x, args.y);
   if (fwd)
     return fwd;
+  rememberBaseline(el);
   return { x: args.x, y: args.y, target: describe(el), prefix: getRefPrefix(), draggable: isHtml5Draggable(el) };
 }
 

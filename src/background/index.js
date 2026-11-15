@@ -3,9 +3,10 @@
 import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity } from './tabs.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
+import { loadLog, flushLog, logEvent, describeForLog, resultOfError, logOrigin, readLog, clearLog, setLogEnabled, logEnabled } from './actionlog.js';
 
 const PUBLIC_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'get_page_text', 'computer', 'javascript_tool', 'read_console_messages', 'read_network_requests', 'handle_dialog', 'resize_window', 'file_upload']);
 
@@ -18,12 +19,20 @@ onRequest(async (tool, args) => {
   const fn = tools[tool];
   if (!fn || (!PUBLIC_TOOLS.has(tool) && !tool.startsWith('_')))
     throw new Error(`Unknown tool ${tool}`);
-  if (state.paused && tool !== '_status' && tool !== '_pair_cancel')
+  // The second step of an upload (after the user approved it) is what the user knows as file_upload.
+  const logTool = tool === '_upload_send' ? 'file_upload' : tool;
+  const logged = !logTool.startsWith('_');
+  // Where the action happens, for the activity log (origin only), read before the action runs.
+  const where = logged && logEnabled() ? siteForLog(logTool, args) : null;
+  if (state.paused && tool !== '_status' && tool !== '_pair_cancel') {
+    if (logged)
+      logAction(logTool, args, where, 'paused');
     throw new Error(PAUSED_MSG);
-  if (!tool.startsWith('_')) {
+  }
+  if (logged) {
     noteAgentActivity(args?.tabId);
     const own = cleanSummary(args?.action_summary);
-    noteAction(args?.tabId, own || describeAction(tool, args), !!own);
+    noteAction(args?.tabId, own || describeAction(logTool, args), !!own);
   }
   let result;
   try {
@@ -36,16 +45,46 @@ onRequest(async (tool, args) => {
       return fn(args);
     });
   } catch (e) {
+    if (logged)
+      logAction(logTool, args, where, state.paused ? 'paused' : resultOfError(e));
     throw friendlyTabError(e, args?.tabId);
   } finally {
     if (!tool.startsWith('_'))
       noteAgentActivity(args?.tabId);
   }
   // Stop pressed while this command ran: don't report success for an interrupted action.
-  if (state.paused && !tool.startsWith('_'))
+  if (state.paused && !tool.startsWith('_')) {
+    logAction(logTool, args, where, 'paused');
     throw new Error(PAUSED_MSG);
+  }
+  if (logged)
+    logAction(logTool, args, where, 'allowed');
   return result;
 });
+
+/** The site an agent action is about (a promise of an origin or null), for the activity log. */
+function siteForLog(tool, args = {}) {
+  if (tool === 'navigate' && typeof args.url === 'string' && !/^(back|forward)$/.test(args.url))
+    return Promise.resolve(logOrigin(args.url) || logOrigin('https://' + args.url));
+  if (typeof args.tabId !== 'number')
+    return Promise.resolve(null);
+  return browser.tabs.get(args.tabId).then(t => logOrigin(t.url || ''), () => null);
+}
+
+function logAction(tool, args = {}, where, result) {
+  const own = cleanSummary(args.action_summary);
+  const text = own || describeForLog(tool, args);
+  if (!text)
+    return;
+  Promise.resolve(where).then((origin) => {
+    logEvent({ kind: 'action', origin: origin || undefined, tabId: args.tabId, text, own: !!own, result });
+  }, () => {});
+}
+
+/** Status for our own pages: the shared public status plus the activity-log setting. */
+function pageStatus() {
+  return { ...publicStatus(), logEnabled: logEnabled() };
+}
 
 /** Foxwright's own one-line description of an agent action, for the popup when the agent gave none. */
 function describeAction(tool, a = {}) {
@@ -98,8 +137,9 @@ function friendlyTabError(e, tabId) {
 const PAUSED_MSG = 'Foxwright is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Foxwright toolbar popup if they want you to carry on.';
 
 // ---------- messages from the popup and in-page UI ----------
+const OWN_PAGES = ['popup/', 'welcome/', 'log/'];
 function isOwnPage(sender) {
-  return sender?.id === browser.runtime.id && typeof sender.url === 'string' && sender.url.startsWith(browser.runtime.getURL('popup/'));
+  return sender?.id === browser.runtime.id && typeof sender.url === 'string' && OWN_PAGES.some(p => sender.url.startsWith(browser.runtime.getURL(p)));
 }
 
 async function pauseAgent() {
@@ -134,10 +174,10 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
       if (!state.connected && msg.initial)
         reconnectNow(); // only when the popup opens: its 1.5 s refresh must not reset the reconnect backoff
       await groupTabs();
-      return publicStatus();
+      return pageStatus();
     case 'pause':
       await pauseAgent();
-      return publicStatus();
+      return pageStatus();
     case 'resume':
       state.paused = false;
       break;
@@ -146,12 +186,28 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
         state.mode = msg.mode === 'all' ? 'all' : 'ask';
       break;
     case 'removeSite':
-      state.allowed = state.allowed.filter(o => o !== msg.origin);
-      state.sessionAllowed = state.sessionAllowed.filter(o => o !== msg.origin);
+      forgetSite(msg.origin); // every approval of the site: always, session, 1 hour, read-only
+      break;
+    case 'setConfirmActions':
+      if (!state.managedConfirm)
+        state.confirmActions = msg.on === true;
       break;
     case 'reconnect':
       reconnectNow();
-      return publicStatus();
+      return pageStatus();
+    case 'log-read':
+      await flushLog();
+      return readLog();
+    case 'log-clear':
+      await clearLog();
+      return readLog();
+    case 'log-enable':
+      await setLogEnabled(!!msg.enabled);
+      return readLog();
+    case 'open-page':
+      if (msg.page === 'welcome' || msg.page === 'log')
+        await openOwnPage(msg.page);
+      return true;
     case 'setName':
       state.browserName = cleanName(msg.name) || 'Firefox';
       send({ type: 'name', name: state.browserName });
@@ -161,7 +217,7 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
   }
   await saveSettings();
   await updateBadge();
-  return publicStatus();
+  return pageStatus();
 });
 
 // ---------- keep group bookkeeping fresh ----------
@@ -208,11 +264,37 @@ browser.alarms.onAlarm.addListener((a) => {
     reconnectNow();
 });
 
+/** Open (or focus) one of our pages in a tab: 'welcome' (setup help) or 'log' (activity). */
+export async function openOwnPage(page) {
+  const url = browser.runtime.getURL(`${page}/${page}.html`);
+  const open = (await browser.tabs.query({}).catch(() => [])).find(t => t.url === url || t.url?.startsWith(url + '#'));
+  if (open) {
+    await browser.tabs.update(open.id, { active: true });
+    await browser.windows.update(open.windowId, { focused: true }).catch(() => {});
+    return;
+  }
+  await browser.tabs.create({ url });
+}
+
 browser.runtime.onStartup.addListener(() => {});
-browser.runtime.onInstalled.addListener(() => {});
+// First install only (not updates): show the setup page, once per profile.
+browser.runtime.onInstalled.addListener(async ({ reason }) => {
+  if (reason !== 'install')
+    return;
+  const { welcomeShown } = await browser.storage.local.get({ welcomeShown: false });
+  if (welcomeShown)
+    return;
+  await browser.storage.local.set({ welcomeShown: true });
+  await openOwnPage('welcome').catch(() => {});
+});
+// Write any batched log entries before the event page unloads.
+browser.runtime.onSuspend?.addListener(() => {
+  flushLog();
+});
 
 (async () => {
   await loadSettings();
+  await loadLog();
   markReady();
   await groupTabs().catch(() => {});
   await updateBadge();

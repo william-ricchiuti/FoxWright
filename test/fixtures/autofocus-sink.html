@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Another site</title></head><body style="font-family:sans-serif">
+<h1>Unapproved site</h1>
+<label>Anything <input id="sink" autofocus></label>
+<script>
+// Grabs focus at once and reports every keystroke it receives to the fixture server.
+const sink = document.getElementById('sink');
+sink.focus();
+let last = '';
+setInterval(() => { if (sink.value !== last) { last = sink.value; fetch('/log?sink=' + encodeURIComponent(last)); } }, 30);
+</script>
+</body></html>

@@ -36,6 +36,7 @@ console.log('Foxwright safety e2e');
 const h = await start({ testDriver: true, policy: { mode: 'ask', promptTimeoutSec: 30, confirmUploads: true } });
 
 const driver = await connectDriver(h.bidiUrl);
+h.useDriver(driver);
 const { bidi, contexts, evalIn, promptWindow, answer } = driver;
 
 let popup = null;
@@ -188,7 +189,7 @@ await test('upload_image: a screenshot goes into a file input after the user app
   await answer('once');
   const r = await up;
   expect(!r.isError && /Uploaded as bug-report\.jpg/.test(r.text), r.text);
-  const got = await h.call('javascript_tool', { tabId, action: 'javascript_exec', text: `(() => { const f = document.getElementById('avatar').files[0]; return f ? f.name + '|' + f.type + '|' + f.size : 'none'; })()` });
+  const got = { text: await h.js(tabId, `(() => { const f = document.getElementById('avatar').files[0]; return f ? f.name + '|' + f.type + '|' + f.size : 'none'; })()`) };
   const [name, type, size] = JSON.parse(got.text).split('|');
   expect(name === 'bug-report.jpg' && type === 'image/jpeg' && Number(size) > 1000, 'file input got: ' + got.text);
 });

@@ -2,6 +2,7 @@
 // so pages can't hide, restyle, overlay or click-jack them.
 /* global browser */
 import { state } from './state.js';
+import { logQuestion } from './actionlog.js';
 
 const pending = new Map(); // id -> { req, resolve, windowId, timer }
 const byKey = new Map(); // dedupe identical concurrent asks -> promise
@@ -11,20 +12,36 @@ export function isPromptSender(sender) {
   return !!sender?.url && sender.url.startsWith(PROMPT_URL());
 }
 
+// Site approvals (and upgrades from read-only) can be answered with an access level and a duration.
+const LEVEL_TYPES = new Set(['site', 'frame', 'upgrade']);
+
 /**
- * Ask the human. req = { type: 'site' | 'frame' | 'upload' | 'pair', origin, tabTitle?, files? }.
- * Resolves 'once' | 'always' | 'deny' | 'dismissed' | 'timeout'.
+ * Ask the human. req = { type: 'site' | 'frame' | 'upgrade' | 'upload' | 'pair' | 'action', origin, tabTitle?, files?, element?, summary? }.
+ * Resolves 'once' | 'always' | 'deny' | 'dismissed' | 'timeout' (plus 'hour' for site/frame/upgrade).
+ * Use askSite() to also get the access level the person chose.
  */
 export function askUser(req) {
-  const key = req.type === 'upload' ? null : `${req.type}:${req.origin}`;
+  return ask(req).then(r => r.answer);
+}
+
+/** Site, frame or upgrade question: resolves { answer, level: 'read' | 'full' }. */
+export function askSite(req) {
+  return ask(req);
+}
+
+function ask(req) {
+  // Consequential-action confirmations are about one element, never shared between calls.
+  const key = req.type === 'upload' || req.type === 'action' ? null : `${req.type}:${req.origin}`;
   if (key && byKey.has(key))
     return byKey.get(key);
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  logQuestion(req, 'asked');
   const p = new Promise((resolve) => {
     const entry = { req, resolve, windowId: null, timer: null };
     pending.set(id, entry);
     entry.timer = setTimeout(() => finish(id, 'timeout'), state.promptTimeoutMs);
-    browser.windows.create({ url: `${PROMPT_URL()}?id=${id}`, type: 'popup', width: 500, height: req.type === 'upload' ? 420 : req.type === 'pair' ? 330 : 360, focused: true })
+    const height = { upload: 420, pair: 330, action: 440, upgrade: 380 }[req.type] || 410;
+    browser.windows.create({ url: `${PROMPT_URL()}?id=${id}`, type: 'popup', width: 520, height, focused: true })
       .then((w) => {
         entry.windowId = w.id;
         if (!pending.has(id))
@@ -39,7 +56,7 @@ export function askUser(req) {
   return p;
 }
 
-function finish(id, answer) {
+function finish(id, answer, level = 'full') {
   const e = pending.get(id);
   if (!e)
     return;
@@ -47,7 +64,8 @@ function finish(id, answer) {
   clearTimeout(e.timer);
   if (e.windowId != null && answer === 'timeout')
     browser.windows.remove(e.windowId).catch(() => {});
-  e.resolve(answer);
+  e.resolve({ answer, level });
+  logQuestion(e.req, answer);
 }
 
 export function handlePromptMessage(msg, sender) {
@@ -58,11 +76,14 @@ export function handlePromptMessage(msg, sender) {
     return Promise.resolve(e ? e.req : null);
   }
   if (msg.kind === 'prompt-answer') {
-    const a = ['once', 'always', 'deny'].includes(msg.answer) ? msg.answer : 'deny';
-    if (a === 'always' && pending.get(msg.id)?.req.type === 'upload')
-      finish(msg.id, 'once');
-    else
-      finish(msg.id, a);
+    const type = pending.get(msg.id)?.req.type;
+    let a = ['once', 'always', 'hour', 'deny'].includes(msg.answer) ? msg.answer : 'deny';
+    // Only site questions have "always" and "for 1 hour"; uploads and action confirmations are one-off.
+    if ((a === 'always' || a === 'hour') && !LEVEL_TYPES.has(type))
+      a = type === 'pair' ? 'deny' : 'once';
+    // "Read only" is offered for new site and frame approvals; an upgrade is always to full access.
+    const level = (type === 'site' || type === 'frame') && msg.readOnly === true ? 'read' : 'full';
+    finish(msg.id, a, level);
     return Promise.resolve(true);
   }
   return undefined;

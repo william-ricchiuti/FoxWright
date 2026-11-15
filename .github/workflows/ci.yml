@@ -9,7 +9,7 @@ jobs:
   test:
     name: Linux · Firefox ${{ matrix.firefox }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +25,12 @@ jobs:
         uses: browser-actions/setup-firefox@v1
         with:
           firefox-version: ${{ matrix.firefox }}
+      - name: Test host names and X11 tools for the gap suites
+        run: |
+          echo "127.0.0.1 a.test sub.a.test b.test c.test xn--pple-43d.test" | sudo tee -a /etc/hosts
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb xdotool xauth
+          echo "FIREFOX=$(readlink -f "$(command -v firefox)")" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: |
           npm ci
@@ -45,24 +51,99 @@ jobs:
           npx web-ext lint --source-dir dist/full
       # The tests set up their own copy of the helper in a temporary HOME (see test/harness.mjs).
       - name: End-to-end tests (synthetic input)
-        run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e.mjs
+        run: node test/e2e.mjs
       - name: End-to-end tests (trusted input via WebDriver BiDi)
-        run: FIREFOX="$(readlink -f "$(command -v firefox)")" FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
+        run: FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
       - name: Safety, permission, store-build and resilience tests
+        run: node test/run-suites.mjs e2e-safety e2e-permissions e2e-store e2e-resilience e2e-multi
+      - name: Store build in depth (no javascript_tool), both input modes
         run: |
-          export FIREFOX="$(readlink -f "$(command -v firefox)")"
-          node test/e2e-safety.mjs
-          node test/e2e-permissions.mjs
-          node test/e2e-store.mjs
-          node test/e2e-resilience.mjs
-          node test/e2e-multi.mjs
+          node test/e2e-storebuild.mjs
+          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e-storebuild.mjs
+      # Headful under Xvfb (xdotool presses real keys). Known limits are reported as "~ known limit"
+      # and don't fail the job; one that starts passing does (see KNOWN_LIMITS in test/gap-lib.mjs).
+      - name: Gap suites (boundary, fuzz, hostile pages, persistence, secrets, Stop, trusted input)
+        run: node test/run-suites.mjs gaps
       - name: Event page idle timeout
         if: matrix.firefox == 'latest'
-        run: FIREFOX="$(readlink -f "$(command -v firefox)")" node test/e2e-idle.mjs
+        run: node test/e2e-idle.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: test-results-${{ matrix.firefox }}
+          path: test/results/
+
+  node20:
+    name: Linux · Node 20 · Firefox latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Install dependencies and build
+        run: |
+          echo "FIREFOX=$(readlink -f "$(command -v firefox)")" >> "$GITHUB_ENV"
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+      - name: BiDi client (fake Firefox)
+        run: node test/bidi-connect.mjs
+      - name: Suites on Node 20
+        run: |
+          node test/run-suites.mjs e2e e2e-safety e2e-permissions e2e-store e2e-storebuild e2e-resilience e2e-multi
+          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-node20
+          path: test/results/
+
+  amo-signed:
+    # The signed XPI addons.mozilla.org serves, when it is the version in this tree (otherwise the
+    # job says so and skips). Non-blocking: AMO may lag behind, or be briefly unreachable.
+    name: Signed AMO build · Firefox latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Install dependencies and build the helper and fixtures
+        run: |
+          echo "FIREFOX=$(readlink -f "$(command -v firefox)")" >> "$GITHUB_ENV"
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+      - name: Download and unpack the signed XPI from AMO
+        id: amo
+        run: node test/fetch-amo-xpi.mjs dist/amo
+      - name: Store-build suite against the signed XPI (synthetic, then trusted input)
+        if: steps.amo.outputs.found == 'true'
+        env:
+          FOXWRIGHT_E2E_BUILD: dist/amo
+        run: |
+          node test/e2e-storebuild.mjs
+          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e-storebuild.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-amo-signed
           path: test/results/
 
   package:
@@ -95,3 +176,164 @@ jobs:
           foxwright-firefox doctor | tee doctor.txt || true
           grep -qi "native" doctor.txt
           foxwright-firefox uninstall
+
+  windows:
+    # First real end-to-end runs on Windows (registry key, .bat launcher, named pipe). Non-blocking
+    # until it has a track record. The runner is throwaway, so the tests use its real profile/HOME.
+    name: Windows · end-to-end smoke
+    runs-on: windows-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash # Git Bash: stops at the first failing command (pwsh would carry on)
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Locate Firefox
+        shell: pwsh
+        run: |
+          $ff = (Get-Command firefox -ErrorAction SilentlyContinue).Source
+          if (-not $ff) { $ff = "C:\Program Files\Mozilla Firefox\firefox.exe" }
+          Write-Output "Firefox: $ff"
+          & $ff --version | Out-Host
+          "FIREFOX=$ff" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+      - name: Set up the helper (registry key, .bat launcher)
+        run: node host/dist/foxwright.mjs setup
+      - name: Smoke test (tabs, navigate, read_page, click, type, screenshot, doctor)
+        run: node test/e2e-smoke.mjs
+      - name: doctor after Firefox closed (expected to report Firefox not running)
+        run: node host/dist/foxwright.mjs doctor || true
+      - name: Full e2e suite (informational)
+        continue-on-error: true
+        run: node test/e2e.mjs
+      - name: Helper log
+        if: always()
+        run: node -e "const f = require('path').join(require('os').homedir(), '.foxwright', 'helper.log'); try { console.log(require('fs').readFileSync(f, 'utf8').split('\n').slice(-100).join('\n')); } catch (e) { console.log(e.message); }"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-windows
+          path: test/results/
+
+  macos:
+    # The suites on a macOS runner (real HOME is fine: the runner is throwaway). Non-blocking at first.
+    name: macOS · e2e + safety
+    runs-on: macos-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    env:
+      # If setup-firefox falls back to the preinstalled /Applications/Firefox.app, the harness may
+      # write its policies.json there: nobody's real browser on a CI runner.
+      FOXWRIGHT_E2E_ALLOW_SYSTEM_FIREFOX: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        id: firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Locate Firefox, install dependencies, build, set up the helper
+        run: |
+          # The real binary inside the bundle the action installed, not `firefox` on PATH: on this
+          # runner that is Homebrew's wrapper script for an older preinstalled Firefox, and the
+          # harness has to write policies.json next to the bundle it actually starts.
+          FF="${{ steps.firefox.outputs.firefox-path }}"
+          if [ ! -x "$FF" ]; then
+            for f in "$RUNNER_TOOL_CACHE"/firefox/*/*/Contents/MacOS/firefox; do
+              if [ -x "$f" ]; then FF="$f"; break; fi
+            done
+          fi
+          [ -x "$FF" ] || FF=/Applications/Firefox.app/Contents/MacOS/firefox
+          FF="$(node -e 'console.log(require("fs").realpathSync(process.argv[1]))' "$FF")"
+          echo "Firefox: $FF"; "$FF" --version
+          echo "FIREFOX=$FF" >> "$GITHUB_ENV"
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+          node host/dist/foxwright.mjs setup
+      - name: e2e (synthetic, then trusted input) and safety
+        run: |
+          node test/run-suites.mjs e2e e2e-safety e2e-storebuild
+          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-macos
+          path: test/results/
+
+  sandboxed-firefox:
+    # Snap and Flatpak Firefox have never been tested. Expected to fail today (sandboxing keeps
+    # Firefox from starting the helper); the job records the exact behaviour and errors so the
+    # README's warning can be precise. Non-blocking.
+    name: Linux · ${{ matrix.package }} Firefox (sandbox probe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [snap, flatpak]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Build the extension and helper
+        run: |
+          npm ci
+          npm ci --prefix host
+          npm run build
+      - name: Install the Snap
+        if: matrix.package == 'snap'
+        run: |
+          sudo snap install firefox
+          snap version
+          snap connections firefox || true
+          echo "FIREFOX=/snap/bin/firefox" >> "$GITHUB_ENV"
+          # Snap Firefox reads enterprise policies from /etc/firefox/policies.
+          sudo mkdir -p /etc/firefox/policies
+          echo '{"policies":{"DisableAppUpdate":true,"3rdparty":{"Extensions":{"kitsune-full@william-ricchiuti.com":{"mode":"all"}}}}}' | sudo tee /etc/firefox/policies/policies.json
+      - name: Install the Flatpak
+        if: matrix.package == 'flatpak'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.mozilla.firefox
+          flatpak info --user org.mozilla.firefox | head -20
+          # setup writes the native-messaging manifest into the Flatpak's folder only if it exists.
+          mkdir -p "$HOME/.var/app/org.mozilla.firefox/.mozilla"
+          # The sandbox can't see the checkout: let it read the built extension (and nothing else),
+          # or web-ext can't load it and the probe never gets to the question it is asking.
+          printf '#!/bin/sh\nexec flatpak run --user --filesystem=%s/dist:ro org.mozilla.firefox "$@"\n' "$GITHUB_WORKSPACE" > "$HOME/flatpak-firefox"
+          chmod +x "$HOME/flatpak-firefox"
+          echo "FIREFOX=$HOME/flatpak-firefox" >> "$GITHUB_ENV"
+      - name: Set up the helper (real HOME on this throwaway runner)
+        run: node host/dist/foxwright.mjs setup
+      - name: Probe
+        run: node test/sandbox-probe.mjs ${{ matrix.package }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sandbox-${{ matrix.package }}
+          path: test/results/

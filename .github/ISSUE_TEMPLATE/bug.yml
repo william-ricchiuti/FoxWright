@@ -21,7 +21,7 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Foxwright version (toolbar popup) and helper version (`npx foxwright-firefox --version`)
+      label: Foxwright version (toolbar popup) and the output of `npx foxwright-firefox doctor` (it shows the installed helper's version)
     validations:
       required: true
   - type: input

@@ -41,10 +41,12 @@ Usage:
   foxwright setup [--claude-code] [--claude-desktop] [--all]
                       Install the helper Firefox talks to, and optionally register
                       the MCP server with Claude Code / Claude Desktop.
-  foxwright doctor      Check the installation and the live connection to Firefox.
+  foxwright doctor      Check the installation and the live connection to Firefox, and
+                      say what to do about each problem. Prints the installed
+                      helper's version as well as this command's.
   foxwright mcp         Run the MCP server on stdio (what your AI client launches).
   foxwright uninstall   Remove the helper.
-  foxwright --version   Print the version.
+  foxwright --version   Print this command's version (\`doctor\` also shows the installed helper's).
 `);
   process.exit(cmd && cmd !== 'help' && cmd !== '--help' ? 1 : 0);
 }

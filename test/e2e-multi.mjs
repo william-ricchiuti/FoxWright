@@ -22,7 +22,7 @@ const expect = (c, m) => { if (!c) throw new Error(m); };
 const BASE = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`;
 
 console.log('Foxwright: several Firefox profiles');
-const a = await start({}); // the first browser: owns the shared socket; `a.call` is the agent
+const a = await start({ trusted: true }); // the first browser: owns the shared socket; `a.call` is the agent (with real input)
 const b = await start({ alongside: a, testDriver: true }); // a second profile; the test can press its buttons
 const driver = await connectDriver(b.bidiUrl);
 const ids = (t) => [...t.matchAll(/deviceId ([a-f0-9]{12})/g)].map(m => m[1]);
@@ -72,6 +72,43 @@ await test('switch_browser: the browser where the user clicks Connect is used', 
   expect(new RegExp(`${second}[^\\n]*\\[inUse\\]`).test(l.text), 'the picked browser should be in use:\n' + l.text);
   const t = await a.call('tabs_context_mcp', {});
   expect(t.text.includes('page2.html'), 'actions now go to the second browser:\n' + t.text);
+});
+
+// The first browser has remote debugging (the agent's MCP server holds its BiDi session); the second
+// doesn't. Tab ids restart in every Firefox, so both can have a tab with the same id: after
+// select_browser, trusted input must not reuse the first browser's cached context for that id.
+await test('trusted input never follows a tab id into the other browser (BiDi contexts are per browser)', async () => {
+  const tabIn = async (dev) => {
+    await a.call('select_browser', { deviceId: dev });
+    return Number(/Created tab (\d+)/.exec((await a.call('tabs_create_mcp', {})).text)?.[1]);
+  };
+  let t1 = await tabIn(first), t2 = await tabIn(second);
+  for (let i = 0; i < 20 && t1 !== t2; i++) { // open tabs in whichever browser is behind until the ids meet
+    if (t1 < t2)
+      t1 = await tabIn(first);
+    else
+      t2 = await tabIn(second);
+  }
+  expect(t1 === t2, `could not get the same tab id in both browsers (${t1} vs ${t2})`);
+  const fill = async (dev, text) => {
+    await a.call('select_browser', { deviceId: dev });
+    await a.call('navigate', { tabId: t1, url: `${BASE}/basic.html?same-id` });
+    const ref = /\[ref=([^\]]+)\]/.exec((await a.call('find', { tabId: t1, query: 'Full name' })).text)?.[1];
+    const c = await a.call('computer', { tabId: t1, action: 'left_click', ref });
+    const ty = await a.call('computer', { tabId: t1, action: 'type', text });
+    return `${c.text.split('\n')[0]} / ${ty.text.split('\n')[0]}`;
+  };
+  const r1 = await fill(first, 'first-');
+  const r2 = await fill(second, 'second-');
+  const value = async (dev) => {
+    await a.call('select_browser', { deviceId: dev });
+    return (await a.call('javascript_tool', { tabId: t1, text: 'document.getElementById("name").value' })).text.replace(/^"|"$/g, '');
+  };
+  const v1 = await value(first), v2 = await value(second);
+  console.log(`      (tab ${t1} in both; first browser: ${r1} -> ${JSON.stringify(v1)}; second: ${r2} -> ${JSON.stringify(v2)})`);
+  expect(/trusted input/.test(r1), 'the first browser should use trusted input: ' + r1);
+  expect(v1 === 'first-' && v2 === 'second-', `typing in the second browser went to the first one's tab ${t1}: first ${JSON.stringify(v1)}, second ${JSON.stringify(v2)}`);
+  await a.call('select_browser', { deviceId: first });
 });
 
 await test('when the first browser closes, an agent that never picked one is told it moved', async () => {

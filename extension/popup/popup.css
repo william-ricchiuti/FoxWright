@@ -58,3 +58,17 @@ footer a { color: inherit; }
 #recent time { flex: none; width: 28px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 #recent span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #bname { width: 130px; font: inherit; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); text-align: right; }
+/* paused: one unmissable banner with a single Resume button */
+.card.paused { background: var(--red); border-color: var(--red); color: #fff7ee; text-align: center; padding: 14px; }
+.card.paused p { margin: 0 0 10px; }
+.paused-title { font-size: 16px; font-weight: 700; }
+button.resume { width: 100%; padding: 9px 12px; font-size: 14px; background: #fff7ee; color: var(--red); border-color: #fff7ee; }
+body.is-paused #pause { display: none; }
+.card.warn { border-color: #c86a1b; }
+.btns { display: flex; gap: 8px; align-items: center; }
+button.link { background: none; border: 0; padding: 0; font-weight: 500; color: inherit; text-decoration: underline; cursor: pointer; }
+.btns button.link { margin-left: auto; }
+.fine button.link { font-size: inherit; }
+.tag.warn { color: #c86a1b; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.card.paused button:focus-visible { outline-color: #fff7ee; }

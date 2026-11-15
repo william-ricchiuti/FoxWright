@@ -1,0 +1,9 @@
+# Same bytes on every platform: the build patches vendored files by exact text, and the store
+# build must be reproducible. Git still detects binary files by content.
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.jpg binary
+*.pdf binary
+*.xpi binary
+*.zip binary

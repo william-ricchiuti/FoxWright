@@ -413,25 +413,39 @@ async function bigSites() {
   });
   await scenario('react.dev', 'DocSearch dialog: search, pick a result', async (notes) => {
     await nav('https://react.dev/');
-    await click(await pick('button', /Search/i));
-    await sleep(600);
-    await type('useState');
-    // Like an agent would: look at the (hoisted) results popup and click the right entry.
-    let ref = null, last = '';
-    for (let i = 0; i < 12 && !ref; i++) {
-      await sleep(500);
-      last = await outline();
-      ref = /(?:option|link)[^\n]*useState[^\n]*\[ref=([^\]]+)\]/.exec(last)?.[1];
-    }
+    // The search dialog's code loads on demand after the click. No fixed sleeps: like an agent,
+    // wait for its search field, type, then wait for a matching result in the outline.
+    const c = await click(await pick('button', /Search/i));
+    const seen = c.text.split('\n').filter(l => /^(Opened:|Focus is now)/.test(l)).join(' ');
+    if (seen)
+      notes.push(seen.slice(0, 100));
+    const f = await call('find', { query: 'search docs input', wait_for: 'searchbox', timeout: 15 });
+    notes.push((/after waiting [\d.]+ s/.exec(f.text) || ['find: no wait needed'])[0]);
+    const t = await type('useState');
+    if (/Waited \d+ ms for focus/.test(t.text))
+      notes.push('type waited for focus');
+    const r = await call('read_page', { filter: 'interactive', wait_for: 'option "useState"', timeout: 15, max_chars: 150000 });
+    const ref = /(?:option|link)[^\n]*useState[^\n]*\[ref=([^\]]+)\]/.exec(r.text)?.[1];
     if (!ref) {
       const shot = await call('computer', { action: 'screenshot' });
-      if (shot.images[0])
+      if (shot.images[0]) {
+        fs.mkdirSync('test/results', { recursive: true });
         fs.writeFileSync('test/results/reactdev-search.jpg', Buffer.from(shot.images[0].data, 'base64'));
+      }
       notes.push('saved test/results/reactdev-search.jpg');
     }
-    expect(ref, 'no useState result in the search popup:\n' + last.slice(0, 1200));
+    expect(ref, 'no useState result in the search popup:\n' + r.text.slice(0, 1200));
     await click(ref);
-    await waitText(/useState is a React Hook/i);
+    await call('computer', { action: 'wait', text: 'useState is a React Hook', timeout: 15 });
+  });
+  await scenario('arxiv', 'read a PDF in Firefox\'s viewer with get_page_text', async (notes) => {
+    const n = await nav('https://arxiv.org/pdf/1706.03762');
+    expect(/PDF viewer/.test(n.text), n.text);
+    const r = await call('get_page_text', { query: 'BLEU English-to-German' });
+    expect(/28\.4 BLEU/.test(r.text) && /Source: PDF, \d+ pages/.test(r.text), r.text.slice(0, 1500));
+    const p = await call('get_page_text', { offset: 20000, max_chars: 2000 });
+    expect(/Showing characters 20000–22000 of \d+/.test(p.text), p.text.slice(0, 400));
+    notes.push(/Source: [^\n]*/.exec(r.text)[0].slice(0, 60));
   });
   await scenario('gov.uk', 'site search', async () => {
     await nav('https://www.gov.uk/');

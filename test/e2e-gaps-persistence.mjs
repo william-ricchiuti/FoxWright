@@ -1,12 +1,12 @@
 // Permission persistence and the grant rule (gap area 8), the paused state across a Firefox
 // restart, and an answer that comes after the MCP navigate timeout.
-// Uses gap-harness.mjs (a copy of harness.mjs) so one Firefox profile survives restartFirefox().
+// Uses the harness's profileDir option so one Firefox profile survives restartFirefox().
 //
 //   FIREFOX=... FOXWRIGHT_E2E_HEADFUL=1 xvfb-run -a -s "-screen 0 1400x900x24" node test/e2e-gaps-persistence.mjs
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { start } from './gap-harness.mjs';
+import { start } from './harness.mjs';
 import { runner, extraServer, connectPerson, extBaseOf, sleep, expect, tabIdOf } from './gap-lib.mjs';
 
 const { test, finish } = runner('e2e-gaps-persistence');

@@ -35,6 +35,7 @@ export function connect() {
   } catch (e) {
     state.connecting = false;
     state.lastError = String(e?.message || e);
+    state.errorKind = classifyError(state.lastError);
     updateBadge();
     scheduleRetry();
     return;
@@ -43,9 +44,11 @@ export function connect() {
   p.onMessage.addListener(onMessage);
   p.onDisconnect.addListener((dp) => {
     const err = dp.error?.message || (browser.runtime.lastError && browser.runtime.lastError.message) || 'Helper exited';
-    state.lastError = /No such native application|not found/i.test(err)
+    state.errorKind = classifyError(err);
+    state.lastError = state.errorKind === 'not-installed'
       ? 'The Foxwright helper is not installed. Run: npx foxwright-firefox setup'
       : err;
+    state.helperVersion = null;
     state.connected = false;
     state.connecting = false;
     state.clients = 0;
@@ -56,6 +59,16 @@ export function connect() {
     scheduleRetry();
   });
   p.postMessage({ type: 'hello', version: VERSION, full: FULL, browserId: state.browserId, name: state.browserName });
+}
+
+/**
+ * Why the native connection failed, for the popup and welcome page:
+ *   'not-installed' = Firefox found no registered helper (setup hasn't run, or ran for another
+ *   Firefox / a sandboxed Snap or Flatpak build); 'exited' = the helper started and then stopped
+ *   (for example Node.js missing or too old, or a crash).
+ */
+function classifyError(err) {
+  return /No such native application|not found/i.test(String(err)) ? 'not-installed' : 'exited';
 }
 
 export function reconnectNow() {
@@ -95,6 +108,8 @@ async function onMessage(msg) {
     state.connected = true;
     state.connecting = false;
     state.lastError = msg.error || null;
+    state.errorKind = msg.error ? 'helper-error' : null;
+    state.helperVersion = typeof msg.version === 'string' ? msg.version.slice(0, 32) : null;
     retryMs = 2000;
     updateBadge();
     return;

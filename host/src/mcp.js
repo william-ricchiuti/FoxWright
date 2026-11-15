@@ -35,8 +35,18 @@ const bidi = new Bidi();
 let knownBrowser = null; // { browserId, name }
 let browserNote = '';
 helper.onConnect = async () => {
+  // A new connection may lead to another browser: never reuse BiDi contexts found for the old one.
+  bidi.contexts.clear();
   try {
-    const b = (await helper.status())?.browser;
+    let st = await helper.status();
+    // A helper Firefox just started may not have heard from the extension yet.
+    for (let i = 0; i < 5 && !st?.extension; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      st = await helper.status();
+    }
+    if (st?.extension)
+      onExtensionBuild(!!st.extension.full);
+    const b = st?.browser;
     if (!b?.browserId)
       return;
     if (knownBrowser && knownBrowser.browserId !== b.browserId && !helper.browserId) {
@@ -47,6 +57,39 @@ helper.onConnect = async () => {
   } catch { /* status is best-effort */ }
 };
 bidi.onChange = (ok) => helper.notifyBidi(ok);
+
+// ---------- javascript_tool only when the connected extension can run it ----------
+// The Add-ons store build refuses it, so listing it would only cost the agent a wasted call. It is
+// listed once a full build is known to be connected (not before: an unknown build stays hidden),
+// and tools/list_changed tells the client whenever that changes (browser switch, reconnect).
+let fullBuild = null; // null: no extension seen yet
+let onBuildChange = () => {};
+function onExtensionBuild(full) {
+  if (full === fullBuild)
+    return;
+  fullBuild = full;
+  onBuildChange(full);
+}
+async function refreshBuild() {
+  try {
+    await helper.connect();
+    const st = await helper.status();
+    if (st?.extension)
+      onExtensionBuild(!!st.extension.full);
+  } catch { /* no Firefox yet */ }
+}
+const jsUnavailable = () => (fullBuild === false
+  ? 'javascript_tool is not available in the Firefox Add-ons store edition of Foxwright (Mozilla policy forbids running code strings from outside the add-on). Install the "Foxwright (Full)" build to enable it, or use read_page / find / get_page_text / computer instead.'
+  : 'javascript_tool is not available yet: no Firefox with the Foxwright (Full) extension is connected. Call tabs_context_mcp first; use read_page / find / get_page_text / computer if it stays unavailable.');
+
+// ---------- "Maximum number of active sessions": tell the user once ----------
+let toldSessionBusy = false;
+function sessionBusyNote() {
+  if (toldSessionBusy || bidi.ready || !/Maximum number of active sessions/i.test(bidi.lastError || ''))
+    return '';
+  toldSessionBusy = true;
+  return 'Note for the user: real (trusted) clicks and typing are off for this session because Firefox allows only one remote-control session and something else holds it (often a Foxwright MCP server that was force-quit, or another AI client using Foxwright). Foxwright uses simulated input meanwhile. Restarting Firefox frees the session.';
+}
 // Trusted input goes straight to Firefox, past the extension: count Stop presses here so a
 // long text or key repeat already under way can be cut short.
 let pauseCount = 0;
@@ -177,7 +220,7 @@ async function refShot(a) {
   if (!a.ref || Array.isArray(a.coordinate) || typeof a.tabId !== 'number' || !isRecording(a.tabId) || !/click|hover/.test(a.action || ''))
     return undefined;
   try {
-    return (await helper.call('_point', { tabId: a.tabId, ref: a.ref }, 10000))?.data?.shot;
+    return (await helper.call('_point', { tabId: a.tabId, ref: a.ref, action: 'locate' }, 10000))?.data?.shot;
   } catch {
     return undefined;
   }
@@ -261,15 +304,59 @@ async function trustedComputerInner(a, st) {
   // Resolve where the action lands: frame-local CSS pixels + the frame's BiDi context
   // (Firefox routes BiDi pointer input into out-of-process iframes only via their own context).
   const locate = async (key = 'coordinate') => {
-    const p = (await helper.call('_point', { tabId: a.tabId, ref: key === 'coordinate' ? a.ref : undefined, coordinate: a[key] }))?.data;
+    const p = (await helper.call('_point', { tabId: a.tabId, ref: key === 'coordinate' ? a.ref : undefined, coordinate: a[key], action: a.action, action_summary: a.action_summary }))?.data;
     if (!p)
       return null;
     p.context = p.frameId ? await bidi.contextFor(a.tabId, helper, p.frameId) : top;
     return p;
   };
+  // Read before the extension checks the site (_point/_focus), so a navigation during that check is caught too.
   const beforeUrl = await bidi.currentUrl(top).catch(() => undefined);
   const where = (p) => p.target || `at (${a.coordinate?.join(', ')})`;
+
+  // ----- the input stays on the site the extension approved for this action -----
+  // A BiDi context outlives navigations: Enter may submit a form that redirects elsewhere, and the
+  // rest of the text would land in whatever the next page focuses. So before every chunk of input
+  // (and after an Enter, once the navigation it may start has had a moment to begin), check that
+  // each context still shows the origin it had when the extension approved the action.
+  const approved = new Map(); // context -> origin
+  const progress = {};
+  let mark = 0;
+  const bind = async (ctx) => {
+    if (approved.has(ctx))
+      return;
+    const url = await bidi.currentUrl(ctx).catch(() => undefined);
+    if (ctx === top && beforeUrl !== undefined && originOfUrl(url) !== originOfUrl(beforeUrl))
+      throw moved(originOfUrl(url), originOfUrl(beforeUrl));
+    approved.set(ctx, originOfUrl(url));
+  };
+  const VERB = { left_click: 'clicking', right_click: 'right-clicking', double_click: 'double-clicking', triple_click: 'triple-clicking', type: 'typing', key: 'pressing keys', scroll: 'scrolling', left_click_drag: 'dragging', hover: 'hovering' };
+  function moved(now, was) {
+    const done = progress.total === undefined ? ''
+      : a.action === 'type' ? ` after ${progress.sent} of ${progress.total} characters` : ` after ${progress.sent} of ${progress.total} key presses`;
+    const what = !st.dispatched || progress.sent === 0 ? 'Nothing was sent.' : a.action === 'type' ? 'The rest of the text was not typed.' : a.action === 'key' ? 'The remaining keys were not pressed.' : '';
+    return Object.assign(new Error(`Stopped ${VERB[a.action] || a.action}${done}: ${now ? `the tab now shows ${now}` : 'the page was replaced'}, not ${was}, the site this action was approved for (the page navigated, e.g. Enter submitted a form). ${what} Check the page (read_page or a screenshot) before continuing.`), { fromHelper: true });
+  }
+  const guard = async ({ afterEnter = false } = {}) => {
+    checkStop();
+    const ctxs = [...approved.keys()];
+    if (afterEnter)
+      await bidi.navigatedSince(ctxs, mark);
+    // A navigation under way: wait for its new document (its URL is what counts). One that never
+    // finishes (a download, a 204) only costs this wait; the URL check below still applies.
+    await bidi.waitSettled(ctxs, 3000);
+    checkStop();
+    for (const [ctx, origin] of approved) {
+      const now = originOfUrl(await bidi.currentUrl(ctx).catch(() => undefined));
+      if (now !== origin)
+        throw moved(now, origin);
+    }
+    mark = bidi.navMark(ctxs);
+  };
+
   let summary;
+  let landedElsewhere = false;
+  const afterCalls = [];
   switch (a.action) {
     case 'left_click':
     case 'right_click':
@@ -279,8 +366,27 @@ async function trustedComputerInner(a, st) {
       if (!p)
         return null;
       const count = a.action === 'double_click' ? 2 : a.action === 'triple_click' ? 3 : 1;
+      // Watch what the real click lands on (an overlay or a moving element can take it).
+      const frameId = p.frameId || 0;
+      const arming = helper.call('_click_arm', { tabId: a.tabId, frameId }, 5000).then(r => !!r?.data, () => false);
+      // The site check last, right before the click (one URL read per context).
+      const armed = await arming;
+      await bind(top);
+      await bind(p.context);
       await send(() => bidi.click(p.context, p.x, p.y, { button: a.action === 'right_click' ? 2 : 0, count, modifiers: a.modifiers }));
-      summary = `${{ left_click: 'Clicked', right_click: 'Right-clicked', double_click: 'Double-clicked', triple_click: 'Triple-clicked' }[a.action]} ${where(p)}.`;
+      const verb = { left_click: 'Clicked', right_click: 'Right-clicked', double_click: 'Double-clicked', triple_click: 'Triple-clicked' }[a.action];
+      summary = `${verb} ${where(p)}.`;
+      if (armed) {
+        afterCalls.push(helper.call('_click_check', { tabId: a.tabId, frameId }, 5000).then((r) => {
+          const hit = r?.data?.hit;
+          const under = Array.isArray(r?.data?.under) ? r.data.under : [];
+          // p.partOf: another part of the same small control sits on top of the target there (see refPoint).
+          if (Array.isArray(hit) && hit.length && p.target && ![...hit, ...under].some(d => sameElement(d, p.target) || (p.partOf && sameElement(d, p.partOf)))) {
+            landedElsewhere = true;
+            summary = `${verb} at ${where(p)}, but the click landed on ${hit[0]} instead (something covered or moved the element). The click did happen: check the page (screenshot or read_page) before retrying.`;
+          }
+        }, () => {}));
+      }
       break;
     }
     case 'hover': {
@@ -294,15 +400,17 @@ async function trustedComputerInner(a, st) {
     case 'type':
     case 'key': {
       // Keyboard input must go to the (possibly out-of-process) frame that has focus.
-      const f = (await helper.call('_focus', { tabId: a.tabId }))?.data || { frameId: 0 };
+      const f = (await helper.call('_focus', { tabId: a.tabId, action: a.action, text: a.text, repeat: a.repeat, action_summary: a.action_summary, forType: a.action === 'type' }))?.data || { frameId: 0 };
       const ctx = f.frameId ? await bidi.contextFor(a.tabId, helper, f.frameId) : top;
+      await bind(top);
+      await bind(ctx);
       if (a.action === 'type') {
-        await send(() => bidi.type(ctx, a.text ?? '', checkStop));
+        await send(() => bidi.type(ctx, a.text ?? '', guard, progress));
         summary = f.editable === false
           ? `Sent ${(a.text ?? '').length} key presses, but no text field was focused (focus is on ${f.target || 'the page'}), so nothing was typed into a field. Click the field first, then type.`
-          : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.`;
+          : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.${f.waited >= 0 ? ` (Waited ${f.waited} ms for focus to move into it first.)` : ''}`;
       } else {
-        await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1)), checkStop));
+        await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1)), guard, progress));
         summary = `Pressed ${a.text}${a.repeat > 1 ? ` x${a.repeat}` : ''} (focus was on ${f.target || 'the page'}).`;
       }
       break;
@@ -313,9 +421,11 @@ async function trustedComputerInner(a, st) {
       const p = await locate();
       if (!p)
         return null;
+      await bind(top);
+      await bind(p.context);
       const px = Math.max(1, Math.min(30, a.scroll_amount ?? 3)) * 100;
       const dir = a.scroll_direction || 'down';
-      await send(() => bidi.scroll(p.context, p.x, p.y, dir === 'left' ? -px : dir === 'right' ? px : 0, dir === 'up' ? -px : dir === 'down' ? px : 0));
+      await send(() => bidi.scroll(p.context, p.x, p.y, dir === 'left' ? -px : dir === 'right' ? px : 0, dir === 'up' ? -px : dir === 'down' ? px : 0, guard));
       summary = `Scrolled ${dir}.`;
       break;
     }
@@ -327,7 +437,9 @@ async function trustedComputerInner(a, st) {
       // HTML5 drag-and-drop and cross-frame drags work better with the extension's emulation.
       if (!s || !e || s.draggable || s.frameId !== e.frameId)
         return null;
-      await send(() => bidi.drag(s.context, s.x, s.y, e.x, e.y));
+      await bind(top);
+      await bind(s.context);
+      await send(() => bidi.drag(s.context, s.x, s.y, e.x, e.y, guard));
       summary = `Dragged from ${s.target} to ${e.target}.`;
       break;
     }
@@ -336,10 +448,36 @@ async function trustedComputerInner(a, st) {
   }
   // Stop pressed while the input was being delivered: don't report success for it.
   checkStop();
-  const after = await helper.call('_after', { tabId: a.tabId, beforeUrl, t0: st.t0 }).catch(() => null);
+  const [after] = await Promise.all([helper.call('_after', { tabId: a.tabId, beforeUrl, t0: st.t0 }).catch(() => null), ...afterCalls]);
   checkStop();
   const notes = after?.data || [];
-  return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }] };
+  return { content: [{ type: 'text', text: [summary + ' (trusted input via WebDriver BiDi)', ...notes].join('\n') }], ...(landedElsewhere ? { isError: true } : {}) };
+}
+
+/** Origin of a URL for comparisons ("about:blank" etc. for documents without one). */
+function originOfUrl(u) {
+  if (!u)
+    return '';
+  try {
+    const o = new URL(u).origin;
+    return o && o !== 'null' ? o : String(u).split(/[?#]/)[0];
+  } catch {
+    return String(u);
+  }
+}
+
+/**
+ * Whether two element descriptions (the extension's `<tag#id role=x> "label"`) name the same
+ * element. Form fields compare without the label: it shows the value, which a click may change.
+ */
+export function sameElement(a, b) {
+  if (a === b)
+    return true;
+  const re = /^<([^>]*)>(?: "([\s\S]*)")?$/;
+  const pa = re.exec(String(a)), pb = re.exec(String(b));
+  if (!pa || !pb || pa[1] !== pb[1])
+    return false;
+  return /^(input|textarea|select)\b/.test(pa[1]) || (pa[2] || '') === (pb[2] || '');
 }
 
 // ---------- one action at a time per tab ----------
@@ -397,6 +535,7 @@ async function versionWarning() {
 export async function runMcp() {
   const server = new McpServer({ name: 'foxwright', version: VERSION }, { instructions: INSTRUCTIONS });
   const handlers = {};
+  const registered = {}; // name -> the SDK's RegisteredTool (enable/disable)
   const register = server.registerTool.bind(server);
   // Each tool's arguments go through the same parsing whether the tool is called directly or as
   // a browser_batch step. `aliases` ({wrongName: rightName}) are accepted but not advertised,
@@ -414,12 +553,15 @@ export async function runMcp() {
       const p = obj.safeParse(a);
       if (!p.success)
         return errorResult(`Invalid arguments for ${name}: ${p.error.issues.map(i => `${i.path.join('.') || '(args)'}: ${i.message}`).join('; ')}`);
-      if (UNSERIALIZED.has(name))
-        return fn(p.data);
-      return serialized(p.data.tabId ?? 'default', () => fn(p.data));
+      const r = UNSERIALIZED.has(name) ? await fn(p.data) : await serialized(p.data.tabId ?? 'default', () => fn(p.data));
+      const note = sessionBusyNote();
+      if (note && Array.isArray(r?.content))
+        r.content.push({ type: 'text', text: note });
+      return r;
     };
     handlers[name] = run;
-    return register(name, { ...rest, inputSchema: Object.keys(aliases).length ? z.looseObject(inputSchema) : obj }, run);
+    registered[name] = register(name, { ...rest, inputSchema: Object.keys(aliases).length ? z.looseObject(inputSchema) : obj }, run);
+    return registered[name];
   };
 
   server.registerTool('tabs_context_mcp', {
@@ -436,6 +578,8 @@ export async function runMcp() {
         // A refused connection just means remote debugging is off; anything else means Firefox (or
         // something) answered on the port but real input couldn't start, which is worth saying.
         const why = !trusted && bidi.lastError && !/ECONNREFUSED/.test(bidi.lastError) ? ` Something answered on port ${port}, but real input couldn't start: ${bidi.lastError}.${/Maximum number of active sessions/i.test(bidi.lastError) ? ' Firefox allows one remote-control session and something still holds it (often a Foxwright MCP server that was force-quit). Restarting Firefox frees it.' : ''}` : '';
+        if (/Maximum number of active sessions/i.test(why))
+          toldSessionBusy = true;
         r.content.push({ type: 'text', text: trusted ? 'Input mode: trusted (Firefox remote-debugging/WebDriver BiDi is active, so clicks and keys are real).' : `Input mode: synthetic DOM events (start Firefox with --remote-debugging-port=${port} for real, trusted input).${why}` });
       }
       const warn = await versionWarning();
@@ -459,9 +603,11 @@ export async function runMcp() {
   const inUse = (e) => (helper.browserId ? helper.browserId === e.browserId : !helper.path && e.primary);
   const useBrowser = (e) => {
     helper.use({ browserId: e.browserId, browserName: e.name });
+    bidi.contexts.clear(); // tab ids restart per profile: contexts found in the old one must not be reused
     knownBrowser = { browserId: e.browserId, name: e.name };
     lastTab = null;
     lastReportedMode = null;
+    helper.connect().catch(() => {}); // learn the new browser's extension build (javascript_tool)
   };
 
   server.registerTool('list_connected_browsers', {
@@ -532,7 +678,7 @@ export async function runMcp() {
   });
 
   server.registerTool('read_page', {
-    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary.',
+    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary. On long tasks pass diff: true to get only what changed since your previous read_page of the tab (refs stay valid).',
     inputSchema: {
       tabId,
       filter: z.enum(['all', 'interactive']).optional().describe('"interactive" lists only elements with refs (buttons, links, inputs...). Default "all".'),
@@ -540,28 +686,33 @@ export async function runMcp() {
       ref_id: z.string().optional().describe('Only return the subtree under this ref (or, for an iframe ref, the frame\'s content).'),
       visible_only: z.boolean().optional().describe('Only include what is currently on screen (much smaller on long pages; scroll to see more).'),
       max_chars: numish(z.number().positive()).optional().describe('Maximum characters to return (default 20000).'),
+      diff: z.boolean().optional().describe('Only return lines added, removed or changed since your previous read_page of this tab with the same options, with their parent lines for context. Falls back to the full outline after a navigation or when there is nothing to compare with.'),
+      wait_for: z.string().optional().describe('Wait until this text is on the page, or an element like \'dialog\' or \'button "Save"\' (role and name as the outline prints them) exists, then read. Up to timeout.'),
+      timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },
-  }, async (a) => call('read_page', a));
+  }, async (a) => call('read_page', a, a.wait_for ? 60000 : undefined));
 
   server.registerTool('find', {
-    description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates.',
+    description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates; also says when a match is inside a collapsed section that must be expanded first. With wait_for it first waits for something to appear (e.g. a dialog that opens after a click).',
     inputSchema: {
       query: z.string().optional().describe('What to look for.'),
       tabId,
+      wait_for: z.string().optional().describe('First wait until this text is on the page, or an element like \'dialog\' or \'searchbox "Search"\' (role and name as read_page prints them) exists. Up to timeout.'),
+      timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },
     aliases: { text: 'query', description: 'query' },
   }, async (a) => {
     const query = a.query;
     if (!query)
       return errorResult('find needs a query, e.g. {"query": "search box"}.');
-    return call('find', { tabId: a.tabId, query });
+    return call('find', { tabId: a.tabId, query, wait_for: a.wait_for, timeout: a.timeout }, a.wait_for ? 60000 : undefined);
   });
 
   server.registerTool('form_input', {
-    description: 'Set the value of a form control by ref: text fields and textareas (replaces content), <select> (option value or visible text), checkboxes/radios/switches (true/false), date/time/color/range inputs, and contenteditable editors. Fires the input/change events frameworks like React expect.',
+    description: 'Set the value of a form control by ref: text fields and textareas (replaces content), <select> (option value or visible text; for <select multiple> an array of options), checkboxes/radios/switches (true/false), date/time/color/range inputs, and contenteditable rich-text editors (replaces their content; lines become paragraphs). Fires the input/change events frameworks like React expect.',
     inputSchema: {
       ref: z.string().describe('Element ref from read_page or find, e.g. "e12".'),
-      value: z.union([z.string(), z.boolean(), z.number()]).describe('The value to set.'),
+      value: z.union([z.string(), z.boolean(), z.number(), z.array(z.string())]).describe('The value to set (an array of options for a multi-select).'),
       tabId,
       action_summary: actionSummary,
     },
@@ -583,15 +734,19 @@ Actions:
 * scroll_to: scroll ref into view.
 * left_click_drag: drag from start_coordinate to coordinate.
 * zoom: screenshot a region [x0, y0, x1, y1] at higher detail.
-* wait: wait duration seconds (max 10).`,
+* wait: wait until something happens instead of a fixed time: text (appears on the page), text_gone, ref_gone (element removed or hidden) or until: "idle" (no DOM changes or fetch/XHR for 300 ms), up to timeout seconds (default 5, max 30). Returns how long it took, or an error with what's on screen. Without these, waits duration seconds (max 10).`,
     inputSchema: {
       action: z.enum(['left_click', 'right_click', 'double_click', 'triple_click', 'type', 'screenshot', 'wait', 'scroll', 'key', 'left_click_drag', 'zoom', 'scroll_to', 'hover']),
       tabId,
       coordinate: coord.optional().describe('[x, y] in screenshot pixels.'),
       ref: z.string().optional().describe('Element ref from read_page/find; alternative to coordinate for clicks, hover, scroll, scroll_to.'),
-      text: z.string().optional().describe('Text for "type", or keys for "key".'),
+      text: z.string().optional().describe('Text for "type", keys for "key", or for "wait" the text to wait for.'),
       modifiers: z.string().optional().describe('Modifier keys for clicks, e.g. "ctrl", "shift", "cmd+shift".'),
-      duration: numish(z.number()).optional().describe('Seconds, for "wait" (max 10).'),
+      duration: numish(z.number()).optional().describe('Seconds, for a plain "wait" (max 10).'),
+      text_gone: z.string().optional().describe('For "wait": wait until this text is no longer on the page.'),
+      ref_gone: z.string().optional().describe('For "wait": wait until this element is removed or hidden (e.g. a spinner or a closing dialog).'),
+      until: z.enum(['idle']).optional().describe('For "wait": "idle" waits until the page stops changing (no DOM mutations and no fetch/XHR in flight for 300 ms).'),
+      timeout: numish(z.number()).optional().describe('For "wait" with text/text_gone/ref_gone/until: seconds to wait at most (default 5, max 30).'),
       scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional(),
       scroll_amount: numish(z.number()).optional().describe('Wheel ticks, 1-30 (default 3).'),
       start_coordinate: coord.optional().describe('Drag start [x, y].'),
@@ -616,7 +771,7 @@ Actions:
     } catch (e) {
       return errorResult(e);
     }
-    const r = await call('computer', a, a.action === 'wait' ? 20000 : 180000);
+    const r = await call('computer', a, a.action === 'wait' ? 50000 : 180000);
     if (!r.isError && ['screenshot', 'zoom'].includes(a.action))
       keepShot(r, a.tabId);
     if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
@@ -625,7 +780,7 @@ Actions:
   });
 
   server.registerTool('get_page_text', {
-    description: 'Return the readable text of the page, preferring the main article/content area. Long pages come in pages of max_chars (default 20000); pass query to get only the passages about something (e.g. "conservation status"), which is much cheaper than reading everything.',
+    description: 'Return the readable text of the page, preferring the main article/content area. Long pages come in pages of max_chars (default 20000); pass query to get only the passages about something (e.g. "conservation status"), which is much cheaper than reading everything. Also reads PDFs open in Firefox\'s PDF viewer (text PDFs; not scans or encrypted ones) and plain-text pages.',
     inputSchema: {
       tabId,
       query: z.string().optional().describe('Only return paragraphs mentioning these words.'),
@@ -635,13 +790,14 @@ Actions:
   }, async (a) => call('get_page_text', a));
 
   server.registerTool('javascript_tool', {
-    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Only available in the self-distributed "Foxwright (Full)" build, and pages with a strict Content-Security-Policy may block it.',
+    description: 'Run JavaScript in the page (its own JS context, with access to page variables and the DOM). The last expression\'s value is returned (top-level await works). Gives up after timeout seconds (default 10); a script stuck in a loop keeps the tab unresponsive until it is navigated or closed. Only available in the self-distributed "Foxwright (Full)" build, and pages with a strict Content-Security-Policy may block it.',
     inputSchema: {
       action: z.literal('javascript_exec').optional(),
       text: z.string().describe('The JavaScript to run.'),
       tabId,
+      timeout: numish(z.number()).optional().describe('Seconds to wait for the script (default 10, max 60).'),
     },
-  }, async (a) => call('javascript_tool', a));
+  }, async (a) => call('javascript_tool', a, (Math.min(60, Math.max(1, Number(a.timeout) > 1000 ? Number(a.timeout) / 1000 : Number(a.timeout) || 10)) + 30) * 1000));
 
   server.registerTool('handle_dialog', {
     description: 'While you work in a tab, JavaScript alert/confirm/prompt dialogs don\'t block it: alerts are dismissed, confirms answered Cancel and prompts cancelled, and the tool result tells you what the page asked. Call this BEFORE an action to answer the next dialog in that tab differently (e.g. accept a "Are you sure?" confirm, or type into a prompt).',
@@ -690,8 +846,7 @@ Actions:
   }, async (a) => {
     try {
       let total = 0;
-      const files = [];
-      const shown = [];
+      const checked = [];
       const list = typeof a.paths === 'string' ? [a.paths] : a.paths;
       if (!Array.isArray(list) || !list.length)
         return errorResult('file_upload needs paths: ["/absolute/path/to/file"].');
@@ -710,11 +865,35 @@ Actions:
         total += st.size;
         if (total > 25 * 1024 * 1024)
           throw new Error('Files larger than 25 MB in total are not supported.');
-        const buf = await fs.readFile(abs);
-        shown.push(`${abs} (${buf.length < 1024 ? `${buf.length} bytes` : `${Math.round(buf.length / 1024)} KB`})`);
-        files.push({ name: path.basename(abs), type: mimeFor(abs), base64: buf.toString('base64') });
+        checked.push({ p, abs, st, shown: `${abs} (${st.size < 1024 ? `${st.size} bytes` : `${Math.round(st.size / 1024)} KB`})` });
       }
-      return call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files, paths: shown }, 180000);
+      const shown = checked.map(c => c.shown);
+      /** Read the files the user approved: the same files (path, inode, size) as shown to them. */
+      const readApproved = async () => {
+        const files = [];
+        for (const c of checked) {
+          const abs = await fs.realpath(path.resolve(c.p));
+          const st = await fs.stat(abs);
+          if (abs !== c.abs || st.ino !== c.st.ino || st.dev !== c.st.dev || st.size !== c.st.size || !st.isFile())
+            throw new Error(`${c.abs} changed after the user approved the upload (or now points elsewhere). Nothing was uploaded; call file_upload again.`);
+          const buf = await fs.readFile(abs);
+          if (buf.length !== c.st.size)
+            throw new Error(`${c.abs} changed while it was being read. Nothing was uploaded; call file_upload again.`);
+          files.push({ name: path.basename(abs), type: mimeFor(abs), base64: buf.toString('base64') });
+        }
+        return files;
+      };
+      // The user sees the paths first, and only then are the files read and sent to Firefox.
+      let token;
+      try {
+        token = (await helper.call('_upload_ask', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, paths: shown }, 180000))?.data?.token;
+      } catch (e) {
+        // An extension from before 0.8 asks the user inside file_upload, which carries the contents.
+        if (/Unknown tool/.test(String(e?.message)))
+          return call('file_upload', { tabId: a.tabId, ref: a.ref, coordinate: a.coordinate, files: await readApproved(), paths: shown }, 180000);
+        throw e;
+      }
+      return call('_upload_send', { tabId: a.tabId, token, files: await readApproved() }, 60000);
     } catch (e) {
       return errorResult(e);
     }
@@ -857,6 +1036,29 @@ Actions:
       content.push(image);
     return { content };
   });
+
+  // javascript_tool: hidden until a full-build extension is known to be connected (see onExtensionBuild).
+  const jsTool = registered.javascript_tool;
+  const applyBuild = (full) => (full ? jsTool.enable() : jsTool.disable()); // each sends tools/list_changed once connected
+  if (fullBuild !== true)
+    jsTool.disable();
+  onBuildChange = applyBuild;
+  // Called anyway while hidden (an agent that cached the list): keep the clear refusal, not the SDK's bare "disabled".
+  const callHandlers = server.server._requestHandlers;
+  const sdkCall = callHandlers?.get?.('tools/call');
+  if (sdkCall) {
+    callHandlers.set('tools/call', async (request, extra) => {
+      if (request?.params?.name === 'javascript_tool' && !jsTool.enabled) {
+        if (fullBuild === null) // Firefox may have connected since: ask once more
+          await refreshBuild();
+        if (!jsTool.enabled)
+          return { content: [{ type: 'text', text: `Error: ${jsUnavailable()}` }], isError: true };
+      }
+      return sdkCall(request, extra);
+    });
+  }
+  // So the first tools/list is right when Firefox is already running: give the helper a moment.
+  await Promise.race([refreshBuild(), new Promise(r => setTimeout(r, 1500))]);
 
   const transport = new StdioServerTransport();
   // The SDK doesn't notice stdin closing, and the open helper/BiDi sockets would keep this

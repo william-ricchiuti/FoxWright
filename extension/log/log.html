@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foxwright activity</title>
+  <link rel="stylesheet" href="../welcome/page.css">
+  <link rel="stylesheet" href="log.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="hanko" aria-hidden="true">狐</div>
+    <div>
+      <h1>Activity</h1>
+      <p class="sub">What the agent did and what you decided, newest first.</p>
+    </div>
+  </header>
+
+  <section class="card" aria-label="Log controls">
+    <div class="row controls">
+      <label for="site">Site</label>
+      <select id="site"><option value="">All sites</option></select>
+      <span class="spacer"></span>
+      <button id="export" type="button">Export as JSON</button>
+      <button id="clear" type="button" class="danger">Clear log</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="enabled"> <span>Keep this log on this computer (the last 500 entries)</span></label>
+    <p class="fine" id="off-note" hidden>The log is off: new activity isn't saved. The toolbar popup still shows the last few actions until Firefox closes.</p>
+    <p class="fine">Foxwright saves the time, the site (not the full address), the tab, a short description and the outcome. It never saves what was typed, page content or passwords. Descriptions in quotes are the agent's own words.</p>
+  </section>
+
+  <p id="count" class="fine" role="status" aria-live="polite"></p>
+  <ol id="log" aria-label="Activity entries"></ol>
+  <p id="empty" class="card fine" hidden>Nothing logged yet.</p>
+
+  <footer><a href="../welcome/welcome.html" id="open-help">Setup help</a></footer>
+</main>
+<script src="log.js"></script>
+</body>
+</html>
