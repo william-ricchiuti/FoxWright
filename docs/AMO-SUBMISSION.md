@@ -36,6 +36,30 @@ Build: scripts are bundled with esbuild. The source zip has BUILDING.txt with ex
 To test: npx foxwright-firefox setup (or from the source zip: npm ci --prefix host && npm run build --prefix host && node host/dist/foxwright.mjs setup), connect an MCP client (claude mcp add foxwright -- node ~/.foxwright/app/foxwright.mjs mcp) and ask it to read a page. Foxwright's permission window appears the first time the agent opens a site. test/e2e-safety.mjs covers the permission window and pause controls.
 ```
 
+### 0.8.0 reviewer notes (ready to paste)
+
+```text
+New in 0.8.0: first-run setup help, an on-device activity log, read-only and one-hour site approvals, optional confirmation before sending/buying/deleting, stronger Stop and real-input checks, conditional waits, incremental page reads, and PDF text extraction. Update the helper to 0.8.0, rerun setup, and restart Firefox and the AI client: the helper/MCP connection now uses an authenticated, encrypted handshake.
+
+Foxwright lets a user-installed local AI agent operate tabs in a dedicated Foxwright tab group. Page content travels through runtime.connectNative('foxwright') to the helper the user installs (npx foxwright-firefox@0.8.0 setup; source in host/). The extension does nothing until the helper is installed and an agent connects.
+
+Permissions:
+- nativeMessaging: communicates with the local helper.
+- <all_urls> and scripting: inject packaged scripts into agent tabs only after site approval in an extension-owned window.
+- tabs/tabGroups: restrict agent access to its tab group.
+- webNavigation: frame-origin checks and page-load detection.
+- webRequest: observes request URLs/status for agent tabs.
+- storage: approvals, settings and local activity metadata. alarms: reconnects the helper.
+
+This listed build cannot execute agent-supplied JavaScript strings; javascript_tool is compiled out. All injected code is packaged: content.js provides page outlines/input; hooks.js captures console messages and handles dialogs while the agent works; page-hooks.js emulates pointer capture only during the extension's own gestures.
+
+Password field values are masked. The activity log is local, limited to 500 entries, can be disabled or cleared, and excludes typed text, form values, page content, filenames and full URLs. Read-only approvals prohibit clicking, typing, form filling, uploads and script execution unless the user approves an upgrade. Stop interrupts agent activity. Private tabs are refused.
+
+Vendored Playwright accessibility code is Apache-2.0; modifications and third-party licences are documented in NOTICE and THIRD-PARTY-NOTICES.txt. Scripts are bundled with esbuild. The source ZIP contains BUILDING.txt with rebuild instructions.
+
+To test from the source ZIP: npm ci --prefix host && npm run build --prefix host && node host/dist/foxwright.mjs setup. Connect an MCP client (claude mcp add foxwright -- node ~/.foxwright/app/foxwright.mjs mcp) and ask it to read a page. Approve the site when prompted. The toolbar opens setup help, approvals and the activity log. Safety and permission suites are in test/.
+```
+
 ### Version notes ("release notes" shown to users)
 
 Write them from the CHANGELOG section, in user terms, for the add-on only (not the helper). 0.4.2's:
