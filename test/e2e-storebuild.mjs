@@ -116,7 +116,7 @@ await test('typing: click + type into a field and multi-line text into a textare
 await test('keys: ctrl+a Backspace clears, Tab moves focus, Enter submits', async () => {
   const { ref } = await refFor('Full name', 'textbox');
   await call('computer', { action: 'left_click', ref });
-  await call('computer', { action: 'key', text: 'ctrl+a Backspace' });
+  await call('computer', { action: 'key', text: `${process.platform === 'darwin' ? 'cmd' : 'ctrl'}+a Backspace` });
   expect(await page('document.getElementById("name").value') === '', 'field not cleared');
   await call('computer', { action: 'type', text: 'Ada' });
   await call('computer', { action: 'key', text: 'Tab' });

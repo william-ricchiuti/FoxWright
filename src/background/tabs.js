@@ -76,9 +76,26 @@ export async function groupTabs() {
   }
   const all = await browser.tabs.query({});
   const tabs = all.filter(t => t.groupId === gid && !t.incognito);
+  // Firefox can leave a tab that was just created or moved between windows out of tabs.query()
+  // for a moment, although the tab itself already reports the group. Ask such tabs directly.
+  const now = Date.now();
+  for (const [id, at] of recentlyGrouped) {
+    if (now - at > 15000) {
+      recentlyGrouped.delete(id);
+      continue;
+    }
+    if (tabs.some(t => t.id === id))
+      continue;
+    const t = await browser.tabs.get(id).catch(() => null);
+    if (t && t.groupId === gid && !t.incognito)
+      tabs.push(t);
+  }
   state.groupTabIds = new Set(tabs.map(t => t.id));
   return tabs;
 }
+
+const recentlyGrouped = new Map(); // tabId -> when Foxwright added it to the group
+
 
 let groupLock = Promise.resolve();
 export function addToGroup(tabId) {
@@ -109,6 +126,7 @@ async function addToGroupNow(tabId) {
     await saveSettings();
   }
   state.groupTabIds.add(tabId);
+  recentlyGrouped.set(tabId, Date.now());
 }
 
 export async function createAgentTab(url = 'about:blank', active = true) {

@@ -70,7 +70,9 @@ async function main() {
 
   await test('tabs_context_mcp creates the Foxwright group', async () => {
     const r = await h.call('tabs_context_mcp', { createIfEmpty: true });
-    tabId = parseInt(/tabId (\d+)/.exec(r.text)[1], 10);
+    const m = /tabId (\d+)/.exec(r.text);
+    expect(m, 'no tab in the result: ' + r.text);
+    tabId = parseInt(m[1], 10);
     expect(tabId > 0, r.text);
     if (TRUSTED && !r.text.includes('Input mode: trusted')) {
       // Say why, so a CI failure shows whether Firefox ever opened its debugging port.
@@ -177,7 +179,7 @@ async function main() {
   await test('ctrl+a Backspace clears a field', async () => {
     const { ref } = await refFor('Full name', 'textbox');
     await call('computer', { action: 'left_click', ref });
-    await call('computer', { action: 'key', text: 'ctrl+a Backspace' });
+    await call('computer', { action: 'key', text: `${process.platform === 'darwin' ? 'cmd' : 'ctrl'}+a Backspace` });
     const v = await js('JSON.stringify(document.getElementById("name").value)');
     expect(v.includes('""'), v);
   });
