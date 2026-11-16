@@ -21,7 +21,7 @@ body:
   - type: input
     id: versions
     attributes:
-      label: Foxwright version (toolbar popup) and the output of `npx foxwright-firefox doctor` (it shows the installed helper's version)
+      label: Foxwright version (toolbar popup)
     validations:
       required: true
   - type: input
@@ -49,5 +49,6 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `npx foxwright-firefox doctor`
+      label: Shareable doctor output
+      description: The toolbar popup can prefill this field. You can also run `npx foxwright-firefox@latest doctor --share`.
       render: text

@@ -149,6 +149,23 @@ $('help').addEventListener('click', () => openPage('welcome'));
 $('footer-help').addEventListener('click', () => openPage('welcome'));
 $('open-log').addEventListener('click', () => openPage('log'));
 $('footer-log').addEventListener('click', () => openPage('log'));
+const reportLink = $('report-problem');
+reportLink.addEventListener('click', async (event) => {
+  event.preventDefault();
+  if (reportLink.getAttribute('aria-busy') === 'true')
+    return;
+  reportLink.setAttribute('aria-busy', 'true');
+  reportLink.textContent = 'Preparing report…';
+  try {
+    await browser.runtime.sendMessage({ kind: 'report-problem' });
+  } catch {
+    await browser.tabs.create({ url: reportLink.href });
+  } finally {
+    reportLink.removeAttribute('aria-busy');
+    reportLink.textContent = 'Report a problem';
+  }
+  window.close();
+});
 for (const r of document.querySelectorAll('input[name=mode]'))
   r.addEventListener('change', () => act({ kind: 'setMode', mode: r.value }));
 $('confirm-actions').addEventListener('change', () => act({ kind: 'setConfirmActions', on: $('confirm-actions').checked }));
