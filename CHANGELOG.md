@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2026-11-15)
 
 **Upgrading.** The MCP server and the helper now check each other with a key and encrypt what they exchange, so both must be on this version. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client. A helper and an MCP server from different sides of this release refuse to talk and say which one to update.
 
@@ -45,14 +45,14 @@
 - `find` says when a match is inside a collapsed section and which control expands it. `form_input` handles `<select multiple>` and rich-text editors. Emoji, right-to-left and CJK text type correctly in the default input mode.
 
 **Tests**
-- CI runs the seven gap suites on Firefox latest and 152, the store build in depth in both input modes, the signed store file when its version matches, and Node 20. New non-blocking jobs: a Windows smoke test, macOS, and Snap and Flatpak probes. These four have not run yet.
+- CI runs the seven gap suites on Firefox latest and 152, the store build in depth in both input modes, the signed store file when its version matches, and Node 20. The non-blocking Windows smoke and macOS e2e jobs passed on the release candidate. Snap and Flatpak probes completed but did not establish a helper connection on the headless runners.
 - One test harness instead of two. It stops the test Firefox from updating itself, times out a hung suite with a diagnostic dump, and can read page state without `javascript_tool`, so the main suite runs on the store build.
 - `scripts/mac-test.sh` reports failures instead of always succeeding.
 - New suites: `e2e-storebuild`, `e2e-onboarding`, `e2e-permission-modes`, `e2e-smoke`, `setup-doctor`, `socket-auth`, `mcp-offline`, `pdf-text`.
 
 **Known limits**
 - A page whose login form submits with GET puts the password in a URL, which `read_network_requests` shows.
-- Windows, Snap and Flatpak have still not been run end to end.
+- Windows smoke and synthetic e2e passed in CI; Windows real-input mode remains unverified. Snap and Flatpak need testing on a real desktop with a portal.
 - PDFs: text comes in drawing order; fonts without a Unicode map can't be read.
 
 ## 0.7.1 (2026-11-13)
