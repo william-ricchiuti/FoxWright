@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Read-only inventory</title>
+<h1>Warehouse inventory</h1><p id="stock"></p><p id="code"></p><button onclick="inventory.changes++; inventory.stock++; render()">Add stock</button>
+<script>
+window.inventory = {stock: 17, code: 'AUDIT-' + crypto.randomUUID().slice(0,8), changes: 0};
+function render() { document.getElementById('stock').textContent = 'Stock count: ' + inventory.stock; document.getElementById('code').textContent = 'Audit code: ' + inventory.code; } render();
+</script></html>

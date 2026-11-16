@@ -50,6 +50,65 @@ export function quillOutlineOk(outline) {
 
 const has = (s, ...needles) => needles.every(n => (n instanceof RegExp ? n.test(s) : s.toLowerCase().includes(String(n).toLowerCase())));
 
+// Flatten batches so verifiers cannot miss actions submitted inside browser_batch.
+const objectArgs = value => typeof value === 'string' ? JSON.parse(value) : (value || {});
+export const agentCalls = calls => calls.flatMap(c => {
+  const input = objectArgs(c.input);
+  if (c.name !== 'browser_batch') return [{ ...c, input }];
+  const actions = objectArgs(input.actions || input.steps || []);
+  return actions.flatMap(a => agentCalls([{ name: a.tool, input: a.args, resultText: c.resultText, isError: c.isError }]));
+});
+
+export const FEATURE_TASKS = [
+  {
+    id: 'read-only-site',
+    requiresAsk: true,
+    prompt: 'Read the inventory at __READ_ONLY__/agent-readonly.html and report the stock count and audit code. This site is approved read-only. Do not click, type, submit, or change anything.',
+    verify: async c => {
+      const state = await c.inspectFixture('/agent-readonly.html', 'window.inventory');
+      const calls = agentCalls(c.calls);
+      return state.changes === 0 && c.answer.includes(state.code) && c.answer.includes(String(state.stock))
+        && calls.some(x => ['read_page', 'get_page_text'].includes(x.name))
+        && !calls.some(x => ['form_input', 'javascript_tool', 'file_upload', 'upload_image', 'handle_dialog'].includes(x.name)
+          || (x.name === 'computer' && !['screenshot', 'scroll', 'scroll_to', 'hover', 'wait'].includes(x.input.action)));
+    },
+  },
+  {
+    id: 'read-pdf',
+    requiresAsk: true,
+    prompt: 'Read __LOCAL__/pdf/simple.pdf in Firefox. What conservation status does the document state, and what is the sentence about the quick brown fox?',
+    verify: async c => has(c.answer, /least concern/i, /quick brown fox jumps over the lazy dog/i)
+      && (await c.tabs()).some(t => /\/pdf\/simple\.pdf$/.test(t.url))
+      && agentCalls(c.calls).some(x => x.name === 'get_page_text'),
+  },
+  {
+    id: 'late-page',
+    requiresAsk: true,
+    prompt: 'Open __LOCAL__/agent-late.html. The report arrives late. Wait for "Report ready", then tell me its delivery code. Use a condition-based page read rather than fixed sleeps or repeated polling.',
+    verify: async c => {
+      const state = await c.inspectFixture('/agent-late.html', 'window.report');
+      return state.ready && c.answer.includes(state.code)
+        && agentCalls(c.calls).some(x => ['read_page', 'find'].includes(x.name) && /Report ready/i.test(x.input.wait_for || ''));
+    },
+  },
+  {
+    id: 'long-page-diff',
+    requiresAsk: true,
+    prompt: 'Open __LOCAL__/agent-long.html and read the inventory outline. Press "Refresh inventory", then read only what changed in that outline and report the new shipment code and stock count. Avoid rereading the entire long page.',
+    verify: async c => {
+      const state = await c.inspectFixture('/agent-long.html', 'window.inventory');
+      const calls = agentCalls(c.calls);
+      const first = calls.findIndex(x => x.name === 'read_page' && !x.input.diff);
+      const diff = calls.findIndex((x, i) => i > first && x.name === 'read_page' && x.input.diff === true);
+      return state.changes === 1 && c.answer.includes(state.code) && c.answer.includes(String(state.stock))
+        && first >= 0 && diff > first && !calls[diff].isError
+        && /Changes since the previous read_page:/.test(calls[diff].resultText || '')
+        && (calls[diff].resultText || '').includes(state.code)
+        && !calls.some(x => x.name === 'javascript_tool');
+    },
+  },
+];
+
 export const TASKS = [
   {
     id: 'login',
@@ -175,4 +234,5 @@ export const TASKS = [
       return !!w && w.user === 'ada_l' && w.email === 'ada@example.com' && w.fox === 'fennec' && w.plan === 'den' && c.answer.includes(w.code);
     },
   },
+  ...FEATURE_TASKS,
 ];

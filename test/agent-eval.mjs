@@ -12,8 +12,8 @@
 //              webfetch, websearch, task and skill. --max-turns applies to Claude only.
 //
 //   --trusted  real input through WebDriver BiDi
-//   --ask      Foxwright asks before every new site, as it does for real users; a scripted "user"
-//              presses "Allow this session" in each permission window (synthetic input only)
+//   --ask      Run in ask mode and include the 0.8.0 feature tasks. A scripted user grants
+//              one-time approval when prompted (synthetic input only).
 //   --repeat N run every task N times and report pass@1 and pass@N
 //
 // Needs the `claude` CLI (logged in). Uses the same throwaway-Firefox harness as the other
@@ -49,6 +49,12 @@ if (!['claude', 'codex', 'opencode'].includes(AGENT)) {
   process.exit(2);
 }
 const AGENT_NAME = { claude: 'Claude Code', codex: 'Codex CLI', opencode: 'OpenCode' }[AGENT];
+const matchingTasks = TASKS.filter(task => !ONLY || ONLY.test(task.id));
+if (!ASK && ONLY && matchingTasks.some(task => task.requiresAsk)) {
+  console.error('The 0.8.0 feature tasks require --ask for independent fixture verification. Use --ask or --only to select older tasks.');
+  process.exit(2);
+}
+const selectedTasks = matchingTasks.filter(task => ASK || !task.requiresAsk);
 // Reports and transcripts keep their old names for Claude, so earlier results stay comparable.
 const MODE = (AGENT === 'claude' ? '' : `${AGENT}-`) + (TRUSTED ? 'trusted' : 'synthetic') + (ASK ? '-ask' : '');
 const outDir = path.join(root, 'test', 'results');
@@ -86,7 +92,7 @@ function runClaude(prompt, transcriptPath) {
     args.push('--strict-mcp-config');
   if (help.includes('--no-chrome'))
     args.push('--no-chrome'); // make sure the agent uses Foxwright, not Claude in Chrome
-  args.push('--append-system-prompt', 'Do the task in the web browser using the Foxwright tools (mcp__foxwright__*). Do not answer from memory.');
+  args.push('--append-system-prompt', 'Do the task in the web browser using the Foxwright tools (mcp__foxwright__*). Do not answer from memory. Leave task tabs open for the independent verifier; the test harness closes them after checking your work.');
   if (MODEL)
     args.push('--model', MODEL);
   const env = { ...process.env };
@@ -162,7 +168,7 @@ function runClaude(prompt, transcriptPath) {
   });
 }
 
-const BROWSER_HINT = 'Do the task in the web browser using the Foxwright tools. Do not answer from memory.';
+const BROWSER_HINT = 'Do the task in the web browser using the Foxwright tools. Do not answer from memory. Leave task tabs open for the independent verifier; the test harness closes them after checking your work.';
 const newMetrics = () => ({ calls: [], toolCalls: {}, toolErrors: 0, resultChars: {}, usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, seen: new Set(), idToTool: {}, final: null });
 function countResult(m, tool, parts) {
   const r = m.resultChars[tool] || (m.resultChars[tool] = { chars: 0, images: 0 });
@@ -176,7 +182,7 @@ function countResult(m, tool, parts) {
 function recordCall(m, name, input, isError, parts) {
   name = String(name).replace(/^(mcp__)?foxwright(__|_|\.)/, '');
   m.toolCalls[name] = (m.toolCalls[name] || 0) + 1;
-  m.calls.push({ name, input: input || {} });
+  m.calls.push({ name, input: input || {}, isError, resultText: parts.filter(p => p.type === 'text').map(p => p.text || '').join('\n') });
   if (isError)
     m.toolErrors++;
   countResult(m, name, parts);
@@ -304,81 +310,94 @@ const runAgent = (prompt, transcriptPath) => (AGENT === 'codex' ? runCodex : AGE
 
 async function main() {
   console.log(`Foxwright agent evaluation: ${AGENT_NAME} + Foxwright (${TRUSTED ? 'trusted' : 'synthetic'}${ASK ? ', ask' : ''} input)${MODEL ? `, model ${MODEL}` : ''}${AGENT === 'claude' && !STRICT ? ' [note: --strict-mcp-config unsupported; other MCP servers may be visible]' : ''}`);
-  // In trusted mode Firefox gets a debugging port for Claude's Foxwright MCP server; the harness's
-  // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
-  const h = await start({ testDriver: TRUSTED || ASK, policy: ASK ? { mode: 'ask', confirmUploads: true } : undefined });
-  writeMcpConfig(h);
-  const driver = ASK ? await connectDriver(h.bidiUrl) : null;
-  const approver = driver ? driver.autoAnswer('once') : null;
-  const v = async (name, args = {}) => h.call(name, args);
-  const groupTabs = async () => {
-    const r = await v('tabs_context_mcp', {});
-    return [...r.text.matchAll(/tabId (\d+): ("(?:[^"\\]|\\.)*") (\S+)( \(active)?/g)].map(x => ({ id: +x[1], title: JSON.parse(x[2]), url: x[3], active: !!x[4] }));
-  };
-  const resetTabs = async () => {
-    for (const t of await groupTabs())
-      await v('tabs_close_mcp', { tabId: t.id });
-  };
-
   const rows = [];
+  let approvalCount = 0;
+  // Each repetition gets a fresh Firefox profile, approvals and isolated helper HOME.
   for (let rep = 0; rep < REPEAT; rep++) {
-    for (const task of TASKS) {
-      if (ONLY && !ONLY.test(task.id))
-        continue;
-      await resetTabs();
-      const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`);
-      const transcript = path.join(transcriptDir, `${MODE}-${task.id}${REPEAT > 1 ? `-${rep + 1}` : ''}.jsonl`);
-      process.stdout.write(`  … ${task.id}`);
-      const run = await runAgent(prompt, transcript);
-      const answer = String(run.m.final?.result ?? '');
-      const tabs = await groupTabs();
-      const active = tabs.find(t => t.active) || tabs[tabs.length - 1];
-      const ctx = {
-        answer,
-        calls: run.m.calls, // [{ name, input }] tool calls the agent made, in order
-        tabs: async () => tabs,
-        texts: async () => {
-          let all = '';
-          for (const t of tabs) {
-            const r = await v('get_page_text', { tabId: t.id });
-            if (!r.isError)
-              all += '\n' + r.text;
-          }
-          return all;
-        },
-        outline: async (filter = 'all', tabId) => ((tabId ?? active?.id) != null ? (await v('read_page', { tabId: tabId ?? active.id, filter, max_chars: 400000 })).text : ''),
-        js: async (code, urlRe) => {
-          const t = (urlRe && tabs.find(x => urlRe.test(x.url))) || active;
-          if (!t)
-            return 'null';
-          const r = await v('javascript_tool', { tabId: t.id, action: 'javascript_exec', text: code });
-          return r.isError ? 'null' : r.text;
-        },
-      };
-      let ok = false, verifyError = null;
-      try {
-        ok = !!(await task.verify(ctx));
-      } catch (e) {
-        verifyError = e.message;
+    // In trusted mode Firefox gets a debugging port for Claude's Foxwright MCP server; the harness's
+    // own MCP client (used for checks) stays off it, since Firefox allows one WebDriver BiDi session.
+    const h = await start({ testDriver: TRUSTED || ASK, policy: ASK ? { mode: 'ask', confirmUploads: true, allowedReadOnly: [`http://localhost:${process.env.FOXWRIGHT_P1}`] } : undefined });
+    writeMcpConfig(h);
+    const driver = ASK ? await connectDriver(h.bidiUrl) : null;
+    const approver = driver ? driver.autoAnswer('once') : null;
+    const v = async (name, args = {}) => h.call(name, args);
+    const groupTabs = async () => {
+      const r = await v('tabs_context_mcp', {});
+      return [...r.text.matchAll(/tabId (\d+): ("(?:[^"\\]|\\.)*") (\S+)( \(active)?/g)].map(x => ({ id: +x[1], title: JSON.parse(x[2]), url: x[3], active: !!x[4] }));
+    };
+    const resetTabs = async () => {
+      for (const t of await groupTabs())
+        await v('tabs_close_mcp', { tabId: t.id });
+    };
+
+    try {
+      for (const task of selectedTasks) {
+        await resetTabs();
+        const prompt = task.prompt.replace('__UPLOAD_FILE__', uploadFile).replaceAll('__LOCAL__', `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`).replaceAll('__READ_ONLY__', `http://localhost:${process.env.FOXWRIGHT_P1}`);
+        const transcript = path.join(transcriptDir, `${MODE}-${task.id}${REPEAT > 1 ? `-${rep + 1}` : ''}.jsonl`);
+        process.stdout.write(`  … ${task.id}`);
+        const run = await runAgent(prompt, transcript);
+        const answer = String(run.m.final?.result ?? '');
+        const tabs = await groupTabs();
+        const active = tabs.find(t => t.active) || tabs[tabs.length - 1];
+        const ctx = {
+          answer,
+          inspectFixture: async (pathname, expression) => {
+            if (!driver) throw new Error('New-feature verification requires --ask');
+            const context = (await driver.contexts()).find(c => {
+              try { const u = new URL(c.url); return ['localhost', '127.0.0.1'].includes(u.hostname) && u.pathname === pathname; } catch { return false; }
+            });
+            if (!context) throw new Error(`Fixture not open: ${pathname}`);
+            return JSON.parse(await driver.evalIn(context.context, `JSON.stringify(${expression})`));
+          },
+          calls: run.m.calls, // [{ name, input }] tool calls the agent made, in order
+          tabs: async () => tabs,
+          texts: async () => {
+            let all = '';
+            for (const t of tabs) {
+              const r = await v('get_page_text', { tabId: t.id });
+              if (!r.isError)
+                all += '\n' + r.text;
+            }
+            return all;
+          },
+          outline: async (filter = 'all', tabId) => ((tabId ?? active?.id) != null ? (await v('read_page', { tabId: tabId ?? active.id, filter, max_chars: 400000 })).text : ''),
+          js: async (code, urlRe) => {
+            const t = (urlRe && tabs.find(x => urlRe.test(x.url))) || active;
+            if (!t)
+              return 'null';
+            const r = await v('javascript_tool', { tabId: t.id, action: 'javascript_exec', text: code });
+            return r.isError ? 'null' : r.text;
+          },
+        };
+        let ok = false, verifyError = null;
+        try {
+          ok = !!(await task.verify(ctx));
+        } catch (e) {
+          verifyError = e.message;
+        }
+        const f = run.m.final || {};
+        const u = f.usage ? { input: f.usage.input_tokens || 0, output: f.usage.output_tokens || 0, cacheRead: f.usage.cache_read_input_tokens || 0, cacheWrite: f.usage.cache_creation_input_tokens || 0 } : run.m.usage;
+        const row = {
+          id: task.id, rep: rep + 1, ok, ms: run.ms, turns: f.num_turns ?? null, cost: f.total_cost_usd ?? null,
+          tools: run.m.toolCalls, toolCalls: Object.values(run.m.toolCalls).reduce((a, b) => a + b, 0), toolErrors: run.m.toolErrors,
+          resultChars: run.m.resultChars, usage: u, answer: answer.slice(0, 400), exit: run.code, verifyError,
+          stderr: run.stderr.slice(-400), hitTurnLimit: /max_turns/.test(String(f.subtype || '')),
+        };
+        rows.push(row);
+        fs.writeFileSync(path.join(outDir, `agent-eval-${MODE}.json`), JSON.stringify(rows, null, 2));
+        const tokens = u.input + u.output + u.cacheRead + u.cacheWrite;
+        process.stdout.write(`\r  ${ok ? '✓' : '✗'} ${task.id.padEnd(17)} ${(run.ms / 1000).toFixed(0).padStart(4)}s  ${String(row.toolCalls).padStart(3)} tool calls  ${Math.round(tokens / 1000)}k tokens${row.cost != null ? `  $${row.cost.toFixed(3)}` : ''}${row.hitTurnLimit ? '  (hit turn limit)' : ''}${run.code ? `  (exit ${run.code})` : ''}\n`);
+        if (!ok)
+          console.log(`      answer: ${answer.replace(/\s+/g, ' ').slice(0, 220) || '(none)'}${verifyError ? `\n      verify error: ${verifyError}` : ''}${run.code && run.stderr ? `\n      stderr: ${run.stderr.trim().slice(-200)}` : ''}`);
       }
-      const f = run.m.final || {};
-      const u = f.usage ? { input: f.usage.input_tokens || 0, output: f.usage.output_tokens || 0, cacheRead: f.usage.cache_read_input_tokens || 0, cacheWrite: f.usage.cache_creation_input_tokens || 0 } : run.m.usage;
-      const row = {
-        id: task.id, rep: rep + 1, ok, ms: run.ms, turns: f.num_turns ?? null, cost: f.total_cost_usd ?? null,
-        tools: run.m.toolCalls, toolCalls: Object.values(run.m.toolCalls).reduce((a, b) => a + b, 0), toolErrors: run.m.toolErrors,
-        resultChars: run.m.resultChars, usage: u, answer: answer.slice(0, 400), exit: run.code, verifyError,
-        stderr: run.stderr.slice(-400), hitTurnLimit: /max_turns/.test(String(f.subtype || '')),
-      };
-      rows.push(row);
-      const tokens = u.input + u.output + u.cacheRead + u.cacheWrite;
-      process.stdout.write(`\r  ${ok ? '✓' : '✗'} ${task.id.padEnd(17)} ${(run.ms / 1000).toFixed(0).padStart(4)}s  ${String(row.toolCalls).padStart(3)} tool calls  ${Math.round(tokens / 1000)}k tokens${row.cost != null ? `  $${row.cost.toFixed(3)}` : ''}${row.hitTurnLimit ? '  (hit turn limit)' : ''}${run.code ? `  (exit ${run.code})` : ''}\n`);
-      if (!ok)
-        console.log(`      answer: ${answer.replace(/\s+/g, ' ').slice(0, 220) || '(none)'}${verifyError ? `\n      verify error: ${verifyError}` : ''}${run.code && run.stderr ? `\n      stderr: ${run.stderr.trim().slice(-200)}` : ''}`);
+    } finally {
+      approvalCount += approver?.count || 0;
+      approver?.stop();
+      driver?.close();
+      await h.stop();
     }
   }
-  approver?.stop();
-  driver?.close();
-  await h.stop();
   fs.rmSync(mcpConfig, { force: true });
 
   // ----- summary -----
@@ -402,10 +421,12 @@ async function main() {
     '',
     `${new Date().toISOString()} · ${os.platform()} ${os.arch()}${MODEL ? ` · model ${MODEL}` : ''}${AGENT === 'claude' ? ` · max turns ${MAX_TURNS}` : ''}`,
     '',
+    'Each repetition uses a fresh Firefox profile and helper HOME. Results are independently checked after every task.',
+    '',
     REPEAT > 1 ? `Each task ran ${REPEAT} times. pass@1: **${Math.round(100 * passed / rows.length)}%** (${passed}/${rows.length} runs). pass@${REPEAT}: ${passAtN}/${taskIds.length} tasks. Passed every time: ${allPass}/${taskIds.length} tasks.\n` : '',
     `**${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,
     '',
-    ASK ? `Foxwright was in "ask" mode: a scripted user approved ${approver.count} permission window(s).\n` : '',
+    ASK ? `Foxwright was in "ask" mode: a scripted user approved ${approvalCount} permission window(s).\n` : '',
     '| Task | Result | Time | Tool calls | Errors | Tokens (in+cache / out) | Cost | Answer |',
     '|---|---|---|---|---|---|---|---|',
     ...rows.map(r => `| ${r.id} | ${r.ok ? 'pass' : '**fail**'} | ${Math.round(r.ms / 1000)} s | ${r.toolCalls} | ${r.toolErrors} | ${Math.round((r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / 1000)}k / ${Math.round(r.usage.output / 1000)}k | ${r.cost != null ? '$' + r.cost.toFixed(3) : '–'} | ${r.answer.replace(/\s+/g, ' ').replace(/\|/g, '/').slice(0, 90)} |`),

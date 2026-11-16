@@ -1,0 +1,652 @@
+[
+  {
+    "id": "rich-editor",
+    "rep": 1,
+    "ok": true,
+    "ms": 28821,
+    "turns": null,
+    "cost": 0.0019502999999999999,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "computer": 7,
+      "javascript_tool": 1
+    },
+    "toolCalls": 13,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1024,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2124,
+        "images": 0
+      },
+      "computer": {
+        "chars": 648,
+        "images": 0
+      },
+      "javascript_tool": {
+        "chars": 10,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3202,
+      "output": 1650,
+      "cacheRead": 160000,
+      "cacheWrite": 0
+    },
+    "answer": "Done. The snow playground editor now contains \"<strong>Kitsune</strong> was here.\" with \"Kitsune\" bold; tab 3 is left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 8748,
+    "turns": null,
+    "cost": 0.000461382,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 977,
+      "output": 270,
+      "cacheRead": 50944,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: 17\nAudit code: AUDIT-f63e25f1\n\nPage tab (tab 6) is left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 1,
+    "ok": true,
+    "ms": 8300,
+    "turns": null,
+    "cost": 0.000378978,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 224,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 703,
+      "output": 253,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "Conservation status: **Least Concern**.\n\nQuick brown fox sentence: \"The quick brown fox jumps over the lazy dog.\"\n\n(Tab 7 left open on the PDF.)",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 1,
+    "ok": true,
+    "ms": 15212,
+    "turns": null,
+    "cost": 0.00037297800000000005,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 188,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 795,
+      "output": 220,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "Delivery code: **DELIVERY-e615d5a8**",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": false,
+    "ms": 12782,
+    "turns": null,
+    "cost": 0.00159435,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 591,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 246,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 22268,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5789,
+      "output": 858,
+      "cacheRead": 70400,
+      "cacheWrite": 0
+    },
+    "answer": "Refreshed. Changed outline line only:\n\n- Before: `Stock count: 17. Shipment code: PENDING`\n- After: `Stock count: 23. Shipment code: SHIP-c41bbf83`\n\nNew shipment code: **SHIP-c41bbf83**; stock count: **23**. Tab left open.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "rich-editor",
+    "rep": 2,
+    "ok": true,
+    "ms": 32079,
+    "turns": null,
+    "cost": 0.00224571,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 10
+    },
+    "toolCalls": 14,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1024,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1641,
+        "images": 0
+      },
+      "computer": {
+        "chars": 792,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4401,
+      "output": 1753,
+      "cacheRead": 177920,
+      "cacheWrite": 0
+    },
+    "answer": "Done. The editor now contains \"Kitsune was here.\" with Kitsune bold (`<strong>`) — confirmed via the accessibility outline and screenshot. Tab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 2,
+    "ok": true,
+    "ms": 8514,
+    "turns": null,
+    "cost": 0.000464166,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 897,
+      "output": 294,
+      "cacheRead": 51072,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**\nAudit code: **AUDIT-20c4ffaa**\n\nRead-only page reviewed without interacting with any controls; tab left open.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 2,
+    "ok": true,
+    "ms": 7811,
+    "turns": null,
+    "cost": 0.000350694,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 224,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 801,
+      "output": 182,
+      "cacheRead": 40448,
+      "cacheWrite": 0
+    },
+    "answer": "- Conservation status: **Least Concern**\n- Sentence: \"The quick brown fox jumps over the lazy dog.\"",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 2,
+    "ok": true,
+    "ms": 15921,
+    "turns": null,
+    "cost": 0.000402978,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 188,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 811,
+      "output": 266,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is **DELIVERY-cde278ec**. The report tab remains open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 2,
+    "ok": true,
+    "ms": 9713,
+    "turns": null,
+    "cost": 0.0012643319999999997,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 591,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5410,
+      "output": 404,
+      "cacheRead": 70144,
+      "cacheWrite": 0
+    },
+    "answer": "Shipment code: **SHIP-3f368a23**; stock count: **23**.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "rich-editor",
+    "rep": 3,
+    "ok": true,
+    "ms": 22629,
+    "turns": null,
+    "cost": 0.0015679980000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "computer": 7
+    },
+    "toolCalls": 10,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1024,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 795,
+        "images": 0
+      },
+      "computer": {
+        "chars": 578,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3229,
+      "output": 1200,
+      "cacheRead": 121216,
+      "cacheWrite": 0
+    },
+    "answer": "Done. The editor now contains \"Kitsune was here.\" with \"Kitsune\" in bold, and tab 3 is left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 3,
+    "ok": true,
+    "ms": 7147,
+    "turns": null,
+    "cost": 0.00038122799999999995,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 802,
+      "output": 232,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**\nAudit code: **AUDIT-bef0cec8**\n\nRead-only; nothing was clicked or changed. Tab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 3,
+    "ok": true,
+    "ms": 8645,
+    "turns": null,
+    "cost": 0.000371778,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 224,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 703,
+      "output": 241,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "**Conservation status:** Least Concern.\n\n**Fox sentence:** \"The quick brown fox jumps over the lazy dog.\"",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 3,
+    "ok": true,
+    "ms": 15322,
+    "turns": null,
+    "cost": 0.00038332800000000005,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 188,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 812,
+      "output": 233,
+      "cacheRead": 40576,
+      "cacheWrite": 0
+    },
+    "answer": "Delivery code: **DELIVERY-add57ddc**",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 3,
+    "ok": true,
+    "ms": 10170,
+    "turns": null,
+    "cost": 0.001274532,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 591,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5422,
+      "output": 418,
+      "cacheRead": 70144,
+      "cacheWrite": 0
+    },
+    "answer": "New shipment code: **SHIP-f649f2c0**, stock count: **23** (previously 17, PENDING).",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  }
+]

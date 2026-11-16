@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Delayed report</title>
+<h1>Delivery report</h1><p id="status">Preparing the report; it takes ten seconds.</p>
+<script>
+window.report = {ready: false, code: ''};
+setTimeout(() => { report.code = 'DELIVERY-' + crypto.randomUUID().slice(0,8); report.ready = true; document.getElementById('status').textContent = 'Report ready. Delivery code: ' + report.code; }, 10000);
+</script></html>

@@ -1,0 +1,512 @@
+[
+  {
+    "id": "read-only-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 12277,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 193,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 13043,
+      "output": 191,
+      "cacheRead": 58368,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**  \nAudit code: **AUDIT-a72741c2**\n\nLeft the tab open without changing anything.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 1,
+    "ok": true,
+    "ms": 13414,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 224,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 17950,
+      "output": 198,
+      "cacheRead": 72064,
+      "cacheWrite": 0
+    },
+    "answer": "The document states **“Least Concern”** as the conservation status.\n\nThe sentence is: **“The quick brown fox jumps over the lazy dog.”**",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 1,
+    "ok": true,
+    "ms": 24452,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 186,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 300,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 33816,
+      "output": 196,
+      "cacheRead": 54784,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is **DELIVERY-526beb67**.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": true,
+    "ms": 15746,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 192,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30503,
+      "output": 264,
+      "cacheRead": 92416,
+      "cacheWrite": 0
+    },
+    "answer": "New shipment code: **SHIP-d1852fdd**  \nStock count: **23**\n\nRead only the outline changes after refreshing. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 2,
+    "ok": true,
+    "ms": 12431,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 193,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 17348,
+      "output": 196,
+      "cacheRead": 71296,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**  \nAudit code: **AUDIT-993c9687**\n\nThe tab remains open. No page controls were used.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 2,
+    "ok": true,
+    "ms": 18754,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 244,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 23189,
+      "output": 231,
+      "cacheRead": 89856,
+      "cacheWrite": 0
+    },
+    "answer": "The document states **“Least Concern”** as the conservation status.\n\nThe sentence is: “The quick brown fox jumps over the lazy dog.”",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 2,
+    "ok": true,
+    "ms": 23752,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 206,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 11923,
+      "output": 232,
+      "cacheRead": 126976,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is `DELIVERY-793d9104`.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 2,
+    "ok": true,
+    "ms": 18323,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 214,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 51204,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 24014,
+      "output": 299,
+      "cacheRead": 132096,
+      "cacheWrite": 0
+    },
+    "answer": "Shipment code: **SHIP-1af2d772**  \nStock count: **23**\n\nRead only the outline changes after refreshing. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 3,
+    "ok": true,
+    "ms": 16128,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 193,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 13011,
+      "output": 197,
+      "cacheRead": 58496,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**  \nAudit code: **AUDIT-9cd29489**\n\nLeft the tab open. No page controls were used.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 3,
+    "ok": true,
+    "ms": 16525,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 224,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 13001,
+      "output": 193,
+      "cacheRead": 58368,
+      "cacheWrite": 0
+    },
+    "answer": "The document states **Least Concern**.\n\nThe sentence is: “The quick brown fox jumps over the lazy dog.”",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 3,
+    "ok": true,
+    "ms": 23672,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 186,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 300,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 12965,
+      "output": 197,
+      "cacheRead": 58496,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is **DELIVERY-8275b357**.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 3,
+    "ok": true,
+    "ms": 18463,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 192,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 51204,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 21679,
+      "output": 279,
+      "cacheRead": 87680,
+      "cacheWrite": 0
+    },
+    "answer": "New shipment code: **SHIP-6c9fc1e3**  \nStock count: **23**\n\nRead only the outline changes after refreshing. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  }
+]
