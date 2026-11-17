@@ -38,9 +38,13 @@ function render(s) {
     $('setup-cmd').hidden = !d.cmd;
     setText('err', s.lastError && s.errorKind === 'exited' ? `Firefox said: ${s.lastError}` : '');
   }
-  $('version-warn').hidden = !s.versionMismatch;
-  if (s.versionMismatch)
-    setText('version-text', `The helper (${s.helperVersion}) and this extension (${s.version}) are different versions. Some tools may misbehave.`);
+  // Different versions, or an AI client that needs a restart: what to do depends on which side is older.
+  const notes = s.versionNotes || [];
+  const cmd = notes.find(n => n.cmd)?.cmd || '';
+  $('version-warn').hidden = !notes.length;
+  setText('version-text', notes.map(n => n.text).join(' '));
+  $('version-cmd').hidden = !cmd;
+  setText('version-cmd-text', cmd);
   for (const r of document.querySelectorAll('input[name=mode]')) {
     r.checked = r.value === s.mode;
     r.disabled = !!s.managedMode;

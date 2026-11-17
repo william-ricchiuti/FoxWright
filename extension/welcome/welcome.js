@@ -72,8 +72,8 @@ function render(s) {
     dot.className = 'dot ok';
     live = 'Connected';
     diag = s.helperVersion ? `Helper ${s.helperVersion} is running.` : 'The helper is running.';
-    if (s.versionMismatch)
-      diag += ` It doesn't match this extension (${s.version}): run npx foxwright-firefox@latest setup to update it.`;
+    for (const n of s.versionNotes || [])
+      diag += ` ${n.text}${n.cmd ? ` ${n.cmd}` : ''}`;
     if (s.errorKind === 'helper-error' && s.lastError)
       diag += ` It reported a problem: ${s.lastError}`;
   } else if (s.errorKind === 'not-installed') {

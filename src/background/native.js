@@ -78,6 +78,7 @@ export function connect() {
       ? 'The Foxwright helper is not installed. Run: npx foxwright-firefox setup'
       : err;
     state.helperVersion = null;
+    state.oldClientAt = 0; // a new helper will say so again if the old AI client is still trying
     state.connected = false;
     state.connecting = false;
     state.clients = 0;
@@ -147,8 +148,15 @@ async function onMessage(msg) {
     state.lastError = msg.error || null;
     state.errorKind = msg.error ? 'helper-error' : null;
     state.helperVersion = typeof msg.version === 'string' ? msg.version.slice(0, 32) : null;
+    state.oldClientAt = Number.isFinite(msg.oldClient) ? Math.min(Date.now(), msg.oldClient) : 0;
     retryMs = 2000;
     updateBadge();
+    return;
+  }
+  // The helper refused an MCP server from before 0.8 (no key handshake): the AI client that runs
+  // it needs a restart, and only the person can do that. The popup says so (compat.js).
+  if (msg.type === 'old-client') {
+    state.oldClientAt = Date.now();
     return;
   }
   if (msg.type === 'clients') {

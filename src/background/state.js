@@ -1,5 +1,6 @@
 // Shared background state + settings persistence.
 /* global browser */
+import { versionNotes } from './compat.js';
 
 export const FULL = typeof __FOXWRIGHT_FULL__ !== 'undefined' ? __FOXWRIGHT_FULL__ : false;
 export const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
@@ -40,6 +41,7 @@ export const state = {
   // --- connection details for the popup and the welcome page (onboarding) ---
   helperVersion: null, // the connected helper's version (from hello-ack; older helpers don't say)
   errorKind: null, // why the helper isn't connected: 'not-installed' | 'exited' | 'helper-error' | null
+  oldClientAt: 0, // when the helper last refused an AI client's pre-0.8 MCP server (native.js)
 };
 
 const RECENT_MAX = 12;
@@ -142,6 +144,7 @@ export function pruneTimed() {
 
 export function publicStatus() {
   pruneTimed();
+  const notes = versionNotes({ connected: state.connected, version: VERSION, helperVersion: state.helperVersion, oldClientAt: state.oldClientAt });
   return {
     version: VERSION,
     full: FULL,
@@ -168,12 +171,10 @@ export function publicStatus() {
     browserName: state.browserName,
     helperVersion: state.helperVersion,
     errorKind: state.errorKind,
-    versionMismatch: !!(state.connected && state.helperVersion && minorOf(state.helperVersion) !== minorOf(VERSION)),
+    // What to say about versions, per direction, and about a refused old AI client (compat.js).
+    versionNotes: notes,
+    versionMismatch: notes.some(n => n.kind !== 'old-client'),
   };
-}
-
-function minorOf(v) {
-  return String(v || '').split('.').slice(0, 2).join('.');
 }
 
 export async function updateBadge() {
