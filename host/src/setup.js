@@ -12,6 +12,7 @@ const REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${HOST_NAME}`;
 const OLD_HOST_NAME = 'zenko';
 const OLD_REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${OLD_HOST_NAME}`;
 const STORE_URL = 'https://addons.mozilla.org/firefox/addon/foxwright/';
+const CLIENTS_URL = 'https://github.com/william-ricchiuti/FoxWright/blob/main/docs/CLIENTS.md';
 const SETUP_CMD = 'npx foxwright-firefox setup';
 const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
 const c = {
@@ -400,7 +401,7 @@ export async function setup(flags) {
   }
   const major = parseInt(process.versions.node.split('.')[0], 10);
   if (major < 20) {
-    console.error(`Foxwright needs Node.js 20 or newer (found ${process.versions.node}).`);
+    console.error(`Foxwright needs Node.js 20 or newer (found ${process.versions.node}). Install the LTS version from https://nodejs.org, open a new terminal window, and run this command again.`);
     process.exit(1);
   }
 
@@ -462,14 +463,14 @@ export async function setup(flags) {
         fs.writeFileSync(path.join(dir, `${OLD_HOST_NAME}.json`), JSON.stringify(compat, null, 2) + '\n');
       } catch { /* that browser just won't have it */ }
     }
-    console.log(c.ok('Also registered under the old name "zenko", so the Zenko 0.6 extension keeps working until Firefox updates it.'));
+    console.log(c.ok('Also registered for the extension\'s 0.6 versions (then called Zenko), until Firefox updates them.'));
   } catch (e) {
     console.log(c.warn(`Couldn't add the registration for the Zenko 0.6 extension (${e.message}). Update the extension to Foxwright 0.7 or newer.`));
   }
 
   if (process.platform === 'linux') {
     if (fs.existsSync('/snap/bin/firefox') || which('flatpak') && fs.existsSync(path.join(os.homedir(), '.var/app/org.mozilla.firefox')))
-      console.log(c.warn('Snap/Flatpak Firefox is sandboxed and may not be able to start the helper (Ubuntu ships the Snap by default). If the toolbar fox keeps its "!" badge, install Firefox from Mozilla\'s .deb repository or tarball: https://support.mozilla.org/kb/install-firefox-linux'));
+      console.log(c.warn('Found Snap or Flatpak Firefox (Ubuntu\'s built-in Firefox is a Snap). Its sandbox usually can\'t start this helper, so Foxwright would stay at "Helper not found". If that is the Firefox you use, install Firefox from Mozilla\'s .deb repository or tarball and add Foxwright to it: https://support.mozilla.org/kb/install-firefox-linux'));
   }
 
   // 4. Hook up AI clients. A failure here never undoes the steps above: say what to run instead.
@@ -488,14 +489,14 @@ export async function setup(flags) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Code (${e.message.split('\n')[0]}). Run this yourself:\n    ${claudeCodeCmd}`));
       }
     } else {
-      console.log(c.warn('`claude` CLI not found; skipping Claude Code.'));
+      console.log(c.warn(`Skipped Claude Code: its \`claude\` command isn't on PATH. Install Claude Code, then run:\n    ${claudeCodeCmd}`));
     }
   }
   if (flags.includes('--claude-desktop') || flags.includes('--all')) {
     const cfgPath = claudeDesktopConfigPath();
     // There is no official Claude Desktop for Linux: don't invent a config folder for it.
     if (process.platform === 'linux' && !fs.existsSync(path.dirname(cfgPath))) {
-      console.log(c.warn(`Skipped Claude Desktop: ${path.dirname(cfgPath)} doesn't exist (there is no official Claude Desktop for Linux). If you use one, start it once and re-run setup.`));
+      console.log(c.warn(`Skipped Claude Desktop: ${path.dirname(cfgPath)} doesn't exist yet. If you use Claude Desktop, open it once, then run setup again.`));
     } else {
       try {
         let cfg = {};
@@ -508,7 +509,7 @@ export async function setup(flags) {
         if (fs.existsSync(cfgPath))
           fs.copyFileSync(cfgPath, cfgPath + '.bak');
         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-        console.log(c.ok(`Added Foxwright to Claude Desktop (${cfgPath}). Restart Claude Desktop to load it.`));
+        console.log(c.ok(`Added Foxwright to Claude Desktop (${cfgPath}). Quit Claude Desktop completely (not just its window) and open it again to load it.`));
       } catch (e) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Desktop (${e.message}). Add it to ${cfgPath} yourself (see below).`));
       }
@@ -519,19 +520,32 @@ export async function setup(flags) {
   } catch { /* uninstall then leaves empty folders behind; harmless */ }
 
   const ffCmd = process.platform === 'darwin' ? '/Applications/Firefox.app/Contents/MacOS/firefox' : isWin ? '"C:\\Program Files\\Mozilla Firefox\\firefox.exe"' : 'firefox';
+  const entry = JSON.stringify({ command, args });
+  // VS Code's own installer command. On Windows, cmd and PowerShell quote JSON differently: show the file entry.
+  const vscode = isWin
+    ? `add to mcp.json under "servers":  "foxwright": ${JSON.stringify({ type: 'stdio', command, args })}`
+    : `code --add-mcp ${shellQuote(JSON.stringify({ name: 'foxwright', type: 'stdio', command, args }))}`;
   console.log(`
 ${c.b('Next steps')}
   1. Install the Foxwright extension in Firefox (152+): ${STORE_URL}
-     If it was already installed, restart Firefox or toggle the extension off/on.
-     The toolbar fox should lose its "!" badge once it finds this helper.
-  2. Connect your AI client:
-     ${c.b('Claude Code:')}   ${claudeCodeCmd}
-     ${c.b('Claude Desktop / Cowork:')} add to claude_desktop_config.json → "mcpServers":
-       "foxwright": ${JSON.stringify({ command, args })}
-     ${c.dim('(or re-run setup with --claude-code / --claude-desktop / --all to do this for you)')}
-  3. Optional, real (trusted) clicks and typing: start Firefox with
+     If it's already installed, it finds this helper by itself within a few seconds
+     (or press "Try again" in its toolbar popup). The toolbar fox loses its "!" badge.
+  2. Connect your AI app, then restart it:
+     ${c.b('Claude Code:')}  ${claudeCodeCmd}
+     ${c.b('Codex:')}        ${displayCmd(['codex', 'mcp', 'add', 'foxwright', '--', command, ...args])}
+     ${c.b('Gemini CLI:')}   ${displayCmd(['gemini', 'mcp', 'add', '--scope', 'user', 'foxwright', command, ...args])}
+     ${c.b('VS Code:')}      ${vscode}
+     ${c.b('Claude Desktop, Cursor, Windsurf')} and other apps with an "mcpServers" settings file,
+       add inside "mcpServers":  "foxwright": ${entry}
+     ${c.b('Zed:')} the same entry inside "context_servers" in its settings.json.
+     Where each app keeps its settings: ${CLIENTS_URL}
+     ${c.dim('(setup --claude-code / --claude-desktop / --all connects Claude for you)')}
+  3. Ask your AI app: "Use Foxwright to open https://example.com and tell me the main heading."
+     Firefox asks you to approve the site first.
+
+  Optional, real (trusted) clicks and typing: start Firefox with
        ${ffCmd} --remote-debugging-port=9222
-     Foxwright detects it automatically. See README for trade-offs.
+     Foxwright detects it automatically. See the README for the trade-offs.
 
   Check everything with: ${c.b(displayCmd([command, appScript(), 'doctor']))}
 `);
@@ -796,7 +810,7 @@ export async function doctor({ share = false } = {}) {
   detail(`  This command: foxwright ${VERSION} (${fileURLToPath(import.meta.url)})`);
   ok(`Node.js ${process.versions.node} (${process.execPath})`);
   if (parseInt(process.versions.node) < 20)
-    bad(`Node.js ${process.versions.node} is too old`, 'Install Node.js 20 or newer.');
+    bad(`Node.js ${process.versions.node} is too old`, 'Install Node.js 20 or newer (the LTS version from https://nodejs.org), open a new terminal window, then run setup again.');
 
   // 1. Set up at all?
   let manifest = null;
@@ -888,8 +902,8 @@ export async function doctor({ share = false } = {}) {
   if (ff.sandbox)
     report.push(`Firefox packaging: ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}`);
   if (ff.sandbox)
-    warn(`Firefox is running as a ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}. Its sandbox may not let the extension start the helper`,
-      'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak: https://support.mozilla.org/kb/install-firefox-linux');
+    warn(`Firefox is running as a ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}${ff.sandbox === 'snap' ? ' (Ubuntu\'s built-in Firefox)' : ''}. Its sandbox usually stops the extension from starting the helper`,
+      'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak, add Foxwright to that Firefox, and use it for your agent: https://support.mozilla.org/kb/install-firefox-linux');
 
   // Each connected Firefox profile's helper registers in ~/.foxwright/browsers; remove what dead helpers left.
   const live = [];
@@ -1073,5 +1087,5 @@ export async function uninstall() {
   // Folders setup created, if they are empty now (e.g. ~/.mozilla/native-messaging-hosts).
   removeEmptyDirs(createdDirs.filter(d => d !== dir && !d.startsWith(dir + path.sep)));
   removeOldInstalls();
-  console.log('Foxwright helper removed. Also remove the Foxwright extension from Firefox (about:addons) and from any other AI client you added it to.');
+  console.log('Foxwright helper removed. To finish, remove the Foxwright extension in Firefox (about:addons), and delete the "foxwright" entry from any other AI app you added it to by hand (Cursor, Codex, VS Code, Gemini CLI, Windsurf, Zed).');
 }
