@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The npm package contains only the helper and its notices. 0.8.0 also shipped an old, unused `dist/kitsune.mjs` (1.6 MB) left over from an earlier build.
+
 ## 0.8.0 (2026-11-15)
 
 **Upgrading.** The MCP server and the helper now check each other with a key and encrypt what they exchange, so both must be on this version. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client. A helper and an MCP server from different sides of this release refuse to talk and say which one to update.
