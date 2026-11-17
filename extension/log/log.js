@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 
 const ACTION_RESULTS = { allowed: 'Done', denied: 'Not allowed', paused: 'Stopped (paused)', failed: 'Failed' };
 const ANSWER_RESULTS = { asked: 'Asked you', allowed: 'Allowed', once: 'Allowed (session)', hour: 'Allowed (1 hour)', always: 'Allowed (always)', denied: 'Denied', timeout: 'No answer (timed out)', dismissed: 'Window closed', paused: 'Denied (paused)' };
-const KIND_LABEL = { site: 'Site access', frame: 'Embedded site', upload: 'File upload', pair: 'Use this Firefox', upgrade: 'Click and type on a read-only site', action: 'Send, buy or delete' };
+const KIND_LABEL = { site: 'Site access', frame: 'Embedded site', upload: 'File upload', pair: 'Use this Firefox', upgrade: 'Click and type on a read-only site', confirm: 'Send, buy or delete' };
 
 let data = { enabled: true, entries: [] };
 let shownKey = '';
