@@ -19,7 +19,8 @@
     "foxwright-firefox": "dist/foxwright.mjs"
   },
   "files": [
-    "dist",
+    "dist/foxwright.mjs",
+    "dist/THIRD-PARTY-NOTICES.txt",
     "README.md",
     "LICENSE"
   ],
