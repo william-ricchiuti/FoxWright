@@ -2,7 +2,7 @@
 import net from 'node:net';
 import { socketPath } from './paths.js';
 import { socketFor } from './browsers.js';
-import { AUTH_VERSION, OLD_HELPER_MSG, readToken, tokenPath, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
+import { AUTH_VERSION, OLD_HELPER_MSG, MAX_LINE, MAX_HANDSHAKE, readToken, tokenPath, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
 
 export class HelperClient {
   /** path: a specific helper socket. browserId: follow that Firefox profile (by its registry
@@ -89,7 +89,7 @@ export class HelperClient {
         if (!ns) {
           ns = msg?.type === 'auth-challenge' && msg.v === AUTH_VERSION ? b64(msg.ns, 32) : null;
           if (!ns)
-            return handshakeFailed(msg?.type === 'auth-challenge' ? `The Foxwright helper uses a different handshake version (${msg.v}). Ask the user to run \`npx foxwright-firefox@latest setup\`, restart Firefox, and update this MCP server.` : OLD_HELPER_MSG);
+            return handshakeFailed(msg?.type === 'auth-challenge' ? `The Foxwright helper uses a different handshake version (${Number.isInteger(msg.v) ? msg.v : 'unknown'}). Ask the user to run \`npx foxwright-firefox@latest setup\`, restart Firefox, and update this MCP server.` : OLD_HELPER_MSG);
           try {
             key = readToken();
           } catch (e) {
@@ -100,7 +100,8 @@ export class HelperClient {
           return;
         }
         if (msg?.type === 'auth-failed')
-          return handshakeFailed(`The Foxwright helper refused this MCP server: ${msg.error || 'authentication failed'}`);
+          // Fixed wording: whatever answered hasn't proved it is the helper, so its own text is not passed on to the agent.
+          return handshakeFailed(`The Foxwright helper refused this MCP server's key. Both read ${tokenPath()}; they see different keys if they run as different users or with different FOXWRIGHT_HOME settings. Ask the user to restart Firefox and this AI client, or to run \`npx foxwright-firefox doctor\`.`);
         const mac = msg?.type === 'auth-ok' ? b64(msg.mac, 32) : null;
         if (!mac || !sameMac(mac, proof(key, 'helper', ns, nc)))
           return handshakeFailed(`Whatever is listening on ${target} could not prove it is the Foxwright helper (it doesn't know this computer's Foxwright key in ${tokenPath()}), so nothing was sent to it. Ask the user to close Firefox, check for unexpected programs, then reopen Firefox; if it persists, run \`npx foxwright-firefox doctor\`.`);
@@ -109,6 +110,14 @@ export class HelperClient {
       };
       s.on('data', (d) => {
         buf += d;
+        // Nothing legitimate is this long: don't let whatever is on the other end fill memory.
+        if (buf.length > (chan ? MAX_LINE : MAX_HANDSHAKE)) {
+          buf = '';
+          if (!chan)
+            handshakeFailed(`Something other than the Foxwright helper answered on ${target}. Not sending anything to it. ${OLD_HELPER_MSG}`);
+          s.destroy();
+          return;
+        }
         let nl;
         while ((nl = buf.indexOf('\n')) >= 0) {
           const line = buf.slice(0, nl);
