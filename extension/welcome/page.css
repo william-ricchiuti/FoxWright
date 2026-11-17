@@ -12,18 +12,13 @@
 body {
   margin: 0; padding: 28px 16px 40px; background: var(--paper); color: var(--ink);
   font: 14px/1.55 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 7px 7px;
 }
 main { max-width: 680px; margin: 0 auto; }
 header { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
-.hanko {
-  width: 48px; height: 48px; border-radius: 10px; background: var(--red); color: #fbeee0; flex: none;
-  display: grid; place-items: center; font: 700 26px/1 "Hiragino Mincho ProN", "Yu Mincho", serif;
-  transform: rotate(-4deg); box-shadow: inset 0 0 0 2px rgba(255,255,255,.25);
-}
+.logo { width: 48px; height: 48px; flex: none; display: block; }
 h1 { margin: 0; font-size: 22px; letter-spacing: .01em; }
 .sub { margin: 2px 0 0; color: var(--ink-2); }
-h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+h2 { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
 .card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
 .card p { margin: 0 0 8px; }
 .card p:last-child { margin-bottom: 0; }

@@ -58,7 +58,7 @@ function render(s) {
   $('pause').hidden = s.paused;
   if (document.activeElement !== $('bname'))
     $('bname').value = s.browserName || '';
-  setText('build', `v${s.version}${s.full ? ' · full build' : ''}`);
+  setText('build', `Extension ${s.version}${s.full ? ' · full build' : ''}`);
 
   const recent = s.recentActions || [];
   $('recent-card').hidden = !recent.length;
