@@ -38,10 +38,10 @@ To test: npx foxwright-firefox setup (or from the source zip: npm ci --prefix ho
 
 ### 0.8.1 reviewer notes (ready to paste)
 
-About 2,630 characters including the bracketed placeholder, which leaves room for one or two short lines about the other 0.8.1 changes. Replace the placeholder before pasting and keep the total under 3,000. The user-facing version notes are in [amo/LISTING.md](amo/LISTING.md) ("Release notes for 0.8.1").
+Under 3,000 characters, ready to paste. The user-facing version notes are in [amo/LISTING.md](amo/LISTING.md) ("Release notes for 0.8.1").
 
 ```text
-New in 0.8.1 (a fix release; no new permissions, no new data collection, manifest permissions unchanged): clearer first-run and permission screens. The setup page (welcome/) asks which AI app the user has and shows the matching setup command per OS, with help for a missing Node.js, Windows PowerShell's script policy, and Snap/Flatpak Firefox on Linux. The permission window (prompt/) has the same four answers in a 2x2 layout and explains "this session" and Read only. Popup, permission window and Activity page get better dark-mode contrast and wrapping. All UI text is set with textContent; no remote resources. [Coordinator: add one line per other change in src/ or extension/, from git diff --stat v0.8.0 HEAD -- src extension vendor.]
+New in 0.8.1 (a fix release; no new permissions, no new data collection, manifest permissions unchanged): clearer first-run and permission screens. The setup page (welcome/) asks which AI app the user has and shows the matching setup command per OS, with help for a missing Node.js, Windows PowerShell's script policy, and Snap/Flatpak Firefox on Linux. The permission window (prompt/) has the same four answers in a 2x2 layout and explains "this session" and Read only. Popup, permission window and Activity page get better dark-mode contrast and wrapping. All UI text is set with textContent; no remote resources. Also: the built-in PDF text reader (background/pdftext.js) has time, size and nesting limits; agent tabs open in the group's own window and container tabs are listed; stricter permission and confirmation checks; the activity log stores less.
 
 Foxwright lets a user-installed local AI agent operate tabs in a dedicated Foxwright tab group. Page content travels only through runtime.connectNative('foxwright') to the helper the user installs (npx foxwright-firefox@0.8.1 setup; source in host/). The extension does nothing until the helper is installed and an agent connects.
 

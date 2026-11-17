@@ -53,7 +53,7 @@ Source code, documentation and test results: https://github.com/william-ricchiut
 
 ## Release notes for 0.8.1 ("Version notes", shown to users)
 
-Paste into the version's release notes. Written for people using the add-on; the coordinator should add one line per user-visible fix from the other 0.8.1 lanes before submitting.
+Paste into the version's release notes. Written for people using the add-on.
 
 ```
 Easier first setup:
@@ -70,6 +70,13 @@ Toolbar popup and Activity page:
 - Approved sites show the kind of approval (always, this session, until a time, read only) on their own line instead of cutting it off.
 - The shortcut shows as Option+Shift+K on a Mac.
 - The Activity page shows a readable label for every answer, including "Allow for 1 hour".
+
+Fixes:
+- The agent's new tabs now work when another Firefox window, or a private window, is in front, and tabs in Firefox containers are no longer invisible to the agent.
+- A malicious PDF can no longer freeze Foxwright; very large pages are handled without slowing it down.
+- The Activity log keeps less: never addresses, typed text or file names, even if the agent writes them in its own summary.
+- "Ask before sending, buying or deleting" catches more ways of sending, such as Ctrl/Cmd+Enter and Enter in chat boxes.
+- If your AI app or the helper is out of date, the toolbar popup tells you exactly what to do.
 
 Version 0.8.0 (the previous release) added the setup page, read-only and one-hour approvals, an optional confirmation before sending, buying or deleting, and the on-device Activity log. After updating from 0.7 or older, run: npx foxwright-firefox@latest setup, then restart Firefox and your AI app.
 ```

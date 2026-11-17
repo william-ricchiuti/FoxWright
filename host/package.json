@@ -1,6 +1,6 @@
 {
   "name": "foxwright-firefox",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "MCP server + native helper that lets AI agents like Claude drive your real Firefox through the Foxwright extension.",
   "license": "Apache-2.0",
   "author": "William Ricchiuti",
