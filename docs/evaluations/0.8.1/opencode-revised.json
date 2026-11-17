@@ -1,0 +1,943 @@
+[
+  {
+    "id": "checkout",
+    "rep": 1,
+    "ok": true,
+    "ms": 24629,
+    "turns": null,
+    "cost": 0.0023614199999999995,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 2,
+      "computer": 4,
+      "get_page_text": 1
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 246,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 2318,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1975,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 325,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 9230,
+      "output": 1145,
+      "cacheRead": 96640,
+      "cacheWrite": 0
+    },
+    "answer": "Order complete. The confirmation page says:\n\n- **\"Checkout: Complete!\"**\n- **\"Thank you for your order!\"**\n- \"Your order has been dispatched, and will arrive just as fast as the pony can get there!\"\n- (with \"Back Home\" and \"Generate PDF order\" buttons)\n\nThe tab is left open at https://www.saucedemo.com/checkout-complete.html for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 1,
+    "ok": true,
+    "ms": 15024,
+    "turns": null,
+    "cost": 0.000972534,
+    "tools": {
+      "browser_batch": 5
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "browser_batch": {
+        "chars": 4359,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2045,
+      "output": 805,
+      "cacheRead": 60928,
+      "cacheWrite": 0
+    },
+    "answer": "FOX-4BQCJR",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": false,
+    "ms": 27566,
+    "turns": null,
+    "cost": 0.0020632320000000003,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 2,
+      "get_page_text": 2,
+      "read_page": 3,
+      "computer": 2,
+      "read_network_requests": 1,
+      "read_console_messages": 1
+    },
+    "toolCalls": 13,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 714,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 600,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2227,
+        "images": 0
+      },
+      "computer": {
+        "chars": 184,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 119,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 20,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3312,
+      "output": 2084,
+      "cacheRead": 105344,
+      "cacheWrite": 0
+    },
+    "answer": "Both pages are static (no dynamic pricing or checkout step), and shipping is shown inline. No cart page exists.\n\nTotals:\n- Copper: $32.31 + $4.99 shipping = **$37.30**\n- Steel: $36.04 + $12.50 shipping = $48.54\n\nThe **Copper kettle is cheaper** once shipping is included, with a total of **$37.30**.\n\n(Both tabs left open for the verifier.)",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 26155,
+    "turns": null,
+    "cost": 0.0018574619999999998,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 6,
+      "browser_batch": 4,
+      "computer": 1
+    },
+    "toolCalls": 13,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 347,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5285,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 1223,
+        "images": 0
+      },
+      "computer": {
+        "chars": 38,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3969,
+      "output": 1340,
+      "cacheRead": 152704,
+      "cacheWrite": 0
+    },
+    "answer": "Submitted. Reference number: **APP-E5VJZ0**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 1,
+    "ok": true,
+    "ms": 21010,
+    "turns": null,
+    "cost": 0.0009158160000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 2,
+      "get_page_text": 2,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 229,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 112,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 416,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 924,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1924,
+      "output": 614,
+      "cacheRead": 86272,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is **Fennec fox plush, large — SKU FX-02906A**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 17453,
+    "turns": null,
+    "cost": 0.001116204,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1,
+      "read_page": 1,
+      "read_network_requests": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 606,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1791,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 108,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1898,
+      "output": 1094,
+      "cacheRead": 58368,
+      "cacheWrite": 0
+    },
+    "answer": "**Fennec fox — 8 years** in the wild, the longest among the five species listed (the \"Load more species\" button was left untouched per the research-only instruction).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "checkout",
+    "rep": 2,
+    "ok": true,
+    "ms": 23262,
+    "turns": null,
+    "cost": 0.001209264,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 3,
+      "computer": 2,
+      "get_page_text": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 246,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 3200,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1141,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 325,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2440,
+      "output": 944,
+      "cacheRead": 92288,
+      "cacheWrite": 0
+    },
+    "answer": "Confirmation page (`/checkout-complete.html`) says:\n\n**\"Checkout: Complete!\"**\n**\"Thank you for your order!\"**\n\"Your order has been dispatched, and will arrive just as fast as the pony can get there!\"",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 2,
+    "ok": true,
+    "ms": 22994,
+    "turns": null,
+    "cost": 0.0013890600000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 3,
+      "read_page": 4,
+      "computer": 2
+    },
+    "toolCalls": 11,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 340,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 736,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2802,
+        "images": 0
+      },
+      "computer": {
+        "chars": 74,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2946,
+      "output": 961,
+      "cacheRead": 123520,
+      "cacheWrite": 0
+    },
+    "answer": "Your membership code is **FOX-4BQCJR**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 2,
+    "ok": true,
+    "ms": 14936,
+    "turns": null,
+    "cost": 0.0009205859999999999,
+    "tools": {
+      "tabs_create_mcp": 2,
+      "navigate": 2,
+      "read_page": 2,
+      "get_page_text": 2
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_create_mcp": {
+        "chars": 74,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 694,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1483,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 598,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1899,
+      "output": 721,
+      "cacheRead": 67712,
+      "cacheWrite": 0
+    },
+    "answer": "**Steel kettle — $24.85 total** (free shipping).\n\n- Steel: $24.85 + free shipping = **$24.85**\n- Copper: $35.07 + $12.50 shipping = $47.57\n\nBoth tabs (6 and 7) are left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 2,
+    "ok": true,
+    "ms": 27894,
+    "turns": null,
+    "cost": 0.0018879480000000004,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 6,
+      "form_input": 2,
+      "browser_batch": 3,
+      "computer": 2
+    },
+    "toolCalls": 15,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 347,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5240,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 111,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 1003,
+        "images": 0
+      },
+      "computer": {
+        "chars": 62,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4374,
+      "output": 1191,
+      "cacheRead": 172416,
+      "cacheWrite": 0
+    },
+    "answer": "Submitted successfully. Reference number: **APP-E5VJZ0**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 2,
+    "ok": true,
+    "ms": 18658,
+    "turns": null,
+    "cost": 0.0009266340000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 3,
+      "get_page_text": 2
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 230,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 100,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 548,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1631,
+      "output": 704,
+      "cacheRead": 86528,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is **Fennec fox plush, large — SKU FX-B07281**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 2,
+    "ok": true,
+    "ms": 11336,
+    "turns": null,
+    "cost": 0.00059793,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 606,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1107,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1123,
+      "output": 479,
+      "cacheRead": 47360,
+      "cacheWrite": 0
+    },
+    "answer": "**Gray fox** — 8 years in the wild (the longest of the five listed species).\n\nTab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "checkout",
+    "rep": 3,
+    "ok": true,
+    "ms": 32568,
+    "turns": null,
+    "cost": 0.001734108,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 5,
+      "computer": 6,
+      "find": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 15,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 266,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 292,
+        "images": 0
+      },
+      "computer": {
+        "chars": 3875,
+        "images": 0
+      },
+      "find": {
+        "chars": 682,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 332,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3778,
+      "output": 1106,
+      "cacheRead": 167936,
+      "cacheWrite": 0
+    },
+    "answer": "Done. The confirmation page says:\n\n**\"Thank you for your order!\"** — with the subtitle **\"Your order has been dispatched, and will arrive just as fast as the pony can get there!\"** (page title: \"Checkout: Complete!\")",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 3,
+    "ok": true,
+    "ms": 24790,
+    "turns": null,
+    "cost": 0.0015858,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 3,
+      "read_page": 2,
+      "get_page_text": 3,
+      "find": 1,
+      "computer": 1
+    },
+    "toolCalls": 12,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 320,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 691,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 682,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 673,
+        "images": 0
+      },
+      "find": {
+        "chars": 138,
+        "images": 0
+      },
+      "computer": {
+        "chars": 44,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2724,
+      "output": 1290,
+      "cacheRead": 134400,
+      "cacheWrite": 0
+    },
+    "answer": "**FOX-4BQCJR**\n\n(Fixed email to `ada@example.com` and password to `kitsune2026!`; chose Fennec fox, Den (family), and accepted rules. Tab left open for the verifier.)",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 3,
+    "ok": true,
+    "ms": 16749,
+    "turns": null,
+    "cost": 0.0009548760000000001,
+    "tools": {
+      "tabs_create_mcp": 2,
+      "navigate": 2,
+      "read_page": 2,
+      "get_page_text": 2
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_create_mcp": {
+        "chars": 74,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 694,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1496,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 600,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2154,
+      "output": 612,
+      "cacheRead": 88192,
+      "cacheWrite": 0
+    },
+    "answer": "The **Copper kettle** is cheaper: $31.69 + $9.99 shipping = **$41.68** total (Steel: $32.08 + $12.50 = $44.58). Both tabs are left open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 3,
+    "ok": true,
+    "ms": 23219,
+    "turns": null,
+    "cost": 0.0016540199999999998,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 5,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 11,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 327,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 4345,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 1100,
+        "images": 0
+      },
+      "computer": {
+        "chars": 38,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 3206,
+      "output": 1312,
+      "cacheRead": 128640,
+      "cacheWrite": 0
+    },
+    "answer": "Application submitted. Reference number: **APP-E5VJZ0**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 3,
+    "ok": true,
+    "ms": 20851,
+    "turns": null,
+    "cost": 0.000910782,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 2,
+      "get_page_text": 2,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 229,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 67,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 548,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 894,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1929,
+      "output": 605,
+      "cacheRead": 86144,
+      "cacheWrite": 0
+    },
+    "answer": "Top result: **Fennec fox plush, large — SKU FX-AC425A**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 3,
+    "ok": true,
+    "ms": 14985,
+    "turns": null,
+    "cost": 0.0009316019999999999,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1,
+      "read_network_requests": 1,
+      "read_page": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 606,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 108,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1791,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1715,
+      "output": 834,
+      "cacheRead": 57984,
+      "cacheWrite": 0
+    },
+    "answer": "Kit fox — 6 years in the wild.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]

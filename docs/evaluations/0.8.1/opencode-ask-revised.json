@@ -1,0 +1,362 @@
+[
+  {
+    "id": "read-only-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 9680,
+    "turns": null,
+    "cost": 0.00034872599999999994,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 741,
+      "output": 211,
+      "cacheRead": 36992,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**\nAudit code: **AUDIT-d5ddf539**\n\nRead-only page, nothing was clicked or changed; tab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 16093,
+    "turns": null,
+    "cost": 0.000717018,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "read_page": 1,
+      "get_page_text": 2,
+      "tabs_create_mcp": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 694,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 295,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 601,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1447,
+      "output": 496,
+      "cacheRead": 67456,
+      "cacheWrite": 0
+    },
+    "answer": "The **Copper kettle** is cheaper: $25.49 + $12.50 shipping = **$37.99** total.\n\nSteel comes to $29.35 + $12.50 = $41.85. Both tabs remain open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once http://127.0.0.1:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 10369,
+    "turns": null,
+    "cost": 0.000412344,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 605,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 916,
+      "output": 272,
+      "cacheRead": 37248,
+      "cacheWrite": 0
+    },
+    "answer": "**Gray fox** — 6 years in the wild. (Longest of the five listed: Red 3, Arctic 2, Fennec 4, Gray 6, Kit 5.)",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "denied-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 10785,
+    "turns": null,
+    "cost": 0.00028626,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1
+    },
+    "toolCalls": 2,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 124,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 542,
+      "output": 204,
+      "cacheRead": 27520,
+      "cacheWrite": 0
+    },
+    "answer": "The permission window for `http://b.test:8765` was denied, so I can't load the page or look up the Den membership price. If you approve that site when Foxwright asks, I can retry.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "deny http://b.test:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 2,
+    "ok": true,
+    "ms": 10223,
+    "turns": null,
+    "cost": 0.00032622600000000004,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 215,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 723,
+      "output": 178,
+      "cacheRead": 36992,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**\nAudit code: **AUDIT-66586fd8**\n\nTab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 2,
+    "ok": true,
+    "ms": 136437,
+    "turns": null,
+    "cost": 0.0012379860000000002,
+    "tools": {
+      "tabs_context_mcp": 2,
+      "tabs_create_mcp": 2,
+      "navigate": 3,
+      "read_page": 1,
+      "computer": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 11,
+    "toolErrors": 4,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 523,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 72,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 429,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 35,
+        "images": 0
+      },
+      "computer": {
+        "chars": 151,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 600,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2591,
+      "output": 869,
+      "cacheRead": 109312,
+      "cacheWrite": 0
+    },
+    "answer": "**Steel kettle — $39.80 total** ($34.81 + $4.99 shipping). The copper kettle comes to $42.27 ($29.77 + $12.50 shipping), so steel is cheaper. Both tabs (5 and 9) are left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once http://127.0.0.1:8765",
+      "once http://127.0.0.1:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 2,
+    "ok": true,
+    "ms": 13864,
+    "turns": null,
+    "cost": 0.0006220440000000001,
+    "tools": {
+      "tabs_context_mcp": 2,
+      "navigate": 2,
+      "get_page_text": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 477,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 701,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1182,
+      "output": 459,
+      "cacheRead": 56448,
+      "cacheWrite": 0
+    },
+    "answer": "**Gray fox — 7 years** in the wild (the longest of the five species listed; Red 2, Kit 3, Arctic 4, Fennec 5).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "denied-site",
+    "rep": 2,
+    "ok": true,
+    "ms": 10908,
+    "turns": null,
+    "cost": 0.00046269599999999996,
+    "tools": {
+      "tabs_context_mcp": 2,
+      "navigate": 2
+    },
+    "toolCalls": 4,
+    "toolErrors": 2,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 477,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 198,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 922,
+      "output": 309,
+      "cacheRead": 46332,
+      "cacheWrite": 0
+    },
+    "answer": "Foxwright's permission window for `http://b.test:8765` was denied, so I can't load the price list. If you approve that site (or re-run and click Allow on the Foxwright prompt), I'll read the Den membership price right away.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "deny http://b.test:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]
