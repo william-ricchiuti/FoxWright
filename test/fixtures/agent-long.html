@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Long inventory</title>
+<h1>Inventory</h1><button onclick="inventory.changes++; inventory.stock=23; inventory.code='SHIP-'+crypto.randomUUID().slice(0,8); render()">Refresh inventory</button><p id="status"></p><main id="rows"></main>
+<script>
+window.inventory = {stock: 17, code: 'PENDING', changes: 0};
+function render() { document.getElementById('status').textContent = 'Stock count: '+inventory.stock+'. Shipment code: '+inventory.code; } render();
+for(let i=1;i<=450;i++) { const p=document.createElement('p'); p.textContent='Archived inventory row '+i+': unchanged warehouse supplies awaiting routine review.'; document.getElementById('rows').append(p); }
+</script></html>

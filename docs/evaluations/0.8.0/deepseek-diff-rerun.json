@@ -1,0 +1,137 @@
+[
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": true,
+    "ms": 13473,
+    "turns": null,
+    "cost": 0.001902918,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 194,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 8709,
+      "output": 657,
+      "cacheRead": 67456,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **23**, shipment code: **SHIP-a2c9b025**.",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 2,
+    "ok": true,
+    "ms": 12018,
+    "turns": null,
+    "cost": 0.001654038,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 194,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 30795,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 7517,
+      "output": 505,
+      "cacheRead": 74496,
+      "cacheWrite": 0
+    },
+    "answer": "Refreshed. New values: **Shipment code `SHIP-77daea79`**, **stock count 23** (was 17).",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 3,
+    "ok": true,
+    "ms": 11938,
+    "turns": null,
+    "cost": 0.0013472339999999999,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 590,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 194,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5415,
+      "output": 539,
+      "cacheRead": 70528,
+      "cacheWrite": 0
+    },
+    "answer": "Refreshed and read only the diff. New values:\n\n- **Shipment code:** SHIP-e7ac12e2\n- **Stock count:** 23",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "",
+    "hitTurnLimit": false
+  }
+]

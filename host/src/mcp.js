@@ -678,7 +678,7 @@ export async function runMcp() {
   });
 
   server.registerTool('read_page', {
-    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary. On long tasks pass diff: true to get only what changed since your previous read_page of the tab (refs stay valid).',
+    description: 'Get an accessibility outline of the page (roles, names, states, values) in YAML. Interactive elements carry refs like [ref=e12] that other tools accept. Much cheaper than a screenshot for understanding a page. Includes same-page iframes. Output is truncated at max_chars on a line boundary. After changing the page, repeat read_page with diff: true and the same tabId, filter, depth, ref_id, and visible_only as your initial read to get only changed lines. Refs stay valid.',
     inputSchema: {
       tabId,
       filter: z.enum(['all', 'interactive']).optional().describe('"interactive" lists only elements with refs (buttons, links, inputs...). Default "all".'),
@@ -686,7 +686,7 @@ export async function runMcp() {
       ref_id: z.string().optional().describe('Only return the subtree under this ref (or, for an iframe ref, the frame\'s content).'),
       visible_only: z.boolean().optional().describe('Only include what is currently on screen (much smaller on long pages; scroll to see more).'),
       max_chars: numish(z.number().positive()).optional().describe('Maximum characters to return (default 20000).'),
-      diff: z.boolean().optional().describe('Only return lines added, removed or changed since your previous read_page of this tab with the same options, with their parent lines for context. Falls back to the full outline after a navigation or when there is nothing to compare with.'),
+      diff: z.boolean().optional().describe('Return changed lines and their parents for context. Reuse tabId, filter, depth, ref_id, and visible_only from the initial read. You can change max_chars. After navigation or if there is no matching prior read, returns the full outline.'),
       wait_for: z.string().optional().describe('Wait until this text is on the page, or an element like \'dialog\' or \'button "Save"\' (role and name as the outline prints them) exists, then read. Up to timeout.'),
       timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },

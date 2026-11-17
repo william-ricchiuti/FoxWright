@@ -1,0 +1,47 @@
+[
+  {
+    "id": "read-pdf",
+    "rep": 1,
+    "ok": true,
+    "ms": 19333,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 588,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 244,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 21619,
+      "output": 219,
+      "cacheRead": 70656,
+      "cacheWrite": 0
+    },
+    "answer": "The document states **“Least Concern”** as the conservation status.\n\nThe sentence is: “The quick brown fox jumps over the lazy dog.”",
+    "exit": 0,
+    "verifyError": null,
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  }
+]
