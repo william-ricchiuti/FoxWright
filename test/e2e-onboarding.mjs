@@ -112,6 +112,26 @@ await test('before setup: the page says "Helper not found", with the command and
   await until(async () => /Copied|Selected/.test(await text(welcome, 'copied')), 3000, 'copy button gave no feedback');
 });
 
+await test('the setup page shows the command for the AI app the person picks', async () => {
+  const pick = async (value) => {
+    await d.evalIn(welcome, `document.querySelector('input[name=client][value="${value}"]').click(); true`);
+    return { cmd: await text(welcome, 'cmd'), next: await text(welcome, 'client-next'), restart: await text(welcome, 'restart-hint') };
+  };
+  const desktop = await pick('claude-desktop');
+  expect(desktop.cmd === 'npx foxwright-firefox setup --claude-desktop', 'Claude Desktop command: ' + desktop.cmd);
+  expect(/quit Claude Desktop completely/i.test(desktop.next), 'Claude Desktop restart advice: ' + desktop.next);
+  const other = await pick('other');
+  expect(other.cmd === 'npx foxwright-firefox setup', 'other-app command: ' + other.cmd);
+  expect(/Cursor/.test(other.next) && /Codex/.test(other.next), 'other-app advice: ' + other.next);
+  const code = await pick('claude-code');
+  expect(code.cmd === 'npx foxwright-firefox setup --claude-code' && /\/mcp/.test(code.next), JSON.stringify(code));
+  // The choice is a labelled radio group a screen reader announces as a question.
+  const legend = await d.evalIn(welcome, `document.querySelector('fieldset.clients legend').textContent`);
+  expect(/Which AI app/.test(legend), 'radio group legend: ' + legend);
+  // The Node.js help is there before anyone needs it, behind a disclosure.
+  expect(/nodejs\.org/.test(await text(welcome, 'node-hint')), 'Node.js install hint: ' + await text(welcome, 'node-hint'));
+});
+
 await test('before setup: the popup explains what is wrong and links to setup help', async () => {
   const p = await openPage('popup/popup.html');
   await until(async () => !(await hidden(p, 'setup')) && /can't find/.test(await text(p, 'diag')), 8000, async () => `popup diagnosis: ${await text(p, 'diag')}`);
@@ -139,6 +159,7 @@ await test('after `foxwright setup` runs, the open setup page flips to "Connecte
   const diag = await text(welcome, 'diag');
   expect(/^Helper \d+\.\d+\.\d+ is running\.$/.test(diag), 'diag after connect: ' + diag);
   expect(await d.evalIn(welcome, `document.getElementById('step-use').classList.contains('current')`), 'step 3 should be highlighted');
+  expect(await hidden(welcome, 'linux-note'), 'the Snap/Flatpak warning should go away once the helper is connected');
   await shot(welcome, 'welcome-connected');
   console.log(`      (connected ${((Date.now() - t0) / 1000).toFixed(1)} s after setup ran)`);
 });

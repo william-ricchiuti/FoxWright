@@ -6,13 +6,18 @@
 
 ## Your first 5 minutes
 
-1. **Install [Foxwright for Firefox](https://addons.mozilla.org/firefox/addon/foxwright/).** You’ll need Firefox 152+ and Node.js 20+.
-2. **Connect your AI client.** Run `npx foxwright-firefox setup --claude-code`, then restart Claude Code. For Claude Desktop use `--claude-desktop`. For other MCP clients, use the config printed by `npx foxwright-firefox setup`. The toolbar popup should say **Ready** or **Connected**.
+1. **Install [Foxwright for Firefox](https://addons.mozilla.org/firefox/addon/foxwright/).** You’ll need Firefox 152+ and [Node.js](https://nodejs.org) 20+ (the LTS installer is fine). A setup page opens and walks you through the rest.
+2. **Install the helper and connect your AI app.** In a terminal (on Windows, Command Prompt), run the line for your app, then restart the app:
+   - Claude Desktop: `npx foxwright-firefox setup --claude-desktop`, then quit Claude Desktop completely and reopen it.
+   - Claude Code: `npx foxwright-firefox setup --claude-code`, then start a new session.
+   - Cursor, Codex, VS Code, Gemini CLI, Windsurf, Zed or another MCP app: `npx foxwright-firefox setup`, then copy the lines it prints for your app ([where each app keeps them](docs/CLIENTS.md)).
+
+   The setup page and the toolbar popup switch to **Connected** / **Ready** within a few seconds.
 3. **Try the prompt below.** Approve example.com when Foxwright asks. **Allow this session** with **Read only** is enough.
 
 > Use Foxwright to open https://example.com, tell me the main heading, and close the tab when you’re done.
 
-See [installation details](#install) for platform-specific setup or share the [Foxwright agent guide](docs/AGENT-GUIDE.md) with your AI client.
+On Ubuntu, the built-in Firefox is a Snap, which usually can't start the helper: see [Install](#install). If something doesn't connect, run `npx foxwright-firefox doctor`. You can also share the [Foxwright agent guide](docs/AGENT-GUIDE.md) with your AI app.
 
 *Foxwright was called Zenko in versions 0.6.0 and 0.6.1, and Kitsune before that. It's unrelated to [junyeong-nero/kitsune](https://github.com/junyeong-nero/kitsune), a different project that happens to share the old name.*
 
@@ -90,19 +95,23 @@ These numbers are a useful signal, not a guarantee: one run per task, demo sites
 
 You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
 
-> **Linux:** Ubuntu's default Firefox is a Snap, and Snap/Flatpak Firefox is sandboxed and may not be able to start the helper. If the toolbar fox keeps its `!` badge, install Firefox from [Mozilla's .deb repository or tarball](https://support.mozilla.org/kb/install-firefox-linux). Setup also registers the helper with Flatpak Firefox, LibreWolf, Waterfox and Floorp when it finds them.
+> **Linux (Ubuntu):** Ubuntu's built-in Firefox is a Snap. Snap and Flatpak Firefox run in a sandbox that usually can't start the helper, so the setup page stays at "Helper not found" and the toolbar fox keeps its `!` badge. Check with `snap list firefox` or `flatpak list | grep -i firefox`. If either lists Firefox, install Firefox from [Mozilla's .deb repository or tarball](https://support.mozilla.org/kb/install-firefox-linux) and add Foxwright to that one (Firefox Sync can bring your bookmarks and passwords). `setup` and `doctor` both warn when they see a Snap or Flatpak Firefox. Setup also registers the helper with LibreWolf, Waterfox and Floorp when it finds them.
 
-Run this to register the helper with Firefox and add the MCP server to both Claude clients. Use either flag on its own if you only use one client.
+Run this to register the helper with Firefox and add the MCP server to both Claude apps. Use either flag on its own if you only use one of them, or neither for other apps.
 
 ```sh
 npx foxwright-firefox setup --claude-code --claude-desktop
 ```
 
-Setup copies one self-contained file to `~/.foxwright/app/` (on Windows, `%USERPROFILE%\.foxwright\app\`) and registers it with Firefox. It prints the exact MCP config for other clients. The extension's setup page shows **Connected** as soon as Firefox finds the helper.
+Setup copies one self-contained file to `~/.foxwright/app/` (on Windows, `%USERPROFILE%\.foxwright\app\`) and registers it with Firefox. At the end it prints ready-to-paste settings for Codex, Gemini CLI, VS Code, Cursor, Windsurf, Zed and other MCP apps; [docs/CLIENTS.md](docs/CLIENTS.md) shows where each app keeps them. The extension's setup page shows **Connected** as soon as Firefox finds the helper.
+
+**Windows:** use Command Prompt. If PowerShell says "running scripts is disabled on this system", type `npx.cmd` instead of `npx`.
+
+**No Node.js, or an old one?** The terminal says `npx: command not found`, "'npx' is not recognized", or setup says it needs Node.js 20. Install the LTS version from [nodejs.org](https://nodejs.org), open a new terminal window, and run setup again.
 
 Run `npx foxwright-firefox doctor` to check every link in the chain. To open a GitHub bug report with shareable diagnostics, choose **Report a problem** in the toolbar popup. Review the draft and add what happened before submitting. If the helper is unavailable, run `npx foxwright-firefox@latest doctor --share` in a terminal and paste the output into the draft.
 
-Run `npx foxwright-firefox uninstall` to remove the helper and the Claude Code and Claude Desktop entries.
+Run `npx foxwright-firefox uninstall` to remove the helper and the Claude Code and Claude Desktop entries. Then remove the extension in `about:addons`, and the `foxwright` entry from any other AI app you added it to.
 
 **Upgrading to 0.8 or later.** The MCP server and the helper check each other with a key stored in `~/.foxwright/auth-token` (readable only by you) and encrypt what they exchange. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client so both sides are on the same version.
 
@@ -119,14 +128,9 @@ node host/dist/foxwright.mjs setup --claude-code # or --claude-desktop, or neith
 
 Then load the extension: open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and pick `dist/store/manifest.json`. A temporary add-on is removed when Firefox restarts. To keep it installed, use [Firefox Developer Edition or Nightly](https://www.mozilla.org/firefox/developer/) with `xpinstall.signatures.required` set to `false` in `about:config`, and install `dist/zips/foxwright-store-*.zip` (made by `npm run package`) from `about:addons` → ⚙ → *Install Add-on From File*.
 
-### Using it from Claude Code without `--claude-code`
+### Connecting other AI apps
 
-```sh
-# macOS / Linux
-claude mcp add --scope user foxwright -- node ~/.foxwright/app/foxwright.mjs mcp
-# Windows (PowerShell)
-claude mcp add --scope user foxwright -- node "$env:USERPROFILE\.foxwright\app\foxwright.mjs" mcp
-```
+Copy-paste settings for Claude Code, Claude Desktop, Cursor, Codex, Gemini CLI, VS Code, Windsurf and Zed are in [docs/CLIENTS.md](docs/CLIENTS.md). `npx foxwright-firefox setup` prints them with your own paths filled in.
 
 ### Optional: real input (WebDriver BiDi)
 
@@ -156,7 +160,7 @@ Without it, Foxwright works on most sites. The things that need real input are l
 ## Safety model
 
 - **Agent tabs only.** The agent can only use tabs in the orange **Foxwright** tab group. To share an existing tab, drag it into the group. Popups and new tabs opened from agent tabs join the group automatically.
-- **You approve every site.** Before the agent opens, reads or touches a site you haven't approved, Foxwright shows you a small window owned by the extension, not by the web page. That means a page can't hide it, restyle it, or trick you into clicking it, and neither the page nor the AI can press its buttons. The choices are *Deny*, *Allow this session* and *Always allow*.
+- **You approve every site.** Before the agent opens, reads or touches a site you haven't approved, Foxwright shows you a small window owned by the extension, not by the web page. That means a page can't hide it, restyle it, or trick you into clicking it, and neither the page nor the AI can press its buttons. The choices are *Deny*, *Allow this session* (until you quit Firefox), *Allow for 1 hour* and *Always allow*.
   - This covers embedded frames from other sites too: they stay hidden from the agent until you approve that site.
   - You can review and revoke sites in the toolbar popup, or switch to "Allow all sites" if you prefer.
 - **Read only or full access.** When you approve a site you can tick *Read only*. The agent can then read, take screenshots, scroll, hover, use PageUp/PageDown, Home/End, the arrow keys and Escape (not on a form field), and navigate. It can't click, type, fill in forms, upload files, accept dialogs or run scripts. If it tries, Foxwright asks you once whether to allow that on this site.

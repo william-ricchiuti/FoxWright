@@ -1,9 +1,13 @@
 :root {
   --paper: #f7f0e4; --paper-2: #fffaf2; --ink: #1b1714; --ink-2: #4a3f36; --muted: #7a6b5d;
   --red: #c8321b; --red-2: #d64024; --line: rgba(27, 23, 20, .12); --ok: #3f7d4e;
+  /* text colours that keep 4.5:1 contrast on the cards in both schemes */
+  --red-ink: #b02a14; --warn-ink: #9a4f0f; --ok-ink: #3f7d4e; --origin-bg: rgba(200, 50, 27, .1);
+  color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #1c1815; --paper-2: #26211d; --ink: #f3ebde; --ink-2: #d4c8b8; --muted: #a39584; --line: rgba(243, 235, 222, .12); }
+  :root { --paper: #1c1815; --paper-2: #26211d; --ink: #f3ebde; --ink-2: #d4c8b8; --muted: #a39584; --line: rgba(243, 235, 222, .12);
+    --red-ink: #f08a73; --warn-ink: #e8a060; --ok-ink: #7cc28c; --origin-bg: rgba(240, 138, 115, .14); }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -26,18 +30,18 @@ h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing
 .dot.bad { background: var(--red-2); }
 .card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 .card.alert { border-color: var(--red); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.card.alert strong { color: var(--red); }
+.card.alert strong { color: var(--red-ink); }
 .card p { margin: 0 0 8px; }
 .fine { color: var(--muted); font-size: 12px; }
-pre { margin: 0 0 8px; padding: 8px 10px; background: var(--ink); color: var(--paper); border-radius: 8px; user-select: all; }
+pre { margin: 0 0 8px; padding: 8px 10px; background: var(--ink); color: var(--paper); border-radius: 8px; user-select: all; white-space: pre-wrap; overflow-wrap: anywhere; }
 code { font: 12px ui-monospace, Menlo, monospace; }
 .choice { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
 .choice input { accent-color: var(--red); margin-top: 3px; }
 .choice small { color: var(--muted); }
-#sites { list-style: none; margin: 8px 0 0; padding: 0; max-height: 150px; overflow: auto; }
+#sites { list-style: none; margin: 8px 0 0; padding: 0; max-height: 200px; overflow: auto; }
 #sites li { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 5px 0; border-top: 1px dashed var(--line); }
-#sites li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
-#sites li em { color: var(--muted); font-style: normal; font-size: 11px; margin-left: 4px; }
+#sites li span { min-width: 0; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+#sites li em { display: block; color: var(--muted); font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; font-style: normal; font-size: 11px; }
 #sites .empty { color: var(--muted); border: 0; font-size: 12px; }
 button {
   font: inherit; font-weight: 600; cursor: pointer; border-radius: 8px; padding: 6px 12px;
@@ -49,7 +53,7 @@ button.x { padding: 1px 7px; font-weight: 500; color: var(--muted); }
 button:hover { filter: brightness(.95); }
 .row { display: flex; justify-content: space-between; padding: 3px 0; }
 .tag { font-weight: 600; }
-.tag.trusted { color: var(--ok); }
+.tag.trusted { color: var(--ok-ink); }
 footer { text-align: center; color: var(--muted); font-size: 11.5px; }
 footer a { color: inherit; }
 #recent { list-style: none; margin: 0 0 6px; padding: 0; }
@@ -64,11 +68,12 @@ footer a { color: inherit; }
 .paused-title { font-size: 16px; font-weight: 700; }
 button.resume { width: 100%; padding: 9px 12px; font-size: 14px; background: #fff7ee; color: var(--red); border-color: #fff7ee; }
 body.is-paused #pause { display: none; }
-.card.warn { border-color: #c86a1b; }
+.card.warn { border-color: var(--warn-ink); }
 .btns { display: flex; gap: 8px; align-items: center; }
 button.link { background: none; border: 0; padding: 0; font-weight: 500; color: inherit; text-decoration: underline; cursor: pointer; }
 .btns button.link { margin-left: auto; }
 .fine button.link { font-size: inherit; }
-.tag.warn { color: #c86a1b; }
+.tag.warn { color: var(--warn-ink); }
 button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
 .card.paused button:focus-visible { outline-color: #fff7ee; }
+.btns button.primary { margin-left: 0; }
