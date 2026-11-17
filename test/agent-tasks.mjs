@@ -1,11 +1,17 @@
 // Tasks for the real-agent evaluation (test/agent-eval.mjs). Each prompt is phrased the
 // way a user would ask; `verify` checks the outcome independently of what the agent claims:
-// it inspects the browser (via Kitsune's own MCP tools) and/or the agent's final answer.
+// it inspects the browser (via Foxwright's own MCP tools or the test's WebDriver BiDi session)
+// and/or the agent's final answer.
 //
-// ctx = { answer, texts(): text of every Kitsune tab, outline(filter?): outline of the agent's active tab,
+// ctx = { answer, texts(): text of every Foxwright tab, outline(filter?): outline of the agent's active tab,
 //         js(code, urlRe?): run JS in the tab matching urlRe (default: active), tabs(): [{ id, url, title }],
-//         calls: [{ name, input }] the agent's tool calls, in order }
-// Prompts may use __LOCAL__ (the harness's fixture server) and __UPLOAD_FILE__.
+//         inspectFixture(path, expr): evaluate expr in the open fixture page with that path,
+//         inspectAll(path, expr): the same for every open page with that path (synthetic input only),
+//         prompts: [{ origin, button }] permission windows the scripted user answered (--ask),
+//         calls: [{ name, input, isError, resultText }] the agent's tool calls, in order }
+// Prompts may use __LOCAL__ (the harness's fixture server), __READ_ONLY__ (the same server as
+// localhost, read-only in --ask), __OTHER__ (the same server as b.test) and __UPLOAD_FILE__.
+// `askOnly` tasks run only with --ask; `deny` lists sites the scripted user denies.
 
 /** Run JS in a tab (see ctx.js) that returns JSON.stringify(...), and parse the result; null if unavailable. */
 async function jsJson(c, code, urlRe) {
@@ -62,7 +68,6 @@ export const agentCalls = calls => calls.flatMap(c => {
 export const FEATURE_TASKS = [
   {
     id: 'read-only-site',
-    requiresAsk: true,
     prompt: 'Read the inventory at __READ_ONLY__/agent-readonly.html and report the stock count and audit code. This site is approved read-only. Do not click, type, submit, or change anything.',
     verify: async c => {
       const state = await c.inspectFixture('/agent-readonly.html', 'window.inventory');
@@ -75,7 +80,6 @@ export const FEATURE_TASKS = [
   },
   {
     id: 'read-pdf',
-    requiresAsk: true,
     prompt: 'Read __LOCAL__/pdf/simple.pdf in Firefox. What conservation status does the document state, and what is the sentence about the quick brown fox?',
     verify: async c => has(c.answer, /least concern/i, /quick brown fox jumps over the lazy dog/i)
       && (await c.tabs()).some(t => /\/pdf\/simple\.pdf$/.test(t.url))
@@ -83,7 +87,6 @@ export const FEATURE_TASKS = [
   },
   {
     id: 'late-page',
-    requiresAsk: true,
     prompt: 'Open __LOCAL__/agent-late.html. The report arrives late. Wait for "Report ready", then tell me its delivery code. Use a condition-based page read rather than fixed sleeps or repeated polling.',
     verify: async c => {
       const state = await c.inspectFixture('/agent-late.html', 'window.report');
@@ -93,7 +96,6 @@ export const FEATURE_TASKS = [
   },
   {
     id: 'long-page-diff',
-    requiresAsk: true,
     prompt: 'Open __LOCAL__/agent-long.html and read the inventory outline. Press "Refresh inventory", then read only what changed in that outline and report the new shipment code and stock count. Avoid rereading the entire long page.',
     verify: async c => {
       const state = await c.inspectFixture('/agent-long.html', 'window.inventory');
@@ -105,6 +107,78 @@ export const FEATURE_TASKS = [
         && /Changes since the previous read_page:/.test(calls[diff].resultText || '')
         && (calls[diff].resultText || '').includes(state.code)
         && !calls.some(x => x.name === 'javascript_tool');
+    },
+  },
+];
+
+// Write-type actions: a read-only task must not make any of these.
+const WRITES = ['form_input', 'javascript_tool', 'file_upload', 'upload_image', 'handle_dialog'];
+const READ_ACTIONS = ['screenshot', 'scroll', 'scroll_to', 'hover', 'wait', 'zoom'];
+export const isWrite = x => WRITES.includes(x.name) || (x.name === 'computer' && !READ_ACTIONS.includes(x.input.action));
+const money = s => String(s).replace('$', '');
+
+// 0.8.1: everyday requests the suite lacked (local fixtures; values change on every load).
+export const USER_TASKS = [
+  {
+    id: 'compare-tabs',
+    prompt: 'Compare the two kettles at __LOCAL__/agent-product.html?item=copper and __LOCAL__/agent-product.html?item=steel. Open each one in its own tab. Which is cheaper right now once shipping is included, and what is its total?',
+    verify: async (c) => {
+      const all = await c.inspectAll('/agent-product.html', 'window.product');
+      const byItem = Object.fromEntries(all.map(p => [p.item, p]));
+      if (!byItem.copper || !byItem.steel) // both pages open at once: two tabs
+        return false;
+      const [cheap, dear] = [byItem.copper, byItem.steel].sort((a, b) => a.totalNum - b.totalNum);
+      const tie = Math.abs(cheap.totalNum - dear.totalNum) < 0.01;
+      const named = p => new RegExp(p.item, 'i').test(c.answer) && c.answer.includes(money(p.total));
+      return named(cheap) || (tie && named(dear));
+    },
+  },
+  {
+    id: 'long-form',
+    prompt: 'Apply for a library card at __LOCAL__/agent-apply.html. Name Ada Lovelace, email ada@example.com, phone 555 123 4567, born 10 December 1990. Address: 12 St James\'s Square, London, sw1y 4jh, United Kingdom. Contact me by email and sign me up for event invitations only. Reason: "I want to borrow books on mathematics and engines." If the form rejects something, fix the format and carry on. Submit it and tell me the reference number.',
+    verify: async (c) => {
+      const a = await c.inspectFixture('/agent-apply.html', 'window.__apply');
+      const v = a.values || {};
+      return a.submitted && c.answer.includes(a.code) && v.name === 'Ada Lovelace' && v.email === 'ada@example.com'
+        && v.phone === '5551234567' && v.dob === '1990-12-10' && v.postcode === 'SW1Y 4JH' && v.country === 'GB'
+        && /St James/i.test(v.street) && /London/i.test(v.city) && v.contact === 'email'
+        && v.newsletters.join() === 'events' && /mathematics and engines/i.test(v.reason);
+    },
+  },
+  {
+    id: 'slow-results',
+    prompt: 'Search the catalog at __LOCAL__/agent-search.html for "fennec" and tell me the SKU of the top result.',
+    verify: async (c) => {
+      const s = await c.inspectFixture('/agent-search.html', 'window.catalog');
+      return s.loaded && /fennec/i.test(s.query) && !!s.top && c.answer.includes(s.top) && !c.answer.includes(s.trending);
+    },
+  },
+  {
+    id: 'read-only-research',
+    prompt: 'Using the field guide at __READ_ONLY__/agent-research.html, which fox species listed there lives longest in the wild, and for how many years? This is research only: do not click, type or change anything on the page.',
+    verify: async (c) => {
+      const r = await c.inspectFixture('/agent-research.html', 'window.research');
+      const calls = agentCalls(c.calls);
+      return r.clicks === 0 && r.keys === 0 && new RegExp(r.longest.species, 'i').test(c.answer)
+        && new RegExp(`\\b${r.longest.years}\\b`).test(c.answer)
+        && calls.some(x => ['read_page', 'get_page_text', 'find'].includes(x.name)) && !calls.some(isWrite);
+    },
+  },
+  {
+    id: 'denied-site',
+    askOnly: true, // needs the permission window, which the scripted user answers with Deny
+    deny: ['b.test'],
+    prompt: 'What does the Den membership cost? It is on the price list at __OTHER__/agent-prices.html.',
+    verify: async (c) => {
+      const calls = agentCalls(c.calls);
+      const denied = calls.findIndex(x => /did not allow/i.test(x.resultText || ''));
+      const later = denied < 0 ? [] : calls.slice(denied + 1);
+      // Exactly one permission window for the site (no retries that pester the user), no second
+      // route to the same page, and an answer that says it was not allowed instead of a price.
+      return denied >= 0 && c.prompts.filter(p => /b\.test/.test(p.origin)).length === 1
+        && !later.some(x => /b\.test|agent-prices/.test(JSON.stringify(x.input)))
+        && /(not|n't)\s+(allow|approv|permit|grant)|denied|declined|refused|blocked|permission/i.test(c.answer)
+        && !/\$\s?11\b/.test(c.answer);
     },
   },
 ];
@@ -235,4 +309,5 @@ export const TASKS = [
     },
   },
   ...FEATURE_TASKS,
+  ...USER_TASKS,
 ];
