@@ -14,6 +14,14 @@
 //                            -> give up on a whole suite after this many minutes, printing which
 //                               test and tool call it was stuck in and the helper log tail.
 //   FOXWRIGHT_E2E_ISOLATE=0  -> on Linux, use your real ~/.foxwright instead of a temporary HOME.
+//   FOXWRIGHT_E2E_PREFS='{"intl.locale.requested":"de"}'
+//                            -> extra Firefox prefs (JSON object) for every Firefox the suite starts,
+//                               to run the suites under a setup real people have (locale, zoom,
+//                               resistFingerprinting, strict tracking protection, ...).
+//   FOXWRIGHT_E2E_POLICIES='{"ExtensionSettings":{...}}'
+//                            -> extra enterprise policies (JSON), e.g. to install a language pack.
+//   FOXWRIGHT_E2E_FIREFOX_ARGS='--window-size=640,480'
+//                            -> extra Firefox command-line arguments (space-separated).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -224,8 +232,6 @@ export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
   const dist = mac ? path.join(path.dirname(firefoxBin), '..', 'Resources', 'distribution') : path.join(path.dirname(firefoxBin), 'distribution');
   if (/^\/Applications\//.test(firefoxBin) && !process.env.FOXWRIGHT_E2E_ALLOW_SYSTEM_FIREFOX)
     throw new Error('The tests write a policies.json into the Firefox install. Point FIREFOX at a copy of Firefox.app (scripts/mac-test.sh does this) instead of /Applications/Firefox.app.');
-  fs.mkdirSync(dist, { recursive: true });
-  const file = path.join(dist, 'policies.json');
   // Always keep the test Firefox from updating itself: a throwaway copy once updated mid-suite
   // (macOS) and hung the run.
   const policies = { DisableAppUpdate: true };
@@ -235,7 +241,42 @@ export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
       ext[id] = policy;
     policies['3rdparty'] = { Extensions: ext };
   }
-  fs.writeFileSync(file, JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2));
+  const json = JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2);
+  try {
+    fs.mkdirSync(dist, { recursive: true });
+    fs.writeFileSync(path.join(dist, 'policies.json'), json);
+  } catch (e) {
+    if (mac && (e.code === 'EPERM' || e.code === 'EACCES'))
+      throw new Error(`macOS refused a write into the Firefox copy (${e.code}: ${dist}); it protects app bundles that have run. Use a fresh copy of Firefox.app for each run. (Developer Edition copies are also killed at launch once the file is added: their code signature doesn't allow it.)`);
+    throw e;
+  }
+}
+
+/** A JSON object from the environment ({} when unset). */
+function jsonEnv(name) {
+  const raw = process.env[name];
+  if (!raw)
+    return {};
+  let v;
+  try {
+    v = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`${name} is not valid JSON: ${e.message}`);
+  }
+  if (!v || typeof v !== 'object' || Array.isArray(v))
+    throw new Error(`${name} must be a JSON object.`);
+  return v;
+}
+
+/** FOXWRIGHT_E2E_PREFS: extra Firefox prefs, e.g. a locale or privacy setup. */
+const extraPrefs = () => jsonEnv('FOXWRIGHT_E2E_PREFS');
+
+/** Suite policies win; ExtensionSettings entries from both are kept (e.g. a langpack plus a suite's own). */
+function mergePolicies(fromEnv, fromSuite) {
+  const out = { ...fromEnv, ...fromSuite };
+  if (fromEnv.ExtensionSettings && fromSuite.ExtensionSettings)
+    out.ExtensionSettings = { ...fromEnv.ExtensionSettings, ...fromSuite.ExtensionSettings };
+  return out;
 }
 
 // ---------- suite watchdog ----------
@@ -462,7 +503,7 @@ export async function start({ build, trusted = false, testDriver = false, policy
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
     throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
-  writePolicies(firefox, policy, extraPolicies);
+  writePolicies(firefox, policy, mergePolicies(jsonEnv('FOXWRIGHT_E2E_POLICIES'), extraPolicies));
 
   build = build || process.env.FOXWRIGHT_E2E_BUILD || 'full';
   const sourceDir = build === 'full' || build === 'store' ? path.join(root, 'dist', build) : path.resolve(build);
@@ -544,6 +585,8 @@ export async function start({ build, trusted = false, testDriver = false, policy
   const args = [];
   if (!process.env.FOXWRIGHT_E2E_HEADFUL)
     args.push('--headless');
+  if (process.env.FOXWRIGHT_E2E_FIREFOX_ARGS)
+    args.push(...process.env.FOXWRIGHT_E2E_FIREFOX_ARGS.split(/\s+/).filter(Boolean));
   if (bidiPort)
     args.push(`--remote-debugging-port=${bidiPort}`);
   if (testDriver) {
@@ -567,6 +610,7 @@ export async function start({ build, trusted = false, testDriver = false, policy
       'app.update.disabledForTesting': true,
       ...(profileDir ? { 'extensions.webextensions.keepStorageOnUninstall': true, 'extensions.webextensions.keepUuidOnUninstall': true } : {}),
       ...proxyPrefs,
+      ...extraPrefs(),
     },
   };
   // Firefox (and the helper it starts) inherit the environment at launch: point HOME at the

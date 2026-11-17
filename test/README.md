@@ -9,7 +9,7 @@ These tests run a real Firefox (via `web-ext run`, headless by default) with the
 | `e2e-permissions.mjs` | Approval timeouts, concurrent-call blocking, frame gating, upload confirmation, credential-file refusal. |
 | `e2e-store.mjs` | Smoke test of the AMO build (no `javascript_tool`). |
 | `e2e-storebuild.mjs` | The core flows on the store build, with page state read through `pageEval` instead of `javascript_tool`: outline/find, forms, React, clicks, typing, keys, drag-and-drop, dialogs, iframes, tabs, and (synthetic mode) screenshot masking of an unapproved frame, permission window Allow/Deny, Pause. Runs in both input modes; `FOXWRIGHT_E2E_BUILD=dist/amo` runs it against the signed AMO XPI (see `fetch-amo-xpi.mjs`). |
-| `e2e-smoke.mjs` | Six-step smoke test (tabs, navigate, read_page, click, type, screenshot) plus `doctor` while Firefox is connected. What CI runs on Windows. |
+| `e2e-smoke.mjs` | Six-step smoke test (tabs, navigate, read_page, click, type, screenshot) plus `doctor` while Firefox is connected. What CI runs first on Windows, in both input modes (`FOXWRIGHT_E2E_TRUSTED=1`). |
 | `e2e-resilience.mjs` | Two MCP clients at once, latency, helper crash, Firefox restart. |
 | `e2e-multi.mjs` | Two Firefox profiles at once: list_connected_browsers, select_browser, switch_browser (the test clicks Connect), and the shared socket moving to the other browser when the first closes. |
 | `e2e-gaps-*.mjs` | Seven suites written after the 0.6.0 store release: `hostile` (pages against the permission window), `stop` (the in-page pill and Alt+Shift+K, pressed for real), `trusted` (Stop and the pill in real-input mode), `boundary` (tabs outside the group, private windows, special URLs), `secrets` (uploads, password masking), `fuzz` (malformed arguments), `persistence` (approvals and pause across restarts). They run headful under Xvfb, need `xdotool`, and need `a.test`, `sub.a.test`, `b.test`, `c.test` and `xn--pple-43d.test` pointing to 127.0.0.1 in `/etc/hosts`. Linux only so far. `npm run test:gaps` runs all seven (under `xvfb-run` when there is no display). |
@@ -18,7 +18,7 @@ These tests run a real Firefox (via `web-ext run`, headless by default) with the
 | `bidi-connect.mjs` | The real-input (WebDriver BiDi) client against a fake Firefox that allows one session: overlapping connection attempts share one session. No browser needed. |
 | `sandbox-probe.mjs` | Records what happens with a Snap or Flatpak Firefox (does Firefox start the helper, the exact errors). CI runs it, non-blocking. |
 | `bench-actions.mjs` | Median latency of common tool calls. |
-| `realsites.mjs` | 51 tasks on real websites (needs internet access). |
+| `realsites.mjs` | 52 tasks on real websites (needs internet access). |
 | `agent-eval.mjs` + `agent-tasks.mjs` | A real Claude Code agent does 17 tasks; independent checks. Needs the `claude` CLI and costs about $4 per run with Opus 5.5 (less with a cheaper --model). Options: `--agent claude|codex|opencode` (other agents and models, e.g. `--agent opencode --model deepseek/deepseek-v4-pro`), `--trusted`, `--ask`, `--repeat N`, `--only REGEX`. |
 | `measure-outline.mjs` | Outline sizes on real sites. |
 
@@ -31,7 +31,7 @@ Helpers: `harness.mjs` (fixture servers, Firefox, MCP client, `pageEval`, suite 
 - On Linux the harness sets up the helper in a temporary home folder, so your own `~/.foxwright` and native-messaging registration aren't touched (set `FOXWRIGHT_E2E_ISOLATE=0` to use them instead). On macOS and Windows the tests use your real home folder; on a Mac see below.
 - To see the browser, set `FOXWRIGHT_E2E_HEADFUL=1` (under Xvfb on a server).
 - Behind a TLS-intercepting proxy (e.g. a CI sandbox), set `FOXWRIGHT_E2E_PROXY=host:port` and `FOXWRIGHT_E2E_PROXY_CA=/path/to/proxy-ca.crt` for the real-site suites.
-- Node 20 and 22 both work (`ws-shim.mjs` supplies WebSocket on Node 20).
+- Node 20, 22 and 24 all work (`ws-shim.mjs` supplies WebSocket on Node 20).
 
 ## Harness options (environment)
 
@@ -41,6 +41,10 @@ Helpers: `harness.mjs` (fixture servers, Firefox, MCP client, `pageEval`, suite 
 | `FOXWRIGHT_E2E_TRUSTED=1` | Trusted (WebDriver BiDi) input. The harness waits until Firefox's BiDi endpoint opens sessions promptly before the first test (`FOXWRIGHT_E2E_TRUSTED_WAIT_SEC`, default 90) and, if the MCP server's first connection still lost a race with a busy Firefox, waits for it to switch to trusted input instead of letting the run test synthetic input; it fails with a clear message if trusted input never comes up. |
 | `FOXWRIGHT_E2E_SUITE_TIMEOUT_MIN` | Give up on a whole suite after this many minutes (default 25; 120 for `realsites.mjs` and `agent-eval.mjs`), printing the current test, the last tool call and whether it was answered, and the tail of the helper log, and exit with code 124. Also written to `test/results/<suite>-timeout.txt`. |
 | `FOXWRIGHT_E2E_PAGE_EVAL=bidi\|beacon` | Force how `pageEval` reads page state (see below). |
+| `FOXWRIGHT_E2E_PREFS='{"privacy.resistFingerprinting":true}'` | Extra Firefox prefs (JSON) for every Firefox a suite starts: run any suite under a setup real people have (locale, `layout.css.devPixelsPerPx`, resistFingerprinting, strict tracking protection). |
+| `FOXWRIGHT_E2E_POLICIES='{"ExtensionSettings":{...}}'` | Extra enterprise policies (JSON), merged with the suite's own, e.g. to force-install a language pack. |
+| `FOXWRIGHT_E2E_FIREFOX_ARGS='--window-size=400,300'` | Extra Firefox arguments. Headless Firefox keeps a 1366x768 screen; for other sizes run headful under Xvfb with a matching `-screen`. |
+| `FOXWRIGHT_REALSITES_MAX_FAIL` | `realsites.mjs` exits 1 when more tasks than this fail (default 3; real sites change and sometimes block test machines). |
 
 ### Reading page state without `javascript_tool` (`pageEval`)
 
@@ -70,7 +74,7 @@ Each suite's output is also written to `test/results/<suite>.log`.
 
 ## Testing on your own Mac
 
-`bash scripts/mac-test.sh` copies Firefox.app to a temporary folder (your Firefox is never modified), builds, runs the suites and ends with a pass/fail table (non-zero exit if any suite failed). The tests use your real home folder on macOS, so by default they share `~/.foxwright` (socket, browser registry) with your own Foxwright install.
+`bash scripts/mac-test.sh` copies Firefox.app to a temporary folder (your Firefox is never modified), builds (`npm ci`), runs the suites and ends with a pass/fail table (non-zero exit if any suite failed). `FOXWRIGHT_MAC_FIREFOX_APP=/path/to/Other.app` tests another Firefox. `e2e-permission-modes` runs only when `a.test`, `sub.a.test`, `b.test` and `c.test` resolve to 127.0.0.1; the gap suites and `e2e-onboarding` are Linux only. The tests use your real home folder on macOS, so by default they share `~/.foxwright` (socket, browser registry) with your own Foxwright install.
 
 To keep a run's socket and registry apart from your install:
 
@@ -81,10 +85,11 @@ HOME=/private/tmp/fwt bash scripts/mac-test.sh quick
 Why this works, and its limits:
 
 - Firefox ignores `HOME` when it looks for the native-messaging manifest (it uses your real `~/Library/Application Support/Mozilla/NativeMessagingHosts`), so it starts your **installed** helper. That helper, however, follows `HOME`, so its socket, registry and log go to `/private/tmp/fwt/.foxwright`, and the test's MCP server looks there too.
-- So it is only valid while the installed helper is the same version as the build under test. If you changed the helper (`host/src`), install it first (`node host/dist/foxwright.mjs setup` with your real HOME) or test on Linux, where the harness isolates fully.
+- So it is only valid while the installed helper is the same build as the one under test (the script warns when it isn't). If you changed the helper (`host/src`), install it first (`node host/dist/foxwright.mjs setup` with your real HOME) or test on Linux, where the harness isolates fully.
 - Keep the path short: a Unix socket path is limited to 104 bytes on macOS, and the helper's per-browser socket lives at `<HOME>/.foxwright/browsers/<pid>.sock`.
 - Never run the browser suites against your installed Firefox or while you depend on your real install; on Linux, prefer a container.
+- Firefox Developer Edition can't be tested this way on macOS 27: a copy with the harness's `policies.json` added is killed at launch (code signature), and macOS write-protects a copy once it has run.
 
 ## CI
 
-`.github/workflows/ci.yml`: Linux with Firefox latest and 152.0 runs everything above that needs no internet, including the gap suites (hosts entries, Xvfb, xdotool) and the store-build suite in both modes; a Node 20 job; and non-blocking jobs for the signed AMO XPI (skipped with a message when AMO's version differs from `package.json`), a Windows smoke test (`e2e-smoke.mjs` after `setup`, plus the full `e2e.mjs` as information), macOS (`e2e`, `e2e-safety`, `e2e-storebuild`), and the Snap/Flatpak sandbox probes.
+`.github/workflows/ci.yml`: Linux with Firefox latest and 152.0 runs everything above that needs no internet, including the gap suites (hosts entries, Xvfb, xdotool) and the store-build suite in both modes; Node 20 and 24 jobs (the main job uses 22); and non-blocking jobs for the signed AMO XPI (skipped with a message when AMO's version differs from `package.json`), Windows in both input modes (`e2e-smoke.mjs` after `setup`, then the full `e2e.mjs`; the trusted leg starts Firefox with `--remote-debugging-port`), the store build on Windows (`e2e-store`, `e2e-storebuild` in both modes), macOS (`e2e`, `e2e-safety`, `e2e-permissions`, `e2e-storebuild`, `e2e-smoke`, then `e2e`, `e2e-storebuild` and `e2e-smoke` with trusted input), and the Snap/Flatpak sandbox probes.

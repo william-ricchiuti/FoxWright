@@ -625,7 +625,13 @@ async function main() {
   console.log(`\n${passed}/${results.length} passed (${TRUSTED ? 'trusted' : 'synthetic'})`);
   fs.mkdirSync('test/results', { recursive: true });
   fs.writeFileSync(`test/results/realsites-${TRUSTED ? 'trusted' : 'synthetic'}${FILTER ? '-partial' : ''}.json`, JSON.stringify(results, null, 2));
-  process.exit(0);
+  // Real sites change and sometimes block a test machine, so a few failures don't fail the run;
+  // more than that (e.g. Firefox lost halfway) does, so run-suites and mac-test.sh report it.
+  const maxFail = Number(process.env.FOXWRIGHT_REALSITES_MAX_FAIL ?? 3);
+  const failed = results.length - passed;
+  if (failed > maxFail)
+    console.log(`${failed} tasks failed, more than FOXWRIGHT_REALSITES_MAX_FAIL=${maxFail}`);
+  process.exit(failed > maxFail ? 1 : 0);
 }
 
 main().catch(async (e) => {

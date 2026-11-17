@@ -73,15 +73,20 @@ jobs:
           name: test-results-${{ matrix.firefox }}
           path: test/results/
 
-  node20:
-    name: Linux · Node 20 · Firefox latest
+  node:
+    name: Linux · Node ${{ matrix.node }} · Firefox latest
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Node the helper supports and the newest LTS (the main job runs Node 22).
+        node: [20, 24]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: ${{ matrix.node }}
           cache: npm
       - name: Install Firefox
         uses: browser-actions/setup-firefox@v1
@@ -96,14 +101,14 @@ jobs:
           node test/build-fixtures.mjs
       - name: BiDi client (fake Firefox)
         run: node test/bidi-connect.mjs
-      - name: Suites on Node 20
+      - name: Suites on Node ${{ matrix.node }}
         run: |
           node test/run-suites.mjs e2e e2e-safety e2e-permissions e2e-store e2e-storebuild e2e-resilience e2e-multi
           FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results-node20
+          name: test-results-node${{ matrix.node }}
           path: test/results/
 
   amo-signed:
@@ -178,12 +183,20 @@ jobs:
           foxwright-firefox uninstall
 
   windows:
-    # First real end-to-end runs on Windows (registry key, .bat launcher, named pipe). Non-blocking
-    # until it has a track record. The runner is throwaway, so the tests use its real profile/HOME.
-    name: Windows · end-to-end smoke
+    # Real end-to-end runs on Windows (registry key, .bat launcher, named pipe), with simulated
+    # input and with real input (Firefox started with --remote-debugging-port, WebDriver BiDi).
+    # Non-blocking until it has a track record. The runner is throwaway, so the tests use its real
+    # profile/HOME.
+    name: Windows · end-to-end (${{ matrix.input }} input)
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        input: [synthetic, trusted]
+    env:
+      FOXWRIGHT_E2E_TRUSTED: ${{ matrix.input == 'trusted' && '1' || '' }}
     defaults:
       run:
         shell: bash # Git Bash: stops at the first failing command (pwsh would carry on)
@@ -213,12 +226,13 @@ jobs:
           node test/build-fixtures.mjs
       - name: Set up the helper (registry key, .bat launcher)
         run: node host/dist/foxwright.mjs setup
+      # e2e-smoke and e2e read FOXWRIGHT_E2E_TRUSTED: in the trusted leg the harness starts Firefox
+      # with --remote-debugging-port and fails if real input never comes up.
       - name: Smoke test (tabs, navigate, read_page, click, type, screenshot, doctor)
         run: node test/e2e-smoke.mjs
       - name: doctor after Firefox closed (expected to report Firefox not running)
         run: node host/dist/foxwright.mjs doctor || true
-      - name: Full e2e suite (informational)
-        continue-on-error: true
+      - name: Full e2e suite
         run: node test/e2e.mjs
       - name: Helper log
         if: always()
@@ -226,12 +240,62 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results-windows
+          name: test-results-windows-${{ matrix.input }}
+          path: test/results/
+
+  windows-store:
+    # The addons.mozilla.org build (no javascript_tool) on Windows, both input modes. Non-blocking.
+    name: Windows · store build
+    runs-on: windows-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Locate Firefox
+        shell: pwsh
+        run: |
+          $ff = (Get-Command firefox -ErrorAction SilentlyContinue).Source
+          if (-not $ff) { $ff = "C:\Program Files\Mozilla Firefox\firefox.exe" }
+          Write-Output "Firefox: $ff"
+          & $ff --version | Out-Host
+          "FIREFOX=$ff" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+      - name: Set up the helper (registry key, .bat launcher)
+        run: node host/dist/foxwright.mjs setup
+      - name: Store build smoke test
+        run: node test/e2e-store.mjs
+      - name: Store build in depth (synthetic, then trusted input)
+        run: |
+          node test/e2e-storebuild.mjs
+          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e-storebuild.mjs
+      - name: Helper log
+        if: always()
+        run: node -e "const f = require('path').join(require('os').homedir(), '.foxwright', 'helper.log'); try { console.log(require('fs').readFileSync(f, 'utf8').split('\n').slice(-100).join('\n')); } catch (e) { console.log(e.message); }"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-windows-store
           path: test/results/
 
   macos:
     # The suites on a macOS runner (real HOME is fine: the runner is throwaway). Non-blocking at first.
-    name: macOS · e2e + safety
+    name: macOS · e2e + safety (both input modes)
     runs-on: macos-latest
     timeout-minutes: 40
     continue-on-error: true
@@ -270,10 +334,12 @@ jobs:
           npm run build
           node test/build-fixtures.mjs
           node host/dist/foxwright.mjs setup
-      - name: e2e (synthetic, then trusted input) and safety
-        run: |
-          node test/run-suites.mjs e2e e2e-safety e2e-storebuild
-          FOXWRIGHT_E2E_TRUSTED=1 node test/e2e.mjs
+      - name: e2e, safety and store build (synthetic input)
+        run: node test/run-suites.mjs e2e e2e-safety e2e-permissions e2e-storebuild e2e-smoke
+      - name: e2e, store build and smoke test (trusted input via WebDriver BiDi)
+        env:
+          FOXWRIGHT_E2E_TRUSTED: "1"
+        run: node test/run-suites.mjs e2e e2e-storebuild e2e-smoke
       - uses: actions/upload-artifact@v7
         if: always()
         with:
