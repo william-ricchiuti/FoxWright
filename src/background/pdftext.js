@@ -13,11 +13,135 @@
 // password), scanned pages (images of text, which need OCR), CID fonts without a Unicode map,
 // and vertical writing. Reading order is the order text is drawn in, which for multi-column
 // layouts is usually, not always, the reading order.
+//
+// The file comes from a web site and is parsed in the extension's background page, so nothing in
+// it may hang that page or exhaust its memory: every loop is bounded by the limits below, the
+// work is spread over many event-loop turns, and the only error that leaves this module is a
+// PdfError. test/pdf-fuzz.mjs holds the hostile files this was hardened against.
 
 export class PdfError extends Error {
   constructor(code, message) {
     super(message);
     this.code = code;
+  }
+}
+
+export const PDF_LIMITS = {
+  timeMs: 20000, // one extraction, start to finish
+  fileBytes: 100 * 1048576, // the file itself (get_page_text downloads at most 60 MB)
+  nesting: 100, // arrays and dictionaries inside each other
+  objects: 1000000, // "n g obj" definitions in the file
+  streamBytes: 64 * 1048576, // one stream after decoding (after each filter)
+  decodedBytes: 512 * 1048576, // everything decoded during one extraction
+  cacheBytes: 64 * 1048576, // decoded streams kept for reuse
+  cmapTokens: 700000, // tokens read from one ToUnicode CMap
+  cmapEntries: 200000, // codes one font's ToUnicode CMap may map
+  cmapTarget: 256, // bytes of text one code may map to
+  codespaces: 64, // codespace ranges per CMap
+  widths: 200000, // glyph widths per font
+  pages: 100000,
+  trailers: 1000,
+};
+
+const mb = (n) => Math.round(n / 1048576);
+
+/** Errors that end the whole extraction (the others cost one stream or one page). */
+const isFatal = (e) => e instanceof PdfError && (e.code === 'timeout' || e.code === 'toolarge');
+/** Use in a catch that is meant to shrug off a damaged object: limits still get through. */
+function rethrowFatal(e) {
+  if (isFatal(e))
+    throw e;
+}
+/** Thrown for one stream or object that is over a limit: it is left out, the rest is still read. */
+const skip = (what) => new PdfError('skip', what);
+
+/** Time and size limits of one extraction. */
+class Budget {
+  constructor(timeMs) {
+    this.timeMs = timeMs;
+    this.deadline = Date.now() + timeMs;
+    this.count = 0;
+    this.decoded = 0;
+    this.lastYield = Date.now();
+  }
+
+  expired() {
+    return Date.now() > this.deadline;
+  }
+
+  check() {
+    if (Date.now() > this.deadline)
+      throw new PdfError('timeout', `This PDF takes too long to read: Foxwright's built-in PDF reader stops after ${Math.round(this.timeMs / 1000)} s. It may be very large, or built to be slow to read. Take screenshots of the PDF viewer instead.`);
+  }
+
+  /** Call from every loop that depends on the file; looks at the clock every few thousand units of work. */
+  tick(n = 1) {
+    if ((this.count += n) >= 4096) {
+      this.count = 0;
+      this.check();
+    }
+  }
+
+  /** Bytes produced by decoding a stream. */
+  spend(bytes) {
+    this.decoded += bytes;
+    if (this.decoded > PDF_LIMITS.decodedBytes)
+      throw new PdfError('toolarge', `This PDF expands to more data than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.decodedBytes)} MB once decompressed). Take screenshots of the PDF viewer instead.`);
+  }
+
+  /** Where waiting is possible: let the rest of the extension (messages, the Stop button) run now and then. */
+  async breathe() {
+    const now = Date.now();
+    if (now > this.deadline)
+      this.check();
+    if (now - this.lastYield > 40) {
+      await new Promise(r => setTimeout(r, 0));
+      this.lastYield = Date.now();
+    }
+  }
+}
+
+/** Decoded bytes, growing as needed up to a maximum. */
+class ByteOut {
+  constructor(max, budget, hint = 4096) {
+    this.max = max;
+    this.budget = budget;
+    this.b = new Uint8Array(Math.max(16, Math.min(max, hint)));
+    this.n = 0;
+  }
+
+  room(k) {
+    const need = this.n + k;
+    if (need <= this.b.length)
+      return;
+    if (need > this.max) {
+      this.budget.spend(this.n);
+      throw skip(`a stream is larger than ${mb(this.max)} MB once decoded`);
+    }
+    let cap = this.b.length;
+    while (cap < need)
+      cap *= 2;
+    const nb = new Uint8Array(Math.min(cap, this.max));
+    nb.set(this.b.subarray(0, this.n));
+    this.b = nb;
+    this.budget.tick(64);
+  }
+
+  push(v) {
+    if (this.n === this.b.length)
+      this.room(1);
+    this.b[this.n++] = v;
+  }
+
+  fill(v, k) {
+    this.room(k);
+    this.b.fill(v, this.n, this.n + k);
+    this.n += k;
+  }
+
+  done() {
+    this.budget.spend(this.n);
+    return this.b.subarray(0, this.n);
   }
 }
 
@@ -31,13 +155,17 @@ const WS = new Uint8Array(256);
 for (const c of [0, 9, 10, 12, 13, 32]) WS[c] = 1;
 const DELIM = new Uint8Array(256);
 for (const c of '()<>[]{}/%') DELIM[c.charCodeAt(0)] = 1;
+const ESCAPES = { 110: 10, 114: 13, 116: 9, 98: 8, 102: 12 };
+const TOKEN_CHARS = 64; // names and keywords longer than this are cut (nothing real is longer)
 
 // ---------- lexer / object parser ----------
 
 class Lexer {
-  constructor(bytes, pos = 0, end = bytes.length) {
+  constructor(bytes, budget, pos = 0, end = bytes.length) {
     this.b = bytes;
-    this.pos = pos;
+    this.budget = budget;
+    // A position that isn't a whole number inside the data (it can come from numbers in the file) reads nothing.
+    this.pos = Number.isInteger(pos) && pos >= 0 ? pos : end;
     this.end = end;
   }
 
@@ -58,85 +186,102 @@ class Lexer {
 
   /** Next token: number, PName, PStr, POp (keywords/operators and '[' ']' '<<' '>>' '{' '}'), or null at end. */
   token() {
-    this.skipWs();
     const b = this.b;
-    if (this.pos >= this.end)
-      return null;
-    const c = b[this.pos];
-    if (c === 47) { // /Name
-      let s = '';
-      this.pos++;
-      while (this.pos < this.end && !WS[b[this.pos]] && !DELIM[b[this.pos]]) {
-        if (b[this.pos] === 35 && this.pos + 2 < this.end) { // #xx
-          s += String.fromCharCode(parseInt(String.fromCharCode(b[this.pos + 1], b[this.pos + 2]), 16) || 0);
-          this.pos += 3;
-        } else {
-          s += String.fromCharCode(b[this.pos++]);
+    for (;;) {
+      this.budget.tick();
+      this.skipWs();
+      if (this.pos >= this.end)
+        return null;
+      const c = b[this.pos];
+      if (c === 47) { // /Name
+        let s = '';
+        this.pos++;
+        while (this.pos < this.end && !WS[b[this.pos]] && !DELIM[b[this.pos]]) {
+          let ch = b[this.pos++];
+          if (ch === 35 && this.pos + 1 < this.end) { // #xx
+            ch = parseInt(String.fromCharCode(b[this.pos], b[this.pos + 1]), 16) || 0;
+            this.pos += 2;
+          }
+          if (s.length < TOKEN_CHARS)
+            s += String.fromCharCode(ch);
         }
+        return new PName(s);
       }
-      return new PName(s);
-    }
-    if (c === 40) // (string)
-      return this.literal();
-    if (c === 60) {
-      if (b[this.pos + 1] === 60) {
+      if (c === 40) // (string)
+        return this.literal();
+      if (c === 60) {
+        if (b[this.pos + 1] === 60) {
+          this.pos += 2;
+          return new POp('<<');
+        }
+        return this.hex();
+      }
+      if (c === 62 && b[this.pos + 1] === 62) {
         this.pos += 2;
-        return new POp('<<');
+        return new POp('>>');
       }
-      return this.hex();
+      if (c === 91 || c === 93 || c === 123 || c === 125) {
+        this.pos++;
+        return new POp(String.fromCharCode(c));
+      }
+      if (c === 41 || c === 62) { // stray delimiter: skip it
+        this.pos++;
+        continue;
+      }
+      // number or keyword
+      const start = this.pos;
+      while (this.pos < this.end && !WS[b[this.pos]] && !DELIM[b[this.pos]])
+        this.pos++;
+      if (this.pos === start) {
+        this.pos++;
+        continue;
+      }
+      let s = '';
+      for (let i = start; i < this.pos && i < start + TOKEN_CHARS; i++)
+        s += String.fromCharCode(b[i]);
+      if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s))
+        return parseFloat(s);
+      if (/^[+-]?\d*\.\d*[+-]\d*$/.test(s)) // malformed numbers like "0.-5" seen in the wild
+        return parseFloat(s) || 0;
+      return new POp(s);
     }
-    if (c === 62 && b[this.pos + 1] === 62) {
-      this.pos += 2;
-      return new POp('>>');
-    }
-    if (c === 91 || c === 93 || c === 123 || c === 125) {
-      this.pos++;
-      return new POp(String.fromCharCode(c));
-    }
-    if (c === 41 || c === 62) { // stray delimiter: skip it
-      this.pos++;
-      return this.token();
-    }
-    // number or keyword
-    const start = this.pos;
-    while (this.pos < this.end && !WS[b[this.pos]] && !DELIM[b[this.pos]])
-      this.pos++;
-    if (this.pos === start) {
-      this.pos++;
-      return this.token();
-    }
-    let s = '';
-    for (let i = start; i < this.pos; i++)
-      s += String.fromCharCode(b[i]);
-    if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s))
-      return parseFloat(s);
-    if (/^[+-]?\d*\.\d*[+-]\d*$/.test(s)) // malformed numbers like "0.-5" seen in the wild
-      return parseFloat(s) || 0;
-    return new POp(s);
   }
 
   literal() {
     const b = this.b;
-    const out = [];
-    let depth = 1;
+    // Find the closing parenthesis first, so the bytes go straight into an array of the right size.
+    let depth = 1, p = this.pos + 1;
+    while (p < this.end) {
+      const c = b[p++];
+      if (c === 92)
+        p++;
+      else if (c === 40)
+        depth++;
+      else if (c === 41 && --depth === 0)
+        break;
+    }
+    const stop = Math.min(p, this.end);
+    this.budget.tick((stop - this.pos) >> 6);
+    const out = new Uint8Array(stop - this.pos);
+    let n = 0;
+    depth = 1;
     this.pos++;
-    while (this.pos < this.end) {
+    while (this.pos < stop) {
       let c = b[this.pos++];
       if (c === 92) { // backslash
         c = b[this.pos++];
-        const map = { 110: 10, 114: 13, 116: 9, 98: 8, 102: 12 };
-        if (map[c] !== undefined) {
-          out.push(map[c]);
+        if (ESCAPES[c] !== undefined) {
+          out[n++] = ESCAPES[c];
         } else if (c >= 48 && c <= 55) {
           let v = c - 48;
           for (let i = 0; i < 2 && b[this.pos] >= 48 && b[this.pos] <= 55; i++)
             v = v * 8 + (b[this.pos++] - 48);
-          out.push(v & 255);
+          out[n++] = v & 255;
         } else if (c === 13) {
           if (b[this.pos] === 10)
             this.pos++;
-        } else if (c !== 10) {
-          out.push(c);
+        } else if (c !== 10 && c !== undefined) {
+          out[n++] = c;
         }
         continue;
       }
@@ -144,40 +289,51 @@ class Lexer {
         depth++;
       else if (c === 41 && --depth === 0)
         break;
-      out.push(c);
+      out[n++] = c;
     }
-    return new PStr(Uint8Array.from(out));
+    this.pos = stop;
+    return new PStr(out.subarray(0, n));
   }
 
   hex() {
     const b = this.b;
     this.pos++;
-    const digits = [];
-    while (this.pos < this.end && b[this.pos] !== 62) {
-      const c = b[this.pos++];
+    let close = this.pos;
+    while (close < this.end && b[close] !== 62)
+      close++;
+    this.budget.tick((close - this.pos) >> 6);
+    const out = new Uint8Array((close - this.pos + 1) >> 1);
+    let n = 0, hi = -1;
+    for (; this.pos < close; this.pos++) {
+      const c = b[this.pos];
       const v = c >= 48 && c <= 57 ? c - 48 : c >= 65 && c <= 70 ? c - 55 : c >= 97 && c <= 102 ? c - 87 : -1;
-      if (v >= 0)
-        digits.push(v);
+      if (v < 0)
+        continue;
+      if (hi < 0) {
+        hi = v;
+      } else {
+        out[n++] = hi * 16 + v;
+        hi = -1;
+      }
     }
-    this.pos++;
-    if (digits.length % 2)
-      digits.push(0);
-    const out = new Uint8Array(digits.length / 2);
-    for (let i = 0; i < out.length; i++)
-      out[i] = digits[2 * i] * 16 + digits[2 * i + 1];
-    return new PStr(out);
+    if (hi >= 0)
+      out[n++] = hi * 16;
+    this.pos = close + 1;
+    return new PStr(out.subarray(0, n));
   }
 
   /** Parse one object (with "n g R" references), or return the operator token as POp. */
-  object(tok = this.token()) {
+  object(tok = this.token(), depth = 0) {
     if (tok instanceof POp) {
+      if ((tok.op === '[' || tok.op === '<<') && depth >= PDF_LIMITS.nesting)
+        throw skip('arrays or dictionaries are nested too deeply');
       if (tok.op === '[') {
         const arr = [];
         for (;;) {
           const t = this.token();
           if (t === null || (t instanceof POp && t.op === ']'))
             break;
-          arr.push(this.object(t));
+          arr.push(this.object(t, depth + 1));
         }
         return arr;
       }
@@ -189,7 +345,7 @@ class Lexer {
             break;
           if (!(k instanceof PName))
             continue;
-          d[k.n] = this.object();
+          d[k.n] = this.object(this.token(), depth + 1);
         }
         return d;
       }
@@ -218,7 +374,8 @@ class Lexer {
 
 // ---------- stream filters ----------
 
-async function inflate(data) {
+/** Inflate at most `max` bytes. The input goes in small pieces, so a "zip bomb" is stopped while it is still small. */
+async function inflate(data, budget, max) {
   for (const fmt of ['deflate', 'deflate-raw']) {
     let ds;
     try {
@@ -227,11 +384,18 @@ async function inflate(data) {
       continue;
     }
     const writer = ds.writable.getWriter();
-    writer.write(data).catch(() => {});
-    writer.close().catch(() => {});
     const reader = ds.readable.getReader();
+    let stop = false;
+    const feed = (async () => {
+      try {
+        for (let i = 0; i < data.length && !stop; i += 32768)
+          await writer.write(data.subarray(i, i + 32768));
+        if (!stop)
+          await writer.close();
+      } catch { /* corrupt data, or cancelled below */ }
+    })();
     const chunks = [];
-    let total = 0;
+    let total = 0, over = false;
     try {
       for (;;) {
         const { done, value } = await reader.read();
@@ -239,10 +403,23 @@ async function inflate(data) {
           break;
         chunks.push(value);
         total += value.length;
-        if (total > 256 * 1024 * 1024)
+        if (total > max || budget.expired()) {
+          over = true;
           break;
+        }
       }
     } catch { /* corrupt or trailing junk: keep what was decoded */ }
+    stop = true;
+    if (over) {
+      reader.cancel().catch(() => {});
+      writer.abort().catch(() => {});
+    }
+    await feed;
+    budget.spend(total);
+    budget.check();
+    if (over)
+      throw skip(`a stream is larger than ${mb(max)} MB once decompressed`);
+    await budget.breathe();
     if (total)
       return concat(chunks, total);
   }
@@ -259,24 +436,32 @@ function concat(chunks, total = chunks.reduce((n, c) => n + c.length, 0)) {
   return out;
 }
 
-function unpredict(data, parms) {
+function unpredict(data, parms, budget) {
   const pred = num(parms?.Predictor, 1);
   if (pred < 2)
     return data;
-  const colors = num(parms.Colors, 1), bpc = num(parms.BitsPerComponent, 8), cols = num(parms.Columns, 1);
+  const colors = Math.floor(num(parms.Colors, 1)), bpc = Math.floor(num(parms.BitsPerComponent, 8)), cols = Math.floor(num(parms.Columns, 1));
+  // Nonsense parameters (zero or negative sizes, rows longer than the data): leave the data as it is.
+  if (!(colors >= 1 && colors <= 256 && bpc >= 1 && bpc <= 32 && cols >= 1 && cols <= 0x7fffffff))
+    return data;
   const bpp = Math.max(1, Math.ceil(colors * bpc / 8));
   const rowLen = Math.ceil(colors * bpc * cols / 8);
+  if (!(rowLen >= 1 && rowLen <= data.length))
+    return data;
   if (pred === 2) { // TIFF (8-bit only)
     const out = Uint8Array.from(data);
-    for (let r = 0; r + rowLen <= out.length; r += rowLen)
+    for (let r = 0; r + rowLen <= out.length; r += rowLen) {
+      budget.tick(1 + (rowLen >> 6));
       for (let i = bpp; i < rowLen; i++)
         out[r + i] = (out[r + i] + out[r + i - bpp]) & 255;
+    }
     return out;
   }
   const rows = Math.floor(data.length / (rowLen + 1));
   const out = new Uint8Array(rows * rowLen);
   const prev = new Uint8Array(rowLen);
   for (let r = 0; r < rows; r++) {
+    budget.tick(1 + (rowLen >> 6));
     const type = data[r * (rowLen + 1)];
     const row = data.subarray(r * (rowLen + 1) + 1, (r + 1) * (rowLen + 1));
     const cur = out.subarray(r * rowLen, (r + 1) * rowLen);
@@ -297,12 +482,32 @@ function unpredict(data, parms) {
   return out;
 }
 
-function asciiHex(data) {
-  return new Lexer(Uint8Array.from([60, ...data.filter(c => c !== 62), 62])).hex().bytes;
+function asciiHex(data, budget) {
+  const out = new Uint8Array((data.length + 1) >> 1); // never larger than half the input
+  let n = 0, hi = -1;
+  for (let i = 0; i < data.length; i++) {
+    const c = data[i];
+    if (c === 62) // > end
+      break;
+    const v = c >= 48 && c <= 57 ? c - 48 : c >= 65 && c <= 70 ? c - 55 : c >= 97 && c <= 102 ? c - 87 : -1;
+    if (v < 0)
+      continue;
+    if (hi < 0) {
+      hi = v;
+    } else {
+      out[n++] = hi * 16 + v;
+      hi = -1;
+    }
+  }
+  if (hi >= 0)
+    out[n++] = hi * 16;
+  budget.tick(data.length >> 6);
+  budget.spend(n);
+  return out.subarray(0, n);
 }
 
-function ascii85(data) {
-  const out = [];
+function ascii85(data, budget, max) {
+  const out = new ByteOut(max, budget, data.length);
   let tuple = 0, n = 0;
   for (let i = 0; i < data.length; i++) {
     const c = data[i];
@@ -311,14 +516,18 @@ function ascii85(data) {
     if (WS[c])
       continue;
     if (c === 122 && n === 0) { // z
-      out.push(0, 0, 0, 0);
+      out.fill(0, 4);
       continue;
     }
     if (c < 33 || c > 117)
       continue;
     tuple = tuple * 85 + (c - 33);
     if (++n === 5) {
-      out.push((tuple >>> 24) & 255, (tuple >>> 16) & 255, (tuple >>> 8) & 255, tuple & 255);
+      out.room(4);
+      out.push((tuple >>> 24) & 255);
+      out.push((tuple >>> 16) & 255);
+      out.push((tuple >>> 8) & 255);
+      out.push(tuple & 255);
       tuple = 0;
       n = 0;
     }
@@ -329,66 +538,82 @@ function ascii85(data) {
     for (let i = 0; i < n - 1; i++)
       out.push((tuple >>> (24 - 8 * i)) & 255);
   }
-  return Uint8Array.from(out);
+  budget.tick(data.length >> 6);
+  return out.done();
 }
 
-function lzw(data, early = 1) {
-  const out = [];
-  let dict = [];
-  const reset = () => {
-    dict = [];
-    for (let i = 0; i < 256; i++) dict.push([i]);
-    dict.push(null, null); // 256 clear, 257 EOD
+function lzw(data, early, budget, max) {
+  const out = new ByteOut(max, budget, data.length * 2);
+  // The table: entry i is entry prefix[i] followed by byte suffix[i]. At most 4096 entries (12-bit codes).
+  const prefix = new Int16Array(4096).fill(-1), suffix = new Uint8Array(4096), first = new Uint8Array(4096), len = new Uint16Array(4096);
+  for (let i = 0; i < 256; i++) {
+    suffix[i] = first[i] = i;
+    len[i] = 1;
+  }
+  const emit = (code) => {
+    const l = len[code];
+    out.room(l);
+    let p = out.n + l;
+    for (let c = code; c >= 0; c = prefix[c])
+      out.b[--p] = suffix[c];
+    out.n += l;
   };
-  reset();
-  let bits = 9, buf = 0, nbuf = 0, prev = null;
+  let next = 258, bits = 9, buf = 0, nbuf = 0, prev = -1;
   for (let i = 0; i < data.length; i++) {
+    budget.tick();
     buf = (buf << 8) | data[i];
     nbuf += 8;
     while (nbuf >= bits) {
       const code = (buf >>> (nbuf - bits)) & ((1 << bits) - 1);
       nbuf -= bits;
       if (code === 256) {
-        reset();
+        next = 258;
         bits = 9;
-        prev = null;
+        prev = -1;
         continue;
       }
       if (code === 257)
-        return Uint8Array.from(out);
-      let entry = dict[code];
-      if (!entry && prev)
-        entry = [...prev, prev[0]];
-      if (!entry)
-        return Uint8Array.from(out);
-      out.push(...entry);
-      if (prev)
-        dict.push([...prev, entry[0]]);
-      prev = entry;
-      if (dict.length + early >= (1 << bits) && bits < 12)
+        return out.done();
+      let cur = code;
+      if (code < next && len[code]) {
+        emit(code);
+      } else if (prev >= 0 && next < 4096) { // the entry being defined right now: prev + its own first byte
+        emit(prev);
+        out.push(first[prev]);
+        cur = next;
+      } else {
+        return out.done(); // not a code this table has
+      }
+      if (prev >= 0 && next < 4096) {
+        prefix[next] = prev;
+        suffix[next] = first[cur === next ? prev : cur];
+        first[next] = first[prev];
+        len[next] = len[prev] + 1;
+        next++;
+      }
+      prev = cur;
+      if (next + early >= (1 << bits) && bits < 12)
         bits++;
     }
   }
-  return Uint8Array.from(out);
+  return out.done();
 }
 
-function runLength(data) {
-  const out = [];
+function runLength(data, budget, max) {
+  const out = new ByteOut(max, budget, data.length * 2);
   for (let i = 0; i < data.length;) {
+    budget.tick();
     const n = data[i++];
     if (n === 128)
       break;
     if (n < 128) {
       for (let j = 0; j <= n && i < data.length; j++) out.push(data[i++]);
     } else {
-      const v = data[i++];
-      for (let j = 0; j < 257 - n; j++) out.push(v);
+      out.fill(data[i++] ?? 0, 257 - n);
     }
   }
-  return Uint8Array.from(out);
+  return out.done();
 }
-
-const IMAGE_FILTERS = new Set(['DCTDecode', 'DCT', 'JPXDecode', 'JBIG2Decode', 'CCITTFaxDecode', 'CCF']);
 
 function num(v, d = 0) {
   return typeof v === 'number' && isFinite(v) ? v : d;
@@ -431,8 +656,10 @@ function glyphToUnicode(name) {
   if (m)
     return m[1].match(/.{4}/g).map(h => String.fromCharCode(parseInt(h, 16))).join('');
   m = /^u([0-9A-F]{4,6})$/.exec(base);
-  if (m)
-    return String.fromCodePoint(parseInt(m[1], 16));
+  if (m) {
+    const cp = parseInt(m[1], 16);
+    return cp <= 0x10FFFF ? String.fromCodePoint(cp) : '';
+  }
   m = /^([A-Za-z])(acute|grave|circumflex|dieresis|tilde|ring|cedilla|caron|macron|breve|ogonek|dotaccent|hungarumlaut)$/.exec(base);
   if (m)
     return (m[1] + ACCENTS[m[2]]).normalize('NFC');
@@ -475,55 +702,74 @@ function bytesToInt(bytes) {
   return v;
 }
 
-function parseCMap(data) {
-  const lex = new Lexer(data);
+/** A character code from a CMap: 1 to 4 bytes (so it is always a whole number that can be counted). */
+const isCode = (t) => t instanceof PStr && t.bytes.length >= 1 && t.bytes.length <= 4;
+/** The text a code maps to, at most PDF_LIMITS.cmapTarget bytes of it. */
+const target = (t) => (t instanceof PStr ? utf16be(t.bytes.length > PDF_LIMITS.cmapTarget ? t.bytes.subarray(0, PDF_LIMITS.cmapTarget) : t.bytes) : t instanceof PName ? glyphToUnicode(t.n) : '');
+
+function parseCMap(data, budget) {
+  const lex = new Lexer(data, budget);
   const map = new Map();
   const spaces = []; // [len, lo, hi]
   const toks = [];
   for (let t = lex.token(); t !== null; t = lex.token()) {
     toks.push(t);
-    if (toks.length > 2000000)
+    if (toks.length >= PDF_LIMITS.cmapTokens)
       break;
   }
-  for (let i = 0; i < toks.length; i++) {
+  // Counts every entry written, also ones that overwrite an earlier one: the work is what is limited.
+  let written = 0;
+  const full = () => written >= PDF_LIMITS.cmapEntries;
+  for (let i = 0; i < toks.length && !full(); i++) {
     const t = toks[i];
     if (!(t instanceof POp))
       continue;
     if (t.op === 'begincodespacerange') {
-      for (i++; i + 1 < toks.length && toks[i] instanceof PStr; i += 2)
-        spaces.push([toks[i].bytes.length, bytesToInt(toks[i].bytes), bytesToInt(toks[i + 1].bytes)]);
-    } else if (t.op === 'beginbfchar') {
       for (i++; i + 1 < toks.length && toks[i] instanceof PStr; i += 2) {
-        const dst = toks[i + 1];
-        map.set(`${toks[i].bytes.length}:${bytesToInt(toks[i].bytes)}`, dst instanceof PStr ? utf16be(dst.bytes) : dst instanceof PName ? glyphToUnicode(dst.n) : '');
+        if (isCode(toks[i]) && isCode(toks[i + 1]) && spaces.length < PDF_LIMITS.codespaces)
+          spaces.push([toks[i].bytes.length, bytesToInt(toks[i].bytes), bytesToInt(toks[i + 1].bytes)]);
+      }
+    } else if (t.op === 'beginbfchar') {
+      for (i++; i + 1 < toks.length && toks[i] instanceof PStr && !full(); i += 2) {
+        budget.tick();
+        if (isCode(toks[i])) {
+          written++;
+          map.set(`${toks[i].bytes.length}:${bytesToInt(toks[i].bytes)}`, target(toks[i + 1]));
+        }
       }
     } else if (t.op === 'beginbfrange') {
-      for (i++; i + 2 < toks.length && toks[i] instanceof PStr; i += 3) {
+      for (i++; i + 2 < toks.length && toks[i] instanceof PStr && !full(); i += 3) {
+        const usable = isCode(toks[i]) && isCode(toks[i + 1]);
         const len = toks[i].bytes.length;
-        const lo = bytesToInt(toks[i].bytes), hi = bytesToInt(toks[i + 1].bytes);
-        let dst = toks[i + 2];
-        if (hi - lo > 65535)
-          continue;
+        const lo = usable ? bytesToInt(toks[i].bytes) : 0;
+        // How many codes after lo the range covers: a whole number, so the loops below always end.
+        const more = usable ? Math.min(65535, bytesToInt(toks[i + 1].bytes) - lo) : -1;
+        const dst = toks[i + 2];
         if (dst instanceof POp && dst.op === '[') { // array form
           const arr = [];
           for (i += 3; i < toks.length && !(toks[i] instanceof POp && toks[i].op === ']'); i++)
             arr.push(toks[i]);
           i -= 2; // the loop adds 3; land just past ']'
-          for (let c = lo; c <= hi && c - lo < arr.length; c++)
-            map.set(`${len}:${c}`, arr[c - lo] instanceof PStr ? utf16be(arr[c - lo].bytes) : '');
+          for (let k = 0; k <= more && k < arr.length && !full(); k++) {
+            budget.tick();
+            written++;
+            map.set(`${len}:${lo + k}`, arr[k] instanceof PStr ? target(arr[k]) : '');
+          }
           continue;
         }
         if (dst instanceof PStr) {
-          const base = dst.bytes;
-          for (let c = lo; c <= hi; c++) {
+          const base = dst.bytes.length > PDF_LIMITS.cmapTarget ? dst.bytes.subarray(0, PDF_LIMITS.cmapTarget) : dst.bytes;
+          for (let k = 0; k <= more && !full(); k++) {
+            budget.tick();
             const b = Uint8Array.from(base);
-            let carry = c - lo; // add to the last byte(s)
-            for (let k = b.length - 1; k >= 0 && carry; k--) {
-              const v = b[k] + carry;
-              b[k] = v & 255;
+            let carry = k; // add to the last byte(s)
+            for (let j = b.length - 1; j >= 0 && carry; j--) {
+              const v = b[j] + carry;
+              b[j] = v & 255;
               carry = v >> 8;
             }
-            map.set(`${len}:${c}`, utf16be(b));
+            written++;
+            map.set(`${len}:${lo + k}`, utf16be(b));
           }
         }
       }
@@ -535,39 +781,72 @@ function parseCMap(data) {
 // ---------- the document ----------
 
 class Doc {
-  constructor(bytes) {
+  constructor(bytes, budget) {
     this.b = bytes;
+    this.budget = budget;
     this.offsets = new Map(); // obj num -> byte offset of "n g obj"
     this.inStream = new Map(); // obj num -> [objstm num, index]
     this.cache = new Map();
-    this.decoded = new Map();
+    this.decoded = new Map(); // stream -> decoded bytes (or null), for streams used again and again
+    this.cachedBytes = 0;
+    this.skipped = 0; // streams left out because they were over a limit
+    this.ends = null; // positions of every "endstream", found on first use
   }
 
-  scan() {
+  async scan() {
     // latin1 view for fast keyword search
     const s = latin1(this.b);
     this.s = s;
     const re = /(?:^|[^0-9])(\d{1,10})[ \t\r\n\f\0]+(\d{1,5})[ \t\r\n\f\0]+obj\b/g;
-    let m;
+    let m, n = 0;
     while ((m = re.exec(s))) {
-      const num = +m[1];
-      this.offsets.set(num, m.index + m[0].length); // later definitions (incremental updates) win
+      this.offsets.set(+m[1], m.index + m[0].length); // later definitions (incremental updates) win
+      if (this.offsets.size > PDF_LIMITS.objects)
+        throw new PdfError('toolarge', `This PDF has more than ${PDF_LIMITS.objects.toLocaleString('en-US')} objects, more than Foxwright's built-in PDF reader handles. Take screenshots of the PDF viewer instead.`);
+      if (++n % 2000 === 0)
+        await this.budget.breathe();
     }
     this.trailers = [];
     const tre = /trailer[\s\0]*<</g;
     while ((m = tre.exec(s))) {
-      const lex = new Lexer(this.b, m.index + 7);
+      const lex = new Lexer(this.b, this.budget, m.index + 7);
       try {
         const d = lex.object();
         if (d && typeof d === 'object')
           this.trailers.push(d);
-      } catch { /* ignore */ }
+      } catch (e) {
+        rethrowFatal(e);
+      }
+      if (this.trailers.length > PDF_LIMITS.trailers)
+        this.trailers.shift(); // the newest ones are the ones that count
+      if (++n % 2000 === 0)
+        await this.budget.breathe();
     }
+  }
+
+  /** Position of the first "endstream" at or after `start` (the end of the file if there is none). */
+  endstreamAfter(start) {
+    if (!this.ends) {
+      this.ends = [];
+      for (let k = this.s.indexOf('endstream'); k >= 0; k = this.s.indexOf('endstream', k + 9)) {
+        this.ends.push(k);
+        this.budget.tick();
+      }
+    }
+    let lo = 0, hi = this.ends.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.ends[mid] < start)
+        lo = mid + 1;
+      else
+        hi = mid;
+    }
+    return lo < this.ends.length ? this.ends[lo] : this.b.length;
   }
 
   /** Raw object at an offset (just after "obj"). */
   parseAt(pos) {
-    const lex = new Lexer(this.b, pos);
+    const lex = new Lexer(this.b, this.budget, pos);
     const obj = lex.object();
     if (obj && typeof obj === 'object' && !Array.isArray(obj) && !(obj instanceof PName) && !(obj instanceof PStr) && !(obj instanceof PRef) && !(obj instanceof POp)) {
       const save = lex.pos;
@@ -580,18 +859,17 @@ class Doc {
           start++;
         let end = -1;
         const len = obj.Length;
-        if (typeof len === 'number' && start + len <= this.b.length) {
+        if (typeof len === 'number' && Number.isInteger(len) && len >= 0 && start + len <= this.b.length) {
           const after = latin1(this.b.subarray(start + len, Math.min(this.b.length, start + len + 20)));
           if (/^[\s\0]*endstream/.test(after))
             end = start + len;
         }
         if (end < 0) {
-          const k = this.s.indexOf('endstream', start);
-          end = k < 0 ? this.b.length : k;
+          end = this.endstreamAfter(start);
           while (end > start && (this.b[end - 1] === 10 || this.b[end - 1] === 13))
             end--;
         }
-        return new PStream(obj, this.b.subarray(start, end));
+        return new PStream(obj, this.b.subarray(start, Math.max(start, end)));
       }
       lex.pos = save;
     }
@@ -600,25 +878,30 @@ class Doc {
 
   async loadObjectStreams() {
     for (const [num, off] of this.offsets) {
+      await this.budget.breathe();
       let o;
       try {
         o = this.parseAt(off);
-      } catch {
+      } catch (e) {
+        rethrowFatal(e);
         continue;
       }
       this.cache.set(num, o);
       if (!(o instanceof PStream))
         continue;
       const type = o.dict.Type?.n;
-      if (type === 'XRef')
+      if (type === 'XRef') {
         this.trailers.push(o.dict);
+        if (this.trailers.length > PDF_LIMITS.trailers)
+          this.trailers.shift();
+      }
       if (type !== 'ObjStm')
         continue;
       const data = await this.decode(o);
       if (!data)
         continue;
       const n = num_(o.dict.N), first = num_(o.dict.First);
-      const lex = new Lexer(data);
+      const lex = new Lexer(data, this.budget);
       const entries = [];
       for (let i = 0; i < n; i++) {
         const on = lex.token(), ob = lex.token();
@@ -643,6 +926,7 @@ class Doc {
     const n = v.num;
     if (this.cache.has(n))
       return this.cache.get(n);
+    this.budget.tick();
     let obj = null;
     try {
       if (this.offsets.has(n)) {
@@ -651,9 +935,10 @@ class Doc {
         const [sn, i] = this.inStream.get(n);
         const st = this.objStmData.get(sn);
         const [, off] = st.entries[i];
-        obj = new Lexer(st.data, st.first + off).object();
+        obj = new Lexer(st.data, this.budget, st.first + off).object();
       }
-    } catch {
+    } catch (e) {
+      rethrowFatal(e);
       obj = null;
     }
     if (obj instanceof PRef)
@@ -662,35 +947,58 @@ class Doc {
     return obj;
   }
 
+  /** A stream's data with its filters undone, or null (image data, an unknown filter, or over a size limit). */
   async decode(stream) {
     if (this.decoded.has(stream))
       return this.decoded.get(stream);
-    let data = stream.raw;
     let filters = this.get(stream.dict.Filter);
-    let parms = this.get(stream.dict.DecodeParms ?? stream.dict.DP);
     if (!Array.isArray(filters))
       filters = filters ? [filters] : [];
+    if (!filters.length)
+      return stream.raw; // already in memory: nothing to remember
+    let data;
+    try {
+      data = await this.applyFilters(stream, filters);
+    } catch (e) {
+      if (!(e instanceof PdfError && e.code === 'skip'))
+        throw e;
+      this.skipped++;
+      data = null;
+    }
+    this.cachedBytes += data ? data.length : 0;
+    if (this.cachedBytes > PDF_LIMITS.cacheBytes) {
+      this.decoded.clear();
+      this.cachedBytes = data ? data.length : 0;
+    }
+    this.decoded.set(stream, data);
+    return data;
+  }
+
+  async applyFilters(stream, filters) {
+    const budget = this.budget, max = PDF_LIMITS.streamBytes;
+    let data = stream.raw;
+    let parms = this.get(stream.dict.DecodeParms ?? stream.dict.DP);
     if (!Array.isArray(parms))
       parms = [parms];
-    for (let i = 0; i < filters.length && data; i++) {
+    for (let i = 0; i < filters.length && data && i < 16; i++) {
       const f = this.get(filters[i])?.n;
       const p = this.get(parms[i]);
       if (f === 'FlateDecode' || f === 'Fl')
-        data = unpredict(await inflate(data) || new Uint8Array(0), p);
+        data = unpredict(await inflate(data, budget, max) || new Uint8Array(0), p, budget);
       else if (f === 'LZWDecode' || f === 'LZW')
-        data = unpredict(lzw(data, num(p?.EarlyChange, 1)), p);
+        data = unpredict(lzw(data, num(p?.EarlyChange, 1) ? 1 : 0, budget, max), p, budget);
       else if (f === 'ASCIIHexDecode' || f === 'AHx')
-        data = asciiHex(data);
+        data = asciiHex(data, budget);
       else if (f === 'ASCII85Decode' || f === 'A85')
-        data = ascii85(data);
+        data = ascii85(data, budget, max);
       else if (f === 'RunLengthDecode' || f === 'RL')
-        data = runLength(data);
+        data = runLength(data, budget, max);
       else if (f === 'Crypt' && this.get(p?.Name)?.n === 'Identity')
         continue;
       else
         data = null; // image codecs and unknown filters: not text
+      await budget.breathe();
     }
-    this.decoded.set(stream, data);
     return data;
   }
 }
@@ -718,29 +1026,36 @@ class Font {
     this.ucs2 = false;
   }
 
-  /** Split a string's bytes into [code, byteLength] pairs. */
-  codes(bytes) {
-    const out = [];
+  /** Call fn(code, byteLength) for each character code in a string's bytes. */
+  eachCode(bytes, fn) {
     const spaces = this.toUni?.spaces;
+    const bySpace = !!(spaces && spaces.length);
     for (let i = 0; i < bytes.length;) {
       let len = this.twoByte ? 2 : 1;
-      if (spaces && spaces.length) {
+      if (bySpace) {
         len = 0;
+        let v = 0;
         for (let l = 1; l <= 4 && !len; l++) {
           if (i + l > bytes.length)
             break;
-          const v = bytesToInt(bytes.subarray(i, i + l));
-          if (spaces.some(([sl, lo, hi]) => sl === l && v >= lo && v <= hi))
-            len = l;
+          v = v * 256 + bytes[i + l - 1];
+          for (let k = 0; k < spaces.length; k++) {
+            if (spaces[k][0] === l && v >= spaces[k][1] && v <= spaces[k][2]) {
+              len = l;
+              break;
+            }
+          }
         }
         if (!len)
           len = this.twoByte ? 2 : 1;
       }
       len = Math.min(len, bytes.length - i);
-      out.push([bytesToInt(bytes.subarray(i, i + len)), len]);
+      let code = 0;
+      for (let k = 0; k < len; k++)
+        code = code * 256 + bytes[i + k];
+      fn(code, len);
       i += len;
     }
-    return out;
   }
 
   /** Text for one code, or null if it can't be decoded. */
@@ -765,7 +1080,11 @@ class Font {
   }
 }
 
+/** A character code as fonts number them: a whole number that is safe to count from. */
+const codeNum = (v) => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffffffff ? v : -1);
+
 async function loadFont(doc, dict) {
+  const budget = doc.budget;
   const f = new Font();
   dict = doc.get(dict);
   if (!dict || typeof dict !== 'object')
@@ -775,7 +1094,8 @@ async function loadFont(doc, dict) {
   if (tu instanceof PStream) {
     const data = await doc.decode(tu);
     if (data)
-      f.toUni = parseCMap(data);
+      f.toUni = parseCMap(data, budget);
+    await budget.breathe();
   }
   if (subtype === 'Type0') {
     f.twoByte = true;
@@ -788,16 +1108,23 @@ async function loadFont(doc, dict) {
       const w = doc.get(desc.W);
       if (Array.isArray(w)) {
         f.widths = new Map();
-        for (let i = 0; i < w.length;) {
-          const c = doc.get(w[i]);
+        let written = 0; // every width set, also ones that overwrite an earlier one
+        const full = () => written >= PDF_LIMITS.widths;
+        for (let i = 0; i < w.length && !full();) {
+          budget.tick();
+          const c = codeNum(doc.get(w[i]));
           const n2 = doc.get(w[i + 1]);
           if (Array.isArray(n2)) {
-            n2.forEach((x, j) => f.widths.set(c + j, num(doc.get(x))));
+            for (let j = 0; j < n2.length && c >= 0 && !full(); j++, written++)
+              f.widths.set(c + j, num(doc.get(n2[j])));
             i += 2;
           } else {
             const wd = num(doc.get(w[i + 2]));
-            for (let k = c; k <= n2 && k - c < 65536; k++)
-              f.widths.set(k, wd);
+            // Count the codes with a whole number, so the loop ends whatever the file says.
+            const more = c >= 0 && codeNum(n2) >= 0 ? Math.min(65535, n2 - c) : -1;
+            for (let k = 0; k <= more && !full(); k++, written++)
+              f.widths.set(c + k, wd);
+            budget.tick(more > 0 ? more : 1);
             i += 3;
           }
         }
@@ -825,17 +1152,20 @@ async function loadFont(doc, dict) {
       f.enc = baseEncoding('WinAnsiEncoding');
     let code = 0;
     for (const d0 of diffs) {
+      budget.tick();
       const d = doc.get(d0);
       if (typeof d === 'number')
         code = d;
-      else if (d instanceof PName && code < 256)
+      else if (d instanceof PName && code >= 0 && code < 256 && Number.isInteger(code))
         f.enc[code++] = glyphToUnicode(d.n);
     }
   }
   const widths = doc.get(dict.Widths);
   if (Array.isArray(widths)) {
     const fc = num(doc.get(dict.FirstChar));
-    f.widths = new Map(widths.map((w, i) => [fc + i, num(doc.get(w))]));
+    f.widths = new Map();
+    for (let i = 0; i < widths.length && i < PDF_LIMITS.widths; i++)
+      f.widths.set(fc + i, num(doc.get(widths[i])));
     f.dw = num(doc.get(fd?.MissingWidth), 500) || 500;
   }
   return f;
@@ -846,36 +1176,85 @@ async function loadFont(doc, dict) {
 const mul = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
 const ID = [1, 0, 0, 1, 0, 0];
 
+/**
+ * Collects a page's text. Pieces are kept in a list and joined once at the end, and spaces at the
+ * end are only counted until something follows them: so each addition costs the same, however
+ * much text there already is.
+ */
 class TextSink {
   constructor() {
-    this.out = '';
+    this.parts = [];
+    this.length = 0; // characters so far (without the spaces still waiting at the end)
+    this.spaces = 0; // spaces at the very end, not yet in parts
+    this.lastWs = false; // the last character in parts is white space
     this.last = null; // { x, y, size } end of the last drawn text, in device space
     this.undecoded = 0;
     this.glyphs = 0;
   }
 
+  add(t) {
+    if (!t)
+      return;
+    let e = t.length;
+    while (e > 0 && t.charCodeAt(e - 1) === 32)
+      e--;
+    if (e > 0) {
+      if (this.spaces) {
+        this.parts.push(' '.repeat(this.spaces));
+        this.length += this.spaces;
+        this.spaces = 0;
+      }
+      this.parts.push(e === t.length ? t : t.slice(0, e));
+      this.length += e;
+      this.lastWs = /\s/.test(t[e - 1]);
+    }
+    this.spaces += t.length - e;
+  }
+
   /** Separate from the previous text by a newline or space, depending on where this text starts. */
   place(x, y, size) {
     const l = this.last;
-    if (l && this.out) {
+    if (l && (this.length || this.spaces)) {
       const lh = Math.max(1, Math.max(size, l.size));
       const dy = Math.abs(y - l.y);
       if (dy > lh * 0.5) {
-        this.out = this.out.replace(/ +$/, '');
-        this.out += dy > lh * 1.9 ? '\n\n' : '\n';
+        this.spaces = 0; // no spaces before a line break
+        const nl = dy > lh * 1.9 ? '\n\n' : '\n';
+        this.parts.push(nl);
+        this.length += nl.length;
+        this.lastWs = true;
       } else if (x - l.x > lh * 0.18 || x < l.x - lh * 4) {
-        if (!/\s$/.test(this.out))
-          this.out += ' ';
+        if (!this.spaces && !this.lastWs)
+          this.spaces = 1;
       }
     }
+  }
+
+  /** The page's text, tidied: no spaces before line breaks, at most one empty line in a row. */
+  text() {
+    const lines = (this.parts.join('') + ' '.repeat(this.spaces)).split('\n');
+    const out = [];
+    let empty = 0;
+    for (let line of lines) {
+      let e = line.length;
+      while (e > 0 && (line.charCodeAt(e - 1) === 32 || line.charCodeAt(e - 1) === 9))
+        e--;
+      if (e < line.length)
+        line = line.slice(0, e);
+      empty = line ? 0 : empty + 1;
+      if (empty <= 1)
+        out.push(line);
+    }
+    return out.join('\n').trim();
   }
 }
 
 async function runContent(doc, data, resources, ctm, sink, fontCache, depth, limits) {
   if (depth > 8 || !data)
     return;
+  const budget = doc.budget;
   resources = doc.get(resources) || {};
-  const lex = new Lexer(data);
+  const lex = new Lexer(data, budget);
   const ops = [];
   let tm = ID, lm = ID, font = null, size = 1, leading = 0, cs = 0, ws = 0, th = 1, rise = 0;
   const stack = [];
@@ -889,27 +1268,29 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
     const m = trm();
     const scaled = Math.hypot(m[2], m[3]);
     sink.place(m[4], m[5], scaled);
-    for (const [code, len] of font.codes(str.bytes)) {
+    font.eachCode(str.bytes, (code, len) => {
+      budget.tick();
       const t = font.text(code, len);
       sink.glyphs++;
       if (t === null)
         sink.undecoded++;
       else
-        sink.out += t;
+        sink.add(t);
+      if (sink.length + sink.spaces > limits.maxChars)
+        throw new PdfError('limit', 'too much text');
       const w = font.width(code);
       const tx = (w * size + cs + (len === 1 && code === 32 ? ws : 0)) * th;
       tm = [tm[0], tm[1], tm[2], tm[3], tm[4] + tx * tm[0], tm[5] + tx * tm[1]];
-    }
+    });
     const end = trm();
     sink.last = { x: end[4], y: end[5], size: scaled };
-    if (sink.out.length > limits.maxChars)
-      throw new PdfError('limit', 'too much text');
   };
   const nextLine = (tx, ty) => {
     lm = mul([1, 0, 0, 1, tx, ty], lm);
     tm = lm;
   };
 
+  await budget.breathe();
   for (let t = lex.token(); t !== null; t = lex.token()) {
     if (!(t instanceof POp) || t.op === '[' || t.op === '<<') {
       ops.push(lex.object(t));
@@ -917,6 +1298,8 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
         ops.length = 0;
       continue;
     }
+    if (++limits.ops % 256 === 0)
+      await budget.breathe();
     const op = t.op;
     const a = ops;
     switch (op) {
@@ -925,11 +1308,13 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
         const name = a[0] instanceof PName ? a[0].n : '';
         size = num(a[1], 1);
         const ref = fontsDict[name];
-        // Fonts shared between pages are indirect objects: cache those by object number.
-        const key = ref instanceof PRef ? `r${ref.num}` : ref && typeof ref === 'object' ? ref : `n${name}`;
-        if (!fontCache.has(key))
-          fontCache.set(key, await loadFont(doc, ref));
-        font = fontCache.get(key);
+        // Fonts are usually indirect objects shared between pages and forms: those are loaded once
+        // per document. A font written inside the resource dictionary is kept per content stream.
+        const cache = ref instanceof PRef ? limits.fonts : fontCache;
+        const key = ref instanceof PRef ? ref.num : ref && typeof ref === 'object' ? ref : `n${name}`;
+        if (!cache.has(key))
+          cache.set(key, await loadFont(doc, ref));
+        font = cache.get(key);
         break;
       }
       case 'Td': nextLine(num(a[0]), num(a[1])); break;
@@ -955,7 +1340,7 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
         }
         break;
       }
-      case 'q': stack.push(ctm); break;
+      case 'q': if (stack.length < 10000) stack.push(ctm); break;
       case 'Q': if (stack.length) ctm = stack.pop(); break;
       case 'cm': if (a.length >= 6) ctm = mul(a.slice(0, 6).map(v => num(v)), ctm); break;
       case 'Do': {
@@ -967,10 +1352,13 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
             sink.images = (sink.images || 0) + 1;
           } else if (sub === 'Form' && !limits.forms.has(x)) {
             limits.forms.add(x);
-            const fm = doc.get(x.dict.Matrix);
-            const m = Array.isArray(fm) && fm.length === 6 ? fm.map(v => num(doc.get(v))) : ID;
-            await runContent(doc, await doc.decode(x), x.dict.Resources || resources, mul(m, ctm), sink, new Map(), depth + 1, limits);
-            limits.forms.delete(x);
+            try {
+              const fm = doc.get(x.dict.Matrix);
+              const m = Array.isArray(fm) && fm.length === 6 ? fm.map(v => num(doc.get(v))) : ID;
+              await runContent(doc, await doc.decode(x), x.dict.Resources || resources, mul(m, ctm), sink, new Map(), depth + 1, limits);
+            } finally {
+              limits.forms.delete(x);
+            }
           }
         }
         break;
@@ -988,7 +1376,8 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
           if (b[i] === 69 && b[i + 1] === 73 && WS[b[i - 1]] && (i + 2 >= b.length || WS[b[i + 2]]))
             break;
         }
-        lex.pos = i + 2;
+        budget.tick((i - lex.pos) >> 6);
+        lex.pos = Math.min(i + 2, b.length);
         sink.images = (sink.images || 0) + 1;
         break;
       }
@@ -1002,17 +1391,35 @@ async function runContent(doc, data, resources, ctm, sink, fontCache, depth, lim
 
 /**
  * Extract the text of a PDF, page by page.
- * Returns { pages: string[], pageCount, undecoded, images }. Throws PdfError with code
- * 'encrypted', 'invalid', 'notext' or 'images'.
+ * Returns { pages: string[], pageCount, undecoded, glyphs, images, truncated, stopped, skipped }.
+ *   truncated: not all of the text is there. stopped says why, if it wasn't the maxChars limit:
+ *     'time' (the time limit ran out) or 'size' (too much data once decompressed).
+ *   skipped: streams left out because they alone were over a size limit.
+ * Throws only PdfError, with code 'encrypted', 'invalid', 'notext', 'images', 'timeout' or 'toolarge'.
+ * Options: maxChars (default 5,000,000), timeMs (default PDF_LIMITS.timeMs).
  */
-export async function extractPdfText(bytes, { maxChars = 5000000 } = {}) {
+export async function extractPdfText(bytes, opts = {}) {
+  try {
+    return await extract(bytes, opts);
+  } catch (e) {
+    if (e instanceof PdfError && e.code !== 'skip' && e.code !== 'limit')
+      throw e;
+    // A bug or an unexpected shape in the file: one clear error instead of whatever was thrown.
+    throw new PdfError('invalid', `Foxwright's built-in PDF reader couldn't make sense of this PDF; it may be damaged (${String(e?.message || e).slice(0, 120)}). Take screenshots of the PDF viewer instead.`);
+  }
+}
+
+async function extract(bytes, { maxChars = 5000000, timeMs = PDF_LIMITS.timeMs } = {}) {
   if (!(bytes instanceof Uint8Array))
     bytes = new Uint8Array(bytes);
   const head = latin1(bytes.subarray(0, 1024));
   if (!/%PDF-/.test(head))
     throw new PdfError('invalid', 'This is not a PDF file (no %PDF header).');
-  const doc = new Doc(bytes);
-  doc.scan();
+  if (bytes.length > PDF_LIMITS.fileBytes)
+    throw new PdfError('toolarge', `This PDF is ${mb(bytes.length)} MB, more than Foxwright's built-in PDF reader handles (${mb(PDF_LIMITS.fileBytes)} MB). Take screenshots of the PDF viewer instead.`);
+  const budget = new Budget(timeMs);
+  const doc = new Doc(bytes, budget);
+  await doc.scan();
   await doc.loadObjectStreams();
   if (doc.trailers.some(t => t.Encrypt !== undefined && t.Encrypt !== null))
     throw new PdfError('encrypted', 'This PDF is encrypted (it may still open without a password in Firefox, which decrypts it; Foxwright\'s built-in PDF reader can\'t).');
@@ -1038,8 +1445,9 @@ export async function extractPdfText(bytes, { maxChars = 5000000 } = {}) {
   const pages = [];
   const seen = new Set();
   const walk = (node, inherited, depth) => {
+    budget.tick();
     node = doc.get(node);
-    if (!node || typeof node !== 'object' || seen.has(node) || depth > 50)
+    if (!node || typeof node !== 'object' || seen.has(node) || depth > 50 || pages.length >= PDF_LIMITS.pages)
       return;
     seen.add(node);
     const res = node.Resources !== undefined ? node.Resources : inherited;
@@ -1056,8 +1464,9 @@ export async function extractPdfText(bytes, { maxChars = 5000000 } = {}) {
   if (!pages.length) {
     // No usable page tree: fall back to every page object, in object order.
     for (const n of [...doc.offsets.keys(), ...doc.inStream.keys()].sort((a, b) => a - b)) {
+      budget.tick();
       const o = doc.get(new PRef(n, 0));
-      if (o && typeof o === 'object' && o.Type instanceof PName && o.Type.n === 'Page')
+      if (o && typeof o === 'object' && o.Type instanceof PName && o.Type.n === 'Page' && pages.length < PDF_LIMITS.pages)
         pages.push({ page: o, res: o.Resources });
     }
   }
@@ -1065,46 +1474,70 @@ export async function extractPdfText(bytes, { maxChars = 5000000 } = {}) {
     throw new PdfError('invalid', 'Couldn\'t find any pages in this PDF (it may be damaged or use features Foxwright\'s PDF reader doesn\'t support).');
 
   const texts = [];
-  let undecoded = 0, glyphs = 0, images = 0, total = 0, truncated = false;
+  let undecoded = 0, glyphs = 0, images = 0, total = 0, truncated = false, stopError = null;
+  const fonts = new Map(); // fonts that are indirect objects, by object number: loaded once per document
   const fontCache = new Map();
   for (const { page, res } of pages) {
     const sink = new TextSink();
-    let contents = doc.get(page.Contents);
-    if (!Array.isArray(contents))
-      contents = contents ? [contents] : [];
-    const parts = [];
-    for (const c of contents) {
-      const s = doc.get(c);
-      if (s instanceof PStream) {
-        const d = await doc.decode(s);
-        if (d)
-          parts.push(d, Uint8Array.of(10));
-      }
-    }
     try {
-      await runContent(doc, concat(parts), res, ID, sink, fontCache, 0, { maxChars: Math.max(0, maxChars - total), forms: new Set() });
+      await budget.breathe();
+      let contents = doc.get(page.Contents);
+      if (!Array.isArray(contents))
+        contents = contents ? [contents] : [];
+      const parts = [];
+      let size = 0;
+      for (const c of contents) {
+        budget.tick();
+        const s = doc.get(c);
+        if (s instanceof PStream) {
+          const d = await doc.decode(s);
+          if (d) {
+            size += d.length + 1;
+            if (size > PDF_LIMITS.streamBytes) {
+              doc.skipped++;
+              throw skip('a page\'s content is too large');
+            }
+            parts.push(d, Uint8Array.of(10));
+          }
+        }
+      }
+      await runContent(doc, concat(parts, size), res, ID, sink, fontCache, 0, { maxChars: Math.max(0, maxChars - total), forms: new Set(), fonts, ops: 0 });
     } catch (e) {
       if (e instanceof PdfError && e.code === 'limit')
         truncated = true;
+      else if (isFatal(e))
+        stopError = e;
+      // anything else: this page is damaged or over a limit; keep what it gave and go on
     }
     undecoded += sink.undecoded;
     glyphs += sink.glyphs;
     images += sink.images || 0;
-    const t = sink.out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    const t = sink.text();
     texts.push(t);
     total += t.length;
-    if (truncated || total >= maxChars) {
+    if (stopError || truncated || total >= maxChars) {
       truncated = true;
       break;
     }
   }
-  const textChars = texts.join('').replace(/\s/g, '').length;
+  let textChars = 0;
+  for (const t of texts) {
+    for (let i = 0; i < t.length; i++) {
+      const c = t.charCodeAt(i);
+      if (c !== 32 && c !== 10 && c !== 9 && c !== 13 && c !== 160)
+        textChars++;
+    }
+  }
   if (!textChars) {
+    if (stopError)
+      throw stopError;
     if (glyphs && undecoded)
       throw new PdfError('notext', `This PDF draws its text with fonts that have no Unicode mapping, so Foxwright can't turn it back into text (${pages.length} page${pages.length === 1 ? '' : 's'}). Take screenshots of the PDF viewer to read it.`);
     if (images)
       throw new PdfError('images', `This PDF has no text layer: its ${pages.length} page${pages.length === 1 ? ' is an image' : 's are images'} (e.g. a scan). Reading it needs OCR; take screenshots of the PDF viewer instead.`);
+    if (doc.skipped)
+      throw new PdfError('toolarge', `This PDF's pages are larger than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.streamBytes)} MB each once decompressed). Take screenshots of the PDF viewer instead.`);
     throw new PdfError('notext', `This PDF has no extractable text (${pages.length} page${pages.length === 1 ? '' : 's'}).`);
   }
-  return { pages: texts, pageCount: pages.length, undecoded, glyphs, images, truncated };
+  return { pages: texts, pageCount: pages.length, undecoded, glyphs, images, truncated, stopped: stopError ? (stopError.code === 'timeout' ? 'time' : 'size') : undefined, skipped: doc.skipped };
 }

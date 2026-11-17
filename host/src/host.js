@@ -12,11 +12,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { socketPath, foxwrightDir, logPath, browsersDir, browserSocketPath } from './paths.js';
-import { AUTH_VERSION, OLD_CLIENT_MSG, readToken, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
+import { AUTH_VERSION, OLD_CLIENT_MSG, MAX_LINE, MAX_HANDSHAKE, readToken, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
 
 const MAX_TO_EXTENSION = 1024 * 1024; // Firefox limit for host -> extension messages
 const CHUNK_BYTES = 600 * 1024;
 const DOCTOR_OUTPUT_LIMIT = 1500;
+const MAX_UNAUTHENTICATED = 32; // connections that haven't finished the handshake
 
 let logStream = null;
 function log(...args) {
@@ -273,6 +274,10 @@ function onClientSocket(socket) {
   const clientId = nextClient++;
   const c = { socket, chan: null };
   clients.set(clientId, c);
+  // Connections that never finish the handshake can't pile up: beyond a few, the oldest is closed.
+  const waiting = [...clients.values()].filter(x => !x.chan);
+  if (waiting.length > MAX_UNAUTHENTICATED)
+    waiting[0].socket.destroy();
   let buf = '';
   const ns = nonce();
   socket.setEncoding('utf8');
@@ -295,7 +300,7 @@ function onClientSocket(socket) {
       }
       if (msg.v !== AUTH_VERSION || !nc || !mac || !key || !sameMac(mac, proof(key, 'client', ns, nc))) {
         log(`client ${clientId} failed authentication`);
-        socket.end(JSON.stringify({ type: 'auth-failed', error: msg.v !== AUTH_VERSION ? `handshake version ${msg.v} is not supported by this helper (${VERSION}); run \`npx foxwright-firefox@latest setup\` and restart Firefox` : 'wrong key (the MCP server and the helper read different ~/.foxwright/auth-token files?)' }) + '\n');
+        socket.end(JSON.stringify({ type: 'auth-failed', error: msg.v !== AUTH_VERSION ? `handshake version ${Number.isInteger(msg.v) ? msg.v : 'unknown'} is not supported by this helper (${VERSION}); run \`npx foxwright-firefox@latest setup\` and restart Firefox` : 'wrong key (the MCP server and the helper read different ~/.foxwright/auth-token files?)' }) + '\n');
         return;
       }
       socket.write(JSON.stringify({ type: 'auth-ok', mac: proof(key, 'helper', ns, nc).toString('base64') }) + '\n');
@@ -316,7 +321,8 @@ function onClientSocket(socket) {
   };
   socket.on('data', (d) => {
     buf += d;
-    if (!c.chan && buf.length > 64 * 1024) { // nothing legitimate is this long before the handshake
+    if (buf.length > (c.chan ? MAX_LINE : MAX_HANDSHAKE)) { // nothing legitimate is this long
+      buf = '';
       socket.destroy();
       return;
     }
@@ -327,7 +333,13 @@ function onClientSocket(socket) {
       if (!line.trim())
         continue;
       if (!c.chan) {
-        preAuth(line);
+        try {
+          preAuth(line);
+        } catch (e) { // whatever an unauthenticated peer sends must never stop the helper
+          log(`client ${clientId}: bad handshake message (${String(e?.message || e)}); closing`);
+          socket.destroy();
+          return;
+        }
         continue;
       }
       let msg;

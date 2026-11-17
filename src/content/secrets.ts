@@ -3,10 +3,18 @@
 
 const seen = new WeakSet<Element>();
 
+// A text field called "password", "passwd" or "pwd" (by name or id) is a password field whose
+// "Show password" switch is on. The watcher below can miss that switch when the field sits in a
+// shadow root, or was already switched before Foxwright's script arrived.
+const PASSWORD_NAME = /(^|[^a-z])(pass(word|wd|phrase|code)?|pwd|pw)([^a-z]|$)/i;
+function namedLikePassword(el: HTMLInputElement): boolean {
+  return (el.type === 'text' || el.type === '') && (PASSWORD_NAME.test(el.getAttribute('name') || '') || PASSWORD_NAME.test(el.id || ''));
+}
+
 export function isSecretInput(el: Element | null): boolean {
   if (!(el instanceof HTMLInputElement))
     return false;
-  if (el.type === 'password' || seen.has(el) || /password/i.test(el.getAttribute('autocomplete') || '')) {
+  if (el.type === 'password' || seen.has(el) || /password/i.test(el.getAttribute('autocomplete') || '') || namedLikePassword(el)) {
     seen.add(el);
     return true;
   }

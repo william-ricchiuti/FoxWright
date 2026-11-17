@@ -13,6 +13,18 @@ let supportsDoctor = false;
 let nextDoctorId = 1;
 let doctorRequest = null;
 
+/**
+ * The report goes into a public issue form, so only the shape `doctor --share` produces is passed
+ * on: its header, then short lines of plain words, numbers and versions. Nothing with a slash,
+ * backslash, "@" or "~" (paths, user names, addresses) gets through, whatever the helper sent.
+ */
+function shareable(output) {
+  if (typeof output !== 'string' || output.length > 1500)
+    return false;
+  const lines = output.split('\n');
+  return lines[0] === 'Foxwright doctor (shareable)' && lines.length <= 40 && lines.every(l => /^[A-Za-z0-9 .:(),'-]{0,120}$/.test(l));
+}
+
 function finishDoctor(output) {
   if (doctorRequest) {
     clearTimeout(doctorRequest.timer);
@@ -138,7 +150,7 @@ async function onMessage(msg) {
   }
   if (msg.type === 'doctor-result') {
     if (doctorRequest?.id === msg.id)
-      finishDoctor(typeof msg.output === 'string' && msg.output.length <= 1500 ? msg.output : null);
+      finishDoctor(shareable(msg.output) ? msg.output : null);
     return;
   }
   if (msg.type === 'hello-ack') {

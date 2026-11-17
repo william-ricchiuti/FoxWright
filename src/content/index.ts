@@ -142,6 +142,19 @@ function guardFocused(a: any, kind: 'key' | 'type'): any {
   return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
 }
 
+/** form_input on a toggle that isn't a native checkbox (a switch, a menu item) presses it like a click does. */
+function guardForm(a: any): any {
+  if (!a.guard)
+    return null;
+  const el = resolveRef(a.ref);
+  if (!el || el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)
+    return null;
+  if (!['checkbox', 'switch', 'radio', 'menuitemcheckbox'].includes(el.getAttribute('role') || ''))
+    return null;
+  const c = clickConsequence(el, hereOrigin());
+  return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
+}
+
 const handlers: Record<string, (args: any) => any> = {
   ping: () => ({ pong: true, url: location.href, prefix: getRefPrefix() }),
   viewport: () => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scrollX: scrollX, scrollY: scrollY }),
@@ -155,7 +168,7 @@ const handlers: Record<string, (args: any) => any> = {
   scroll: (a) => input.scroll(a),
   scrollTo: (a) => input.scrollTo(a),
   drag: (a) => input.drag(a),
-  formInput: (a) => input.formInput(a),
+  formInput: (a) => guardForm(a) || input.formInput(a),
   upload: (a) => input.uploadFiles(a),
   refPoint: (a) => {
     const r = input.refPoint(a);

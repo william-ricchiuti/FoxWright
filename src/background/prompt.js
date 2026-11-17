@@ -29,7 +29,41 @@ export function askSite(req) {
   return ask(req);
 }
 
+/**
+ * Text in a question that a web page or the agent chose (page title, element name, file names, the
+ * agent's summary): one line, no control or text-direction characters, no quotation marks (the
+ * window puts its own around it, and text that closes them could pass itself off as Foxwright's
+ * words), and a bounded length. The window cleans up again when it shows it.
+ */
+function shown(s, max) {
+  const t = String(s ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ').replace(/["\u201c\u201d\u201e\u201f\u00ab\u00bb\u2033\u301d\u301e\uff02]/g, '\'').replace(/\s+/g, ' ').trim();
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+const MAX_FILES_SHOWN = 40;
+
+function tidyRequest(req) {
+  const out = { ...req };
+  if (req.tabTitle !== undefined)
+    out.tabTitle = shown(req.tabTitle, 120);
+  if (req.summary !== undefined)
+    out.summary = shown(req.summary, 120);
+  if (req.element)
+    out.element = { role: shown(req.element.role, 30), name: shown(req.element.name, 80), reason: shown(req.element.reason, 160) };
+  if (Array.isArray(req.files)) {
+    // File names are kept whole where possible (the end matters most: it is the name and type).
+    const one = (f) => {
+      const t = shown(f, 100000);
+      return t.length > 260 ? '…' + t.slice(-259) : t;
+    };
+    out.files = req.files.slice(0, MAX_FILES_SHOWN).map(one);
+    if (req.files.length > MAX_FILES_SHOWN)
+      out.files.push(`…and ${req.files.length - MAX_FILES_SHOWN} more files (${req.files.length} in all)`);
+  }
+  return out;
+}
+
 function ask(req) {
+  req = tidyRequest(req);
   // Consequential-action confirmations are about one element, never shared between calls.
   const key = req.type === 'upload' || req.type === 'action' ? null : `${req.type}:${req.origin}`;
   if (key && byKey.has(key))
@@ -65,7 +99,7 @@ function finish(id, answer, level = 'full') {
   if (e.windowId != null && answer === 'timeout')
     browser.windows.remove(e.windowId).catch(() => {});
   e.resolve({ answer, level });
-  logQuestion(e.req, answer);
+  logQuestion(e.req, answer, level);
 }
 
 export function handlePromptMessage(msg, sender) {
