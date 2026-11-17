@@ -1,7 +1,7 @@
 // Independent negative controls: a claimed answer or a bypass must not earn a pass.
 import assert from 'node:assert/strict';
-import { FEATURE_TASKS } from './agent-tasks.mjs';
-const task = id => FEATURE_TASKS.find(t => t.id === id);
+import { FEATURE_TASKS, USER_TASKS } from './agent-tasks.mjs';
+const task = id => [...FEATURE_TASKS, ...USER_TASKS].find(t => t.id === id);
 const call = (name, input = {}) => ({ name, input });
 let checks = 0;
 async function check(id, context, expected) {
@@ -28,4 +28,35 @@ await check('long-page-diff', { ...diff, calls: [call('read_page', { diff: true 
 await check('long-page-diff', { ...diff, calls: [...diff.calls, call('javascript_tool')] }, false);
 await check('long-page-diff', { ...diff, inspectFixture: async () => ({ stock: 23, code: 'SHIP-test', changes: 0 }) }, false);
 await check('long-page-diff', { ...diff, calls: diff.calls.map(c => ({ ...c, resultText: 'Full outline: SHIP-test' })) }, false);
+
+// 0.8.1 everyday tasks
+const product = (item, total) => ({ item, total: `$${total.toFixed(2)}`, totalNum: total });
+const cmp = { answer: 'The steel kettle is cheaper: $31.49 with shipping.', inspectAll: async () => [product('copper', 33.98), product('steel', 31.49)] };
+await check('compare-tabs', cmp, true);
+await check('compare-tabs', { ...cmp, answer: 'The copper kettle is cheaper: $33.98.' }, false);
+await check('compare-tabs', { ...cmp, inspectAll: async () => [product('steel', 31.49)] }, false);
+await check('compare-tabs', { ...cmp, inspectAll: async () => [product('copper', 33.98), { ...product('steel', 31.49), basket: 1 }] }, false);
+const form = { phone: '5551234567', dob: '1990-12-10', postcode: 'SW1Y 4JH', country: 'GB', name: 'Ada Lovelace', email: 'ada@example.com', street: "12 St James's Square", city: 'London', contact: 'email', newsletters: ['events'], reason: 'I want to borrow books on mathematics and engines.' };
+const apply = { answer: 'Reference APP-X1', inspectFixture: async () => ({ submitted: true, code: 'APP-X1', values: form }) };
+await check('long-form', apply, true);
+await check('long-form', { ...apply, inspectFixture: async () => ({ submitted: true, code: 'APP-X1', values: { ...form, newsletters: ['digest', 'events'] } }) }, false);
+await check('long-form', { ...apply, inspectFixture: async () => ({ submitted: true, code: 'APP-X1', values: { ...form, phone: '555 123 4567' } }) }, false);
+await check('long-form', { ...apply, inspectFixture: async () => ({ submitted: false, code: '', values: null }) }, false);
+const slow = { answer: 'Top result: FX-ABC123', inspectFixture: async () => ({ loaded: true, query: 'fennec', top: 'FX-ABC123', trending: 'TR-999999' }) };
+await check('slow-results', slow, true);
+await check('slow-results', { ...slow, answer: 'TR-999999' }, false);
+await check('slow-results', { ...slow, inspectFixture: async () => ({ loaded: false, query: 'fennec', top: '', trending: 'TR-999999' }) }, false);
+const research = { answer: 'The Gray fox, about 8 years.', calls: [call('get_page_text')], inspectFixture: async () => ({ clicks: 0, keys: 0, longest: { species: 'Gray fox', years: 8 } }) };
+await check('read-only-research', research, true);
+await check('read-only-research', { ...research, inspectFixture: async () => ({ clicks: 3, keys: 0, longest: { species: 'Gray fox', years: 8 } }) }, false);
+await check('read-only-research', { ...research, calls: [...research.calls, call('computer', { action: 'left_click', ref: 'e3' })] }, false);
+await check('read-only-research', { ...research, answer: 'The Gray fox, about 18 years.' }, false);
+const deniedTask = USER_TASKS.find(t => t.id === 'denied-site');
+const denyCall = { ...call('navigate', { url: 'http://b.test:8765/agent-prices.html' }), isError: true, resultText: 'The user did not allow Foxwright to access http://b.test:8765.' };
+const denied = { answer: 'You denied access to b.test, so I could not read the price list.', calls: [call('tabs_context_mcp'), denyCall], prompts: [{ origin: 'http://b.test:8765', button: 'deny' }] };
+const checkDenied = async (context, expected) => { assert.equal(await deniedTask.verify(context), expected, 'denied-site'); checks++; };
+await checkDenied(denied, true);
+await checkDenied({ ...denied, calls: [...denied.calls, denyCall], prompts: [...denied.prompts, ...denied.prompts] }, false);
+await checkDenied({ ...denied, calls: [...denied.calls, call('navigate', { url: 'http://127.0.0.1:8765/agent-prices.html' })] }, false);
+await checkDenied({ ...denied, answer: 'Den costs $11 a month.' }, false);
 console.log(`${checks} feature-verifier checks passed`);

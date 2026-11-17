@@ -13,9 +13,9 @@ let sitesKey = '';
 /** What to tell the person when the helper isn't connected (see errorKind in native.js). */
 function diagnosis(s) {
   if (s.errorKind === 'not-installed')
-    return { text: "Firefox can't find Foxwright's helper program on this computer. Install it from a terminal:", cmd: true };
+    return { text: "Firefox can't find Foxwright's helper program on this computer. Install it by running this in a terminal:", cmd: true };
   if (s.errorKind === 'exited')
-    return { text: 'Firefox started the helper, but it stopped. Node.js 20 or newer may be missing; run npx foxwright-firefox doctor in a terminal to check.', cmd: false };
+    return { text: 'Firefox started the helper, but it stopped. Usually Node.js 20 or newer is missing: install it from nodejs.org, then run npx foxwright-firefox setup again. To see exactly what is wrong, run npx foxwright-firefox doctor in a terminal.', cmd: false };
   return { text: "Looking for Foxwright's helper program…", cmd: false };
 }
 
@@ -23,7 +23,7 @@ function render(s) {
   const dot = $('dot');
   dot.className = 'dot ' + (s.paused ? 'bad' : s.connected ? 'ok' : 'bad');
   setText('status-text', s.paused ? 'Paused'
-    : s.connected ? (s.clients ? `Connected · ${s.clients} agent${s.clients > 1 ? 's' : ''} attached` : 'Ready · waiting for an agent')
+    : s.connected ? (s.clients ? `Connected · ${s.clients} agent${s.clients > 1 ? 's' : ''} attached` : 'Ready · waiting for your AI app')
       : 'Helper not connected');
   $('paused').hidden = !s.paused;
   document.body.classList.toggle('is-paused', !!s.paused);
@@ -38,9 +38,13 @@ function render(s) {
     $('setup-cmd').hidden = !d.cmd;
     setText('err', s.lastError && s.errorKind === 'exited' ? `Firefox said: ${s.lastError}` : '');
   }
-  $('version-warn').hidden = !s.versionMismatch;
-  if (s.versionMismatch)
-    setText('version-text', `The helper (${s.helperVersion}) and this extension (${s.version}) are different versions. Some tools may misbehave.`);
+  // Different versions, or an AI client that needs a restart: what to do depends on which side is older.
+  const notes = s.versionNotes || [];
+  const cmd = notes.find(n => n.cmd)?.cmd || '';
+  $('version-warn').hidden = !notes.length;
+  setText('version-text', notes.map(n => n.text).join(' '));
+  $('version-cmd').hidden = !cmd;
+  setText('version-cmd-text', cmd);
   for (const r of document.querySelectorAll('input[name=mode]')) {
     r.checked = r.value === s.mode;
     r.disabled = !!s.managedMode;
@@ -169,6 +173,12 @@ reportLink.addEventListener('click', async (event) => {
 for (const r of document.querySelectorAll('input[name=mode]'))
   r.addEventListener('change', () => act({ kind: 'setMode', mode: r.value }));
 $('confirm-actions').addEventListener('change', () => act({ kind: 'setConfirmActions', on: $('confirm-actions').checked }));
+
+// Firefox maps Alt in the shortcut to Option on a Mac.
+browser.runtime.getPlatformInfo().then((p) => {
+  if (p.os === 'mac')
+    setText('pause-key', '(Option+Shift+K)');
+}).catch(() => {});
 
 act({ kind: 'status', initial: true });
 setInterval(() => act({ kind: 'status' }), 1500);

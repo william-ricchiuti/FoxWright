@@ -13,6 +13,18 @@ let supportsDoctor = false;
 let nextDoctorId = 1;
 let doctorRequest = null;
 
+/**
+ * The report goes into a public issue form, so only the shape `doctor --share` produces is passed
+ * on: its header, then short lines of plain words, numbers and versions. Nothing with a slash,
+ * backslash, "@" or "~" (paths, user names, addresses) gets through, whatever the helper sent.
+ */
+function shareable(output) {
+  if (typeof output !== 'string' || output.length > 1500)
+    return false;
+  const lines = output.split('\n');
+  return lines[0] === 'Foxwright doctor (shareable)' && lines.length <= 40 && lines.every(l => /^[A-Za-z0-9 .:(),'-]{0,120}$/.test(l));
+}
+
 function finishDoctor(output) {
   if (doctorRequest) {
     clearTimeout(doctorRequest.timer);
@@ -78,6 +90,7 @@ export function connect() {
       ? 'The Foxwright helper is not installed. Run: npx foxwright-firefox setup'
       : err;
     state.helperVersion = null;
+    state.oldClientAt = 0; // a new helper will say so again if the old AI client is still trying
     state.connected = false;
     state.connecting = false;
     state.clients = 0;
@@ -137,7 +150,7 @@ async function onMessage(msg) {
   }
   if (msg.type === 'doctor-result') {
     if (doctorRequest?.id === msg.id)
-      finishDoctor(typeof msg.output === 'string' && msg.output.length <= 1500 ? msg.output : null);
+      finishDoctor(shareable(msg.output) ? msg.output : null);
     return;
   }
   if (msg.type === 'hello-ack') {
@@ -147,8 +160,15 @@ async function onMessage(msg) {
     state.lastError = msg.error || null;
     state.errorKind = msg.error ? 'helper-error' : null;
     state.helperVersion = typeof msg.version === 'string' ? msg.version.slice(0, 32) : null;
+    state.oldClientAt = Number.isFinite(msg.oldClient) ? Math.min(Date.now(), msg.oldClient) : 0;
     retryMs = 2000;
     updateBadge();
+    return;
+  }
+  // The helper refused an MCP server from before 0.8 (no key handshake): the AI client that runs
+  // it needs a restart, and only the person can do that. The popup says so (compat.js).
+  if (msg.type === 'old-client') {
+    state.oldClientAt = Date.now();
     return;
   }
   if (msg.type === 'clients') {

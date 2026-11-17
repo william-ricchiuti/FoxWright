@@ -1,5 +1,6 @@
 // Shared background state + settings persistence.
 /* global browser */
+import { versionNotes } from './compat.js';
 
 export const FULL = typeof __FOXWRIGHT_FULL__ !== 'undefined' ? __FOXWRIGHT_FULL__ : false;
 export const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
@@ -40,6 +41,7 @@ export const state = {
   // --- connection details for the popup and the welcome page (onboarding) ---
   helperVersion: null, // the connected helper's version (from hello-ack; older helpers don't say)
   errorKind: null, // why the helper isn't connected: 'not-installed' | 'exited' | 'helper-error' | null
+  oldClientAt: 0, // when the helper last refused an AI client's pre-0.8 MCP server (native.js)
 };
 
 const RECENT_MAX = 12;
@@ -62,14 +64,22 @@ export function noteAction(tabId, text, own) {
 }
 
 export async function loadSettings() {
-  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], browserId: '', browserName: '', paused: false, readOnly: [], timed: {}, confirmActions: false });
+  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], allowedRead: [], browserId: '', browserName: '', paused: false, readOnly: [], timed: {}, confirmActions: false });
   state.browserId = /^[a-f0-9]{12}$/.test(local.browserId) ? local.browserId : [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
   state.browserName = cleanName(local.browserName) || 'Firefox';
   if (state.browserId !== local.browserId)
     await browser.storage.local.set({ browserId: state.browserId });
   state.mode = local.mode === 'all' ? 'all' : 'ask';
-  state.allowed = Array.isArray(local.allowed) ? local.allowed : [];
-  state.readOnly = Array.isArray(local.readOnly) ? local.readOnly.filter(o => typeof o === 'string') : [];
+  // Stored apart (see saveSettings): `allowed` holds only full-access sites, `allowedRead` the
+  // read-only ones. 0.8.0 kept read-only sites in `allowed` too, marked by `readOnly`: still read,
+  // and rewritten in the new form below.
+  const strings = (v) => (Array.isArray(v) ? v.filter(o => typeof o === 'string') : []);
+  const storedRead = strings(local.allowedRead);
+  const legacyRead = strings(local.readOnly);
+  state.allowed = [...new Set([...(Array.isArray(local.allowed) ? local.allowed : []), ...storedRead])];
+  state.readOnly = [...new Set([...legacyRead, ...storedRead])].filter(o => state.allowed.includes(o));
+  if (legacyRead.length)
+    await browser.storage.local.set(storedApprovals()).catch(() => {});
   state.timed = cleanTimed(local.timed);
   state.confirmActions = local.confirmActions === true;
   // Stop stays in force across a Firefox restart or an extension update, until the user resumes.
@@ -108,9 +118,22 @@ export function cleanName(s) {
   return typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
 }
 
+/**
+ * "Always allow" approvals as stored. Read-only sites are kept out of `allowed`, in a key of their
+ * own: a Foxwright from before 0.8 (someone installing an older version over this one) reads only
+ * `allowed`, and would otherwise treat every read-only site as fully approved.
+ */
+function storedApprovals() {
+  return {
+    allowed: state.allowed.filter(o => !state.readOnly.includes(o)),
+    allowedRead: state.allowed.filter(o => state.readOnly.includes(o)),
+    readOnly: [], // the 0.8.0 form, no longer written
+  };
+}
+
 export async function saveSettings() {
   pruneTimed();
-  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed, browserName: state.browserName, paused: state.paused, readOnly: state.readOnly, timed: state.timed, confirmActions: state.confirmActions });
+  await browser.storage.local.set({ mode: state.mode, ...storedApprovals(), browserName: state.browserName, paused: state.paused, timed: state.timed, confirmActions: state.confirmActions });
   try {
     await browser.storage.session.set({ sessionAllowed: state.sessionAllowed, groupId: state.groupId, sessionReadOnly: state.sessionReadOnly });
   } catch { /* ignore */ }
@@ -121,8 +144,9 @@ function cleanTimed(t) {
   const out = {};
   if (t && typeof t === 'object') {
     for (const [o, v] of Object.entries(t)) {
+      // Never more than an hour from now: an approval given while the clock was wrong must not last for years.
       if (v && typeof v.until === 'number' && v.until > Date.now())
-        out[o] = { until: v.until, level: v.level === 'read' ? 'read' : 'full' };
+        out[o] = { until: Math.min(v.until, Date.now() + 60 * 60 * 1000), level: v.level === 'read' ? 'read' : 'full' };
     }
   }
   return out;
@@ -142,6 +166,7 @@ export function pruneTimed() {
 
 export function publicStatus() {
   pruneTimed();
+  const notes = versionNotes({ connected: state.connected, version: VERSION, helperVersion: state.helperVersion, oldClientAt: state.oldClientAt });
   return {
     version: VERSION,
     full: FULL,
@@ -168,12 +193,10 @@ export function publicStatus() {
     browserName: state.browserName,
     helperVersion: state.helperVersion,
     errorKind: state.errorKind,
-    versionMismatch: !!(state.connected && state.helperVersion && minorOf(state.helperVersion) !== minorOf(VERSION)),
+    // What to say about versions, per direction, and about a refused old AI client (compat.js).
+    versionNotes: notes,
+    versionMismatch: notes.some(n => n.kind !== 'old-client'),
   };
-}
-
-function minorOf(v) {
-  return String(v || '').split('.').slice(0, 2).join('.');
 }
 
 export async function updateBadge() {

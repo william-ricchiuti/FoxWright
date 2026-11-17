@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { EXTENSION_IDS, HOST_NAME, foxwrightDir, nativeManifestDir, socketPath, logPath, browsersDir } from './paths.js';
+import { doctorVersionFindings, compareVersions, SETUP_LATEST, OLD_CLIENT_USER_MSG } from './compat.js';
 
 const isWin = process.platform === 'win32';
 const REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${HOST_NAME}`;
@@ -12,6 +14,7 @@ const REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${HOST_NAME}`;
 const OLD_HOST_NAME = 'zenko';
 const OLD_REG_KEY = `HKCU\\Software\\Mozilla\\NativeMessagingHosts\\${OLD_HOST_NAME}`;
 const STORE_URL = 'https://addons.mozilla.org/firefox/addon/foxwright/';
+const CLIENTS_URL = 'https://github.com/william-ricchiuti/FoxWright/blob/main/docs/CLIENTS.md';
 const SETUP_CMD = 'npx foxwright-firefox setup';
 const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
 const c = {
@@ -322,11 +325,22 @@ function isEmptyDesktopConfig(cfg, ignore = []) {
  * path) are removed.
  */
 export function removeOldInstalls(opts = {}) {
-  removeOldInstall('kitsune', 'Kitsune', opts);
-  removeOldInstall('zenko', 'Zenko', opts);
+  const a = removeOldInstall('kitsune', 'Kitsune', opts);
+  const b = removeOldInstall('zenko', 'Zenko', opts);
+  // Which AI clients had an entry for the old helper (setup gives them a Foxwright entry instead),
+  // and whether there was an old install at all.
+  return { claudeCode: a.claudeCode || b.claudeCode, claudeDesktop: a.claudeDesktop || b.claudeDesktop, found: a.found || b.found };
+}
+
+/** Is an install under an old name (Kitsune, Zenko) present? [{ name, label, dir }] */
+export function oldInstallsPresent() {
+  return [['kitsune', 'Kitsune'], ['zenko', 'Zenko']]
+    .map(([name, label]) => ({ name, label, dir: path.join(os.homedir(), '.' + name) }))
+    .filter(o => fs.existsSync(path.join(o.dir, 'app', o.name + '.mjs')) || fs.existsSync(path.join(o.dir, o.name + (isWin ? '-host.bat' : '-host'))));
 }
 
 function removeOldInstall(old, label, { quiet = false } = {}) {
+  const did = { claudeCode: false, claudeDesktop: false, found: false };
   const oldHelper = new RegExp(`[\\\\/]\\.${old}[\\\\/]app[\\\\/]${old}\\.mjs`);
   const say = (m) => !quiet && console.log(c.ok(m));
   const home = os.homedir();
@@ -361,6 +375,7 @@ function removeOldInstall(old, label, { quiet = false } = {}) {
       const out = runClaude(claude, ['mcp', 'get', old], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       if (oldHelper.test(out)) {
         runClaude(claude, ['mcp', 'remove', '--scope', 'user', old], { stdio: 'ignore' });
+        did.claudeCode = true;
         say(`Removed the old "${old}" entry from Claude Code.`);
       }
     } catch { /* not registered */ }
@@ -373,11 +388,13 @@ function removeOldInstall(old, label, { quiet = false } = {}) {
       delete cfg.mcpServers[old];
       fs.copyFileSync(cfgPath, cfgPath + '.bak');
       fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+      did.claudeDesktop = true;
       say(`Removed the old "${old}" entry from Claude Desktop (${cfgPath}).`);
     }
   } catch { /* no config */ }
   // Our files in the old folder, then the folder only if nothing else is left in it.
   if (fs.existsSync(oldApp) || fs.existsSync(path.join(oldDir, old + (isWin ? '-host.bat' : '-host')))) {
+    did.found = true;
     for (const n of [`app/${old}.mjs`, 'app', `${old}-host`, `${old}-host.bat`, `${old}.sock`, 'pipe-id', 'helper.log', 'helper.log.1', 'browsers']) {
       try {
         fs.rmSync(path.join(oldDir, n), { recursive: n === 'browsers' || n === 'app', force: true });
@@ -390,6 +407,107 @@ function removeOldInstall(old, label, { quiet = false } = {}) {
       say(`Removed the old ${label} files from ${oldDir} (other files there were left alone).`);
     }
   }
+  return did;
+}
+
+// ---------- helpers that are running while setup replaces them ----------
+
+/**
+ * Ask whatever listens on a helper socket who it is: { pid, version, pre08 } or null. The pid comes
+ * from the live helper itself, over a socket in the user's own Foxwright folder, never from a file
+ * a crashed helper may have left (that pid could belong to another program by now).
+ * Understands helpers from before the 0.8 handshake too (they answer plain JSON lines).
+ */
+async function identifyHelper(sock) {
+  const first = await new Promise((resolve) => {
+    const s = net.connect(sock);
+    let buf = '';
+    let asked = false;
+    const done = (v) => {
+      clearTimeout(timer);
+      clearTimeout(ask);
+      s.destroy();
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), 4000);
+    // A 0.8+ helper speaks first (its challenge). One from before says nothing until asked.
+    const ask = setTimeout(() => {
+      asked = true;
+      s.write(JSON.stringify({ type: 'status', id: 1 }) + '\n');
+    }, 700);
+    s.setEncoding('utf8');
+    s.on('data', (d) => {
+      buf += d;
+      const nl = buf.indexOf('\n');
+      if (nl < 0)
+        return;
+      let msg = null;
+      try {
+        msg = JSON.parse(buf.slice(0, nl));
+      } catch { /* not a helper */ }
+      if (msg?.type === 'auth-challenge')
+        return done('handshake');
+      done(asked && msg?.type === 'status' && Number.isInteger(msg.pid) ? { pid: msg.pid, version: typeof msg.helper?.version === 'string' ? msg.helper.version : null, pre08: true } : null);
+    });
+    s.on('error', () => done(null));
+    s.on('close', () => done(null));
+  });
+  if (first !== 'handshake')
+    return first;
+  const st = await probeSocket(sock);
+  return !st.error && Number.isInteger(st.pid) ? { pid: st.pid, version: st.helper?.version || null, pre08: false } : null;
+}
+
+/** Sockets of the helpers registered in a Foxwright (or Zenko/Kitsune) folder, plus its shared socket. */
+function helperSockets(dir, name) {
+  const out = [];
+  try {
+    for (const n of fs.readdirSync(path.join(dir, 'browsers')).filter(f => f.endsWith('.json'))) {
+      try {
+        const e = JSON.parse(fs.readFileSync(path.join(dir, 'browsers', n), 'utf8'));
+        if (typeof e.socket === 'string')
+          out.push(e.socket);
+      } catch { /* unreadable entry */ }
+    }
+  } catch { /* no registry */ }
+  if (!isWin)
+    out.push(path.join(dir, `${name}.sock`));
+  return [...new Set(out)];
+}
+
+/**
+ * The helpers a running Firefox started from an install that setup is replacing (another version
+ * of Foxwright, or Zenko/Kitsune). Call before the old files are removed; stopHelpers() ends them
+ * once the new helper is registered. The extension then starts the new helper by itself within
+ * seconds (it retries from 2 s on), so the update takes effect without restarting Firefox.
+ */
+async function findReplacedHelpers() {
+  const found = new Map(); // pid -> { pid, version, label }
+  const dirs = [[foxwrightDir(), HOST_NAME, 'Foxwright'], ...oldInstallsPresent().map(o => [o.dir, o.name, o.label])];
+  for (const [dir, name, label] of dirs) {
+    for (const sock of helperSockets(dir, name)) {
+      if (!isWin && !fs.existsSync(sock))
+        continue;
+      const id = await identifyHelper(sock).catch(() => null);
+      if (!id || id.pid === process.pid || found.has(id.pid))
+        continue;
+      if (name === HOST_NAME && id.version === VERSION)
+        continue; // already this version: leave it running
+      found.set(id.pid, { ...id, label });
+    }
+  }
+  return [...found.values()];
+}
+
+function stopHelpers(list) {
+  const stopped = [];
+  for (const h of list) {
+    try {
+      process.kill(h.pid, 'SIGTERM'); // the helper removes its sockets and exits
+      stopped.push(h);
+    } catch { /* gone already */ }
+  }
+  return stopped;
 }
 
 export async function setup(flags) {
@@ -400,12 +518,22 @@ export async function setup(flags) {
   }
   const major = parseInt(process.versions.node.split('.')[0], 10);
   if (major < 20) {
-    console.error(`Foxwright needs Node.js 20 or newer (found ${process.versions.node}).`);
+    console.error(`Foxwright needs Node.js 20 or newer (found ${process.versions.node}). Install the LTS version from https://nodejs.org, open a new terminal window, and run this command again.`);
     process.exit(1);
   }
 
   // 0. Foxwright used to be called Kitsune, then Zenko: remove those installs so they don't run side by side.
-  removeOldInstalls();
+  //    Helpers of the install being replaced that a running Firefox still uses are stopped at the end.
+  const hadInstall = fs.existsSync(appScript());
+  const replaced = await findReplacedHelpers().catch(() => []);
+  const migrated = removeOldInstalls();
+  const updating = hadInstall || migrated.found;
+  // An AI client that had an entry for the old helper gets one for this helper, flag or not:
+  // otherwise it would have no browser tools at all after its next restart.
+  if (migrated.claudeCode && !flags.includes('--claude-code'))
+    flags = [...flags, '--claude-code'];
+  if (migrated.claudeDesktop && !flags.includes('--claude-desktop'))
+    flags = [...flags, '--claude-desktop'];
 
   // 1. Copy this single-file CLI somewhere stable (npx caches get cleaned).
   const created = [];
@@ -462,14 +590,14 @@ export async function setup(flags) {
         fs.writeFileSync(path.join(dir, `${OLD_HOST_NAME}.json`), JSON.stringify(compat, null, 2) + '\n');
       } catch { /* that browser just won't have it */ }
     }
-    console.log(c.ok('Also registered under the old name "zenko", so the Zenko 0.6 extension keeps working until Firefox updates it.'));
+    console.log(c.ok('Also registered for the extension\'s 0.6 versions (then called Zenko), until Firefox updates them.'));
   } catch (e) {
     console.log(c.warn(`Couldn't add the registration for the Zenko 0.6 extension (${e.message}). Update the extension to Foxwright 0.7 or newer.`));
   }
 
   if (process.platform === 'linux') {
     if (fs.existsSync('/snap/bin/firefox') || which('flatpak') && fs.existsSync(path.join(os.homedir(), '.var/app/org.mozilla.firefox')))
-      console.log(c.warn('Snap/Flatpak Firefox is sandboxed and may not be able to start the helper (Ubuntu ships the Snap by default). If the toolbar fox keeps its "!" badge, install Firefox from Mozilla\'s .deb repository or tarball: https://support.mozilla.org/kb/install-firefox-linux'));
+      console.log(c.warn('Found Snap or Flatpak Firefox (Ubuntu\'s built-in Firefox is a Snap). Its sandbox usually can\'t start this helper, so Foxwright would stay at "Helper not found". If that is the Firefox you use, install Firefox from Mozilla\'s .deb repository or tarball and add Foxwright to it: https://support.mozilla.org/kb/install-firefox-linux'));
   }
 
   // 4. Hook up AI clients. A failure here never undoes the steps above: say what to run instead.
@@ -488,14 +616,14 @@ export async function setup(flags) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Code (${e.message.split('\n')[0]}). Run this yourself:\n    ${claudeCodeCmd}`));
       }
     } else {
-      console.log(c.warn('`claude` CLI not found; skipping Claude Code.'));
+      console.log(c.warn(`Skipped Claude Code: its \`claude\` command isn't on PATH. Install Claude Code, then run:\n    ${claudeCodeCmd}`));
     }
   }
   if (flags.includes('--claude-desktop') || flags.includes('--all')) {
     const cfgPath = claudeDesktopConfigPath();
     // There is no official Claude Desktop for Linux: don't invent a config folder for it.
     if (process.platform === 'linux' && !fs.existsSync(path.dirname(cfgPath))) {
-      console.log(c.warn(`Skipped Claude Desktop: ${path.dirname(cfgPath)} doesn't exist (there is no official Claude Desktop for Linux). If you use one, start it once and re-run setup.`));
+      console.log(c.warn(`Skipped Claude Desktop: ${path.dirname(cfgPath)} doesn't exist yet. If you use Claude Desktop, open it once, then run setup again.`));
     } else {
       try {
         let cfg = {};
@@ -508,7 +636,7 @@ export async function setup(flags) {
         if (fs.existsSync(cfgPath))
           fs.copyFileSync(cfgPath, cfgPath + '.bak');
         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-        console.log(c.ok(`Added Foxwright to Claude Desktop (${cfgPath}). Restart Claude Desktop to load it.`));
+        console.log(c.ok(`Added Foxwright to Claude Desktop (${cfgPath}). Quit Claude Desktop completely (not just its window) and open it again to load it.`));
       } catch (e) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Desktop (${e.message}). Add it to ${cfgPath} yourself (see below).`));
       }
@@ -518,20 +646,47 @@ export async function setup(flags) {
     fs.writeFileSync(createdDirsFile(), JSON.stringify([...new Set([...readCreatedDirs(), ...created])], null, 2) + '\n');
   } catch { /* uninstall then leaves empty folders behind; harmless */ }
 
+  // 5. A Firefox that is open still runs the helper this setup replaced: stop it, and the extension
+  //    starts the new one (registered above) by itself.
+  const stopped = stopHelpers(replaced);
+  for (const h of stopped)
+    console.log(c.ok(`Stopped the ${h.label === 'Foxwright' ? '' : `${h.label} `}helper ${h.version || '(older version)'} that Firefox was running (pid ${h.pid}). The extension starts helper ${VERSION} by itself in a few seconds; no need to restart Firefox.`));
+  if (migrated.found && !migrated.claudeCode && !migrated.claudeDesktop)
+    console.log(c.warn(`If an AI client was set up for the old helper by hand, change its MCP settings to: ${displayCmd([command, ...args])}`));
+  if (updating) {
+    console.log(`\n${c.b('Updated an existing install.')} ${c.b('Restart your AI client')} (quit it completely and open it again): one that was open
+during this update still runs the old MCP server, which the new helper refuses.
+The Firefox extension updates separately: Firefox installs new versions from the add-ons store by itself,
+sometimes days after a helper release (Mozilla reviews each one). An older extension keeps working.`);
+  }
+
   const ffCmd = process.platform === 'darwin' ? '/Applications/Firefox.app/Contents/MacOS/firefox' : isWin ? '"C:\\Program Files\\Mozilla Firefox\\firefox.exe"' : 'firefox';
+  const entry = JSON.stringify({ command, args });
+  // VS Code's own installer command. On Windows, cmd and PowerShell quote JSON differently: show the file entry.
+  const vscode = isWin
+    ? `add to mcp.json under "servers":  "foxwright": ${JSON.stringify({ type: 'stdio', command, args })}`
+    : `code --add-mcp ${shellQuote(JSON.stringify({ name: 'foxwright', type: 'stdio', command, args }))}`;
   console.log(`
 ${c.b('Next steps')}
   1. Install the Foxwright extension in Firefox (152+): ${STORE_URL}
-     If it was already installed, restart Firefox or toggle the extension off/on.
-     The toolbar fox should lose its "!" badge once it finds this helper.
-  2. Connect your AI client:
-     ${c.b('Claude Code:')}   ${claudeCodeCmd}
-     ${c.b('Claude Desktop / Cowork:')} add to claude_desktop_config.json → "mcpServers":
-       "foxwright": ${JSON.stringify({ command, args })}
-     ${c.dim('(or re-run setup with --claude-code / --claude-desktop / --all to do this for you)')}
-  3. Optional, real (trusted) clicks and typing: start Firefox with
+     If it's already installed, it finds this helper by itself within a few seconds
+     (or press "Try again" in its toolbar popup). The toolbar fox loses its "!" badge.
+  2. Connect your AI app, then restart it:
+     ${c.b('Claude Code:')}  ${claudeCodeCmd}
+     ${c.b('Codex:')}        ${displayCmd(['codex', 'mcp', 'add', 'foxwright', '--', command, ...args])}
+     ${c.b('Gemini CLI:')}   ${displayCmd(['gemini', 'mcp', 'add', '--scope', 'user', 'foxwright', command, ...args])}
+     ${c.b('VS Code:')}      ${vscode}
+     ${c.b('Claude Desktop, Cursor, Windsurf')} and other apps with an "mcpServers" settings file,
+       add inside "mcpServers":  "foxwright": ${entry}
+     ${c.b('Zed:')} the same entry inside "context_servers" in its settings.json.
+     Where each app keeps its settings: ${CLIENTS_URL}
+     ${c.dim('(setup --claude-code / --claude-desktop / --all connects Claude for you)')}
+  3. Ask your AI app: "Use Foxwright to open https://example.com and tell me the main heading."
+     Firefox asks you to approve the site first.
+
+  Optional, real (trusted) clicks and typing: start Firefox with
        ${ffCmd} --remote-debugging-port=9222
-     Foxwright detects it automatically. See README for trade-offs.
+     Foxwright detects it automatically. See the README for the trade-offs.
 
   Check everything with: ${c.b(displayCmd([command, appScript(), 'doctor']))}
 `);
@@ -642,6 +797,33 @@ function linuxProcesses() {
     } catch { /* gone, or not ours to read */ }
   }
   return out;
+}
+
+/**
+ * 'snap' | 'flatpak' when the only Firefox installed on this Linux computer is a sandboxed one
+ * (what setup warns about), else null. A running one is found by firefoxStatus() instead.
+ */
+export function sandboxedFirefoxOnly({ home = os.homedir(), env = process.env, exists = fs.existsSync } = {}) {
+  if (process.platform !== 'linux')
+    return null;
+  const snap = exists('/snap/bin/firefox');
+  const flatpak = exists(path.join(home, '.var', 'app', 'org.mozilla.firefox')) || exists('/var/lib/flatpak/app/org.mozilla.firefox');
+  if (!snap && !flatpak)
+    return null;
+  // Ubuntu's /usr/bin/firefox is a small script that starts the Snap: that doesn't count as another Firefox.
+  const real = (f) => {
+    try {
+      if (fs.realpathSync(f).startsWith('/snap/'))
+        return false;
+      const st = fs.statSync(f);
+      return !(st.size < 16384 && /\/snap\/|flatpak run/.test(fs.readFileSync(f, 'utf8')));
+    } catch {
+      return false;
+    }
+  };
+  const others = [...['firefox', 'firefox-esr', 'librewolf', 'floorp', 'waterfox'].flatMap(n => findAllOnPath(n, env)),
+    '/opt/firefox/firefox', '/usr/lib/firefox/firefox', '/usr/lib64/firefox/firefox', '/usr/lib/firefox-esr/firefox-esr'].filter(f => exists(f) && real(f));
+  return others.length ? null : snap ? 'snap' : 'flatpak';
 }
 
 /** Running Firefox-family processes: { running: true|false|null (couldn't tell), sandbox: 'snap'|'flatpak'|null }. */
@@ -796,7 +978,7 @@ export async function doctor({ share = false } = {}) {
   detail(`  This command: foxwright ${VERSION} (${fileURLToPath(import.meta.url)})`);
   ok(`Node.js ${process.versions.node} (${process.execPath})`);
   if (parseInt(process.versions.node) < 20)
-    bad(`Node.js ${process.versions.node} is too old`, 'Install Node.js 20 or newer.');
+    bad(`Node.js ${process.versions.node} is too old`, 'Install Node.js 20 or newer (the LTS version from https://nodejs.org), open a new terminal window, then run setup again.');
 
   // 1. Set up at all?
   let manifest = null;
@@ -810,7 +992,12 @@ export async function doctor({ share = false } = {}) {
   report.push(`Helper installation: ${hasApp ? 'found' : 'missing'}`);
   report.push(`Firefox native registration: ${manifest ? 'found' : manifestError === 'missing' ? 'missing' : 'unreadable'}`);
   if (!hasApp && !manifest) {
-    bad(`Foxwright isn't set up for this user (no helper at ${appScript()}, no registration at ${manifestFile()})`, `Run: ${SETUP_CMD}`);
+    const old = oldInstallsPresent();
+    report.push(`Install under an old name: ${old.length ? old.map(o => o.label).join(', ') : 'none'}`);
+    if (old.length)
+      bad(`Only an install from when Foxwright was called ${old.map(o => o.label).join(' / ')} is here (${old.map(o => o.dir).join(', ')}). The Foxwright extension (0.7 and newer) can't use it`, `Replace it with the Foxwright helper: ${SETUP_LATEST} (it removes the old install and moves its Claude entries over). Then restart your AI client.`);
+    else
+      bad(`Foxwright isn't set up for this user (no helper at ${appScript()}, no registration at ${manifestFile()})`, `Run: ${SETUP_CMD}`);
     const ff = firefoxStatus();
     if (ff.running === false)
       detail(c.dim('  Firefox is not running.'));
@@ -832,8 +1019,8 @@ export async function doctor({ share = false } = {}) {
     ok(`Installed helper ${installed || '(version unknown)'} at ${appScript()}`);
   else
     bad(`Helper missing: ${appScript()}`, `Re-run setup to reinstall the helper: ${SETUP_CMD}`);
-  if (installed && installed !== VERSION)
-    warn(`The installed helper is ${installed}, but this command is ${VERSION}`, `To install this version (${VERSION}) of the helper, run setup with it: ${SETUP_CMD}`);
+  for (const f of doctorVersionFindings({ cmd: VERSION, installed }))
+    warn(f.text, f.fix);
 
   if (manifest)
     ok(`Registered with Firefox: ${manifestFile()}`);
@@ -888,8 +1075,8 @@ export async function doctor({ share = false } = {}) {
   if (ff.sandbox)
     report.push(`Firefox packaging: ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}`);
   if (ff.sandbox)
-    warn(`Firefox is running as a ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}. Its sandbox may not let the extension start the helper`,
-      'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak: https://support.mozilla.org/kb/install-firefox-linux');
+    warn(`Firefox is running as a ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}${ff.sandbox === 'snap' ? ' (Ubuntu\'s built-in Firefox)' : ''}. Its sandbox usually stops the extension from starting the helper`,
+      'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak, add Foxwright to that Firefox, and use it for your agent: https://support.mozilla.org/kb/install-firefox-linux');
 
   // Each connected Firefox profile's helper registers in ~/.foxwright/browsers; remove what dead helpers left.
   const live = [];
@@ -925,6 +1112,7 @@ export async function doctor({ share = false } = {}) {
   if (fs.existsSync(foxwrightDir())) // socketPath() creates the pipe id on Windows
     st = await probeSocket();
   const connected = [];
+  let pre08 = st.error === 'EAUTH' ? 1 : 0; // helpers from before the 0.8 handshake: running, but this version can't talk to them
   if (!st.error)
     connected.push(st);
   for (const e of live) {
@@ -933,10 +1121,14 @@ export async function doctor({ share = false } = {}) {
     const s = typeof e.socket === 'string' ? await probeSocket(e.socket) : { error: 'no socket' };
     if (!s.error)
       connected.push(s);
+    else if (s.error === 'EAUTH')
+      pre08++;
   }
   const withExt = connected.filter(s => s.extension);
   if (share) {
-    report.push(`Firefox connection: ${withExt.length ? 'connected' : connected.length ? 'waiting for the extension' : live.length ? 'helper did not answer' : 'no running helper found'}`);
+    report.push(`Firefox connection: ${withExt.length ? 'connected' : connected.length ? 'waiting for the extension' : pre08 ? 'Firefox runs a helper from before 0.8' : live.length ? 'helper did not answer' : 'no running helper found'}`);
+    if (withExt.some(s => s.oldClientAt))
+      report.push('An AI client with an MCP server from before 0.8 was refused: yes');
     if (!withExt.length)
       problems++;
     for (const connection of withExt.slice(0, 4))
@@ -946,9 +1138,17 @@ export async function doctor({ share = false } = {}) {
   if (withExt.length) {
     for (const s of withExt) {
       ok(`Firefox connected${s.browser?.name ? ` ("${s.browser.name}")` : ''}: extension ${s.extension.version || '?'}${s.extension.full ? ' (full build)' : ''}, helper ${s.helper?.version || '?'} (pid ${s.pid})`);
-      if (s.helper?.version && installed && s.helper.version !== installed)
-        warn(`That Firefox still runs helper ${s.helper.version}; ${installed} is installed`, 'Restart Firefox (or toggle the Foxwright extension off and on in about:addons) to start the updated helper.');
+      // Which side is older decides the advice: an older extension only waits for the store.
+      for (const f of doctorVersionFindings({ installed, running: s.helper?.version, ext: s.extension.version }))
+        (f.level === 'bad' ? bad : warn)(f.text, f.fix);
+      if (s.oldClientAt)
+        warn(`${Math.max(1, Math.round((Date.now() - s.oldClientAt) / 60000))} min ago this helper refused an AI client's MCP server from before 0.8 (it was started before the update)`, OLD_CLIENT_USER_MSG);
     }
+  } else if (pre08) {
+    // The running helper is from before 0.8: only its own (old) MCP servers can talk to it.
+    const newer = installed && compareVersions(installed, '0.8.0') !== -1;
+    bad(`Firefox is running a Foxwright helper from before 0.8, which this version can't talk to${newer ? ` (${installed} is installed, but that Firefox hasn't started it yet)` : ''}`,
+      `Run ${SETUP_LATEST} : it installs the current helper and restarts the one Firefox is running. Then restart your AI client.`);
   } else if (connected.length) {
     bad(`A helper is running (pid ${connected.map(s => s.pid).join(', ')}) but the extension hasn't said hello to it`, 'Restart Firefox, or toggle the Foxwright extension off and on in about:addons.');
   } else if (live.length) {
@@ -972,6 +1172,11 @@ export async function doctor({ share = false } = {}) {
       bad(`${ff.running ? 'Firefox is running, but the' : 'The'} Foxwright extension isn't connected (not installed, disabled, or it can't start the helper)`,
         `If the extension isn't installed: ${STORE_URL} . If it is, enable it in about:addons, then restart Firefox.`);
     }
+    // Not running (or not recognisable) as a Snap/Flatpak, but that is the only Firefox installed.
+    const boxed = ff.sandbox ? null : sandboxedFirefoxOnly();
+    if (boxed)
+      warn(`The only Firefox found on this computer is the ${boxed === 'snap' ? 'Snap' : 'Flatpak'} one. Its sandbox may not let the extension start the helper`,
+        'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak: https://support.mozilla.org/kb/install-firefox-linux');
     const tail = logTail();
     if (tail.length && ff.running !== false)
       console.log(c.dim(`  Last helper log lines:\n${tail.map(l => `    ${l}`).join('\n')}`));
@@ -1073,5 +1278,5 @@ export async function uninstall() {
   // Folders setup created, if they are empty now (e.g. ~/.mozilla/native-messaging-hosts).
   removeEmptyDirs(createdDirs.filter(d => d !== dir && !d.startsWith(dir + path.sep)));
   removeOldInstalls();
-  console.log('Foxwright helper removed. Also remove the Foxwright extension from Firefox (about:addons) and from any other AI client you added it to.');
+  console.log('Foxwright helper removed. To finish, remove the Foxwright extension in Firefox (about:addons), and delete the "foxwright" entry from any other AI app you added it to by hand (Cursor, Codex, VS Code, Gemini CLI, Windsurf, Zed).');
 }

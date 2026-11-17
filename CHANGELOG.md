@@ -1,8 +1,62 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 (2026-11-17)
 
-- The npm package contains only the helper and its notices. 0.8.0 also shipped an old, unused `dist/kitsune.mjs` (1.6 MB) left over from an earlier build.
+A fix release, prepared with a five-part review before the 0.8 extension reaches the store: agents, upgrades, security, platforms and first-time setup. No new permissions and no new data collection.
+
+**Security**
+- A crafted PDF could hang Foxwright or make it use up memory. The PDF reader now stops after 20 seconds, limits how much it decompresses, and returns the pages it read so far with a note.
+- One malformed message on the helper's connection could crash the helper before any key check. Fixed; message sizes are limited and idle unchecked connections are dropped.
+- The helper's key file is never read through a link, must be private to you (otherwise it is replaced), and is created in one step, so two programs starting at once agree on one key.
+- Text from something that hasn't proved it is the helper is no longer passed on to the AI agent.
+- A page with megabytes of spaces, or an enormous outline that keeps changing, could freeze Foxwright (`get_page_text` with `query`, `read_page` with `diff`). Fixed.
+
+**Privacy**
+- The activity log no longer keeps full addresses, file paths, typed text, form values or file names that an agent put in its own action summary. Only real key names are logged.
+- The activity log now records "Allow for 1 hour", read-only approvals, read-only upgrade questions and send/buy/delete confirmations.
+- Text fields named like password fields are treated as passwords, even after a page's "Show password" button.
+
+**Approvals**
+- "Ask before sending, buying or deleting" now also asks for Ctrl/Cmd+Enter, Enter in message and comment boxes and in fields outside forms, menu items chosen with the keyboard, clickable non-buttons, icon-only buttons and switches.
+- Read-only approvals are stored so an older Foxwright installed over this one doesn't treat them as full access. A 1-hour approval can't outlast an hour after a clock change.
+- Page- and agent-chosen text in permission windows can't close the window's quotation marks; long file lists are bounded.
+
+**Tabs and windows**
+- New agent tabs open in the Foxwright group's own window. With another window, or a private window, in front, `tabs_create_mcp` used to fail.
+- Tabs in Firefox containers that are in the Foxwright group are listed to the agent. Firefox leaves them out of its tab lists, so they were invisible.
+
+**Upgrades and versions**
+- With an extension older than 0.8, `read_page {diff}`, `wait_for`, `computer wait` for text or idle, and PDF reading no longer fail silently: the agent is told they need extension 0.8, and diff and wait_for fall back to a plain read.
+- Version warnings say the right thing for each case. An older extension: nothing to run, Firefox updates it from the store. An older helper: run `npx foxwright-firefox@latest setup`. An AI client still running old code: restart it. This applies to the agent, the toolbar popup, the setup page and `doctor`.
+- When an AI client is still running an MCP server from before 0.8, the popup and `doctor` say "restart your AI client". Before, only the agent was told.
+- `setup` restarts the helper a running Firefox uses, so an update takes effect without restarting Firefox.
+- `setup` over an old Zenko or Kitsune install moves its Claude Code / Claude Desktop entry to Foxwright instead of only removing it.
+- `doctor` recognises a Zenko-only install, an old helper still running, and a Snap or Flatpak Firefox that is the only one installed.
+
+**First-time setup**
+- The setup page asks which AI app you use (Claude Desktop, Claude Code, or another such as Cursor, Codex, VS Code, Gemini CLI, Windsurf or Zed) and shows the matching command and restart steps for macOS, Windows and Linux, with help when Node.js is missing or PowerShell blocks `npx`.
+- On Linux, the setup page, `setup` and `doctor` say clearly that Snap/Flatpak Firefox usually can't start the helper, how to check, and what to install instead.
+- `setup` prints ready-to-paste settings for Codex, Gemini CLI, VS Code, Cursor, Windsurf and Zed; new docs/CLIENTS.md lists where each app keeps them.
+- Permission window: Deny sits next to "Allow this session", with "Allow for 1 hour" and "Always allow" below; it explains that a session lasts until you quit Firefox and what Read only allows.
+- Better dark-mode contrast and wrapping in the popup, permission window and Activity page; the pause shortcut shows as Option+Shift+K on a Mac.
+- Clearer messages from `setup`, `doctor` and `uninstall`.
+
+**For agents**
+- Tool descriptions: `browser_batch` shows that `computer` steps need `action`; `wait_for` suggests a longer `timeout` for slow results; lookups need no side-effect clicks; a denied site must not be reached another way.
+
+**Packaging**
+- The npm package contains only the helper and its notices. 0.8.0 also shipped an old, unused `dist/kitsune.mjs` (1.6 MB).
+
+**Tests**
+- Agent evaluation: Qwen Code support, a Docker-safe runner that keeps Firefox in a container, verifiers that work on the store build, and five everyday tasks (compare-tabs, long-form, slow-results, read-only-research, denied-site). Results for OpenCode, Codex and Qwen Code in docs/evaluations/0.8.1.
+- New suites: `e2e-compat` (published 0.6/0.7 extensions and 0.6/0.7/0.8 helpers, five upgrade paths), `compat-offline`, `pdf-fuzz`, `socket-hostile`, `actionlog-privacy`, `e2e-gaps-windows` (other and private windows in front, containers), and `e2e-windows-users` (a second Windows account can't read the key, use the helper or squat its pipe).
+- CI: Windows real-input, store-build and second-user jobs, Node 20 and 24, trusted-input suites on macOS.
+- Verified on Firefox 152, 153 ESR, 160, 161 beta and Nightly 162; Node 20, 22 and 24; resistFingerprinting, strict tracking protection, German and Japanese Firefox, page zoom and HiDPI.
+
+**Known limits**
+- Read-only still allows visiting any address on an approved site, so a link such as `/logout` works.
+- "Ask before sending, buying or deleting" is a safety net against agent mistakes, not a guarantee: a page can mislabel its buttons, and the word list is English.
+- Snap and Flatpak Firefox, non-US keyboard layouts in real-input mode, and Windows with real input are tested only in CI or not at all; see docs/TESTING.md.
 
 ## 0.8.0 (2026-11-15)
 

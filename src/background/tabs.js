@@ -74,27 +74,41 @@ export async function groupTabs() {
     state.groupTabIds = new Set();
     return [];
   }
-  const all = await browser.tabs.query({});
-  const tabs = all.filter(t => t.groupId === gid && !t.incognito);
+  // tabs.query({}) leaves out tabs in containers (and briefly, fresh or moved tabs), so also list
+  // every window's tabs directly.
+  const byId = new Map();
+  for (const t of await browser.tabs.query({}))
+    byId.set(t.id, t);
+  for (const w of await browser.windows.getAll({ populate: true }).catch(() => [])) {
+    for (const t of w.tabs || [])
+      byId.set(t.id, t);
+  }
+  const tabs = [...byId.values()].filter(t => t.groupId === gid && !t.incognito);
   // Firefox can leave a tab that was just created or moved between windows out of tabs.query()
   // for a moment, although the tab itself already reports the group. Ask such tabs directly.
   const now = Date.now();
-  for (const [id, at] of recentlyGrouped) {
-    if (now - at > 15000) {
-      recentlyGrouped.delete(id);
-      continue;
-    }
+  // Tabs in containers never show up in those lists (seen on Firefox 160), so keep asking for
+  // each tab that joined until it leaves the group or closes.
+  for (const id of recentlyGrouped.keys()) {
     if (tabs.some(t => t.id === id))
       continue;
     const t = await browser.tabs.get(id).catch(() => null);
     if (t && t.groupId === gid && !t.incognito)
       tabs.push(t);
+    else if (!t || now - recentlyGrouped.get(id) > 15000)
+      recentlyGrouped.delete(id);
   }
   state.groupTabIds = new Set(tabs.map(t => t.id));
   return tabs;
 }
 
-const recentlyGrouped = new Map(); // tabId -> when Foxwright added it to the group
+const recentlyGrouped = new Map(); // tabId -> when Foxwright added it to the group (or saw it join)
+
+/** A tab reported a new groupId (tabs.onUpdated): remember it in case the tab lists leave it out. */
+export function noteGroupChange(tabId, groupId) {
+  if (typeof groupId === 'number' && groupId !== -1)
+    recentlyGrouped.set(tabId, Date.now());
+}
 
 
 let groupLock = Promise.resolve();
@@ -116,7 +130,25 @@ async function addToGroupNow(tabId) {
   }
   const gid = await validGroupId();
   if (gid != null) {
-    await browser.tabs.group({ groupId: gid, tabIds: [tabId] });
+    try {
+      await browser.tabs.group({ groupId: gid, tabIds: [tabId] });
+    } catch (e) {
+      // Firefox checks this call against the focused window: with a private window in front it
+      // refuses ("Cannot move non-private tabs to private window") although the tab and the group
+      // are both in a normal window. Bring the group's window forward for the call, then give
+      // focus back.
+      if (!/private window/i.test(String(e?.message)))
+        throw e;
+      const groupWin = (await browser.tabGroups.get(gid)).windowId;
+      const prev = await browser.windows.getLastFocused().catch(() => null);
+      await browser.windows.update(groupWin, { focused: true });
+      try {
+        await browser.tabs.group({ groupId: gid, tabIds: [tabId] });
+      } finally {
+        if (prev && prev.id !== groupWin)
+          await browser.windows.update(prev.id, { focused: true }).catch(() => {});
+      }
+    }
   } else {
     // In the tab's own window: by default a new group goes to the focused window, which may be private.
     state.groupId = await browser.tabs.group({ tabIds: [tabId], createProperties: { windowId: tab.windowId } });
@@ -130,9 +162,18 @@ async function addToGroupNow(tabId) {
 }
 
 export async function createAgentTab(url = 'about:blank', active = true) {
-  // Always in a normal window: if the person is in a private window (and allowed Foxwright there),
-  // the agent's tab still goes to a normal one, or a new normal window.
-  const windowId = await normalWindowId();
+  // In the group's own window when there is a group: Firefox won't move a tab into a group in
+  // another window, so a tab opened where the person happens to be (another window, or a private
+  // one) could never join it. Otherwise a normal window, never a private one.
+  let windowId = null;
+  const gid = hasGroups() ? await validGroupId() : null;
+  if (gid != null) {
+    try {
+      windowId = (await browser.tabGroups.get(gid)).windowId;
+    } catch { /* group just closed */ }
+  }
+  if (windowId == null)
+    windowId = await normalWindowId();
   let tab;
   if (windowId != null) {
     tab = await browser.tabs.create({ url, active, windowId });
@@ -240,7 +281,12 @@ export function levelOf(origin) {
     take(state.sessionReadOnly.includes(origin) ? 'read' : 'full');
   const t = state.timed[origin];
   if (t) {
-    if (t.until > Date.now())
+    const now = Date.now();
+    // "For 1 hour" never means longer than an hour from now, whatever the computer's clock said
+    // when it was given (a clock set forward and later corrected would otherwise stretch it).
+    if (t.until > now + HOUR_MS)
+      t.until = now + HOUR_MS;
+    if (t.until > now)
       take(t.level);
     else
       expireSoon();

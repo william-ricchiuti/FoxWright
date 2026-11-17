@@ -1,13 +1,81 @@
 # Test report: Foxwright
 
-_Latest run: 0.5.0 (unreleased), 2026-11-08, macOS 27 with Firefox 158.0.1 and Node 22. The previous run (0.4.2) also covered Linux with Firefox 152 and 159 in Docker. Earlier sections are marked with the version they were measured on._
+_Latest run: 0.8.1 platform round (main at 0.8.0 plus test changes), 2026-11-16: Linux (Docker, arm64) with Firefox 152.0, 153.7.0esr, 160.0, 161.0b2 and Nightly 162.0a1 (2026-11-16 build), Node 20, 22 and 24; macOS 27 with Firefox 160.0. Older sections are marked with the version they were measured on._
 
 Every test drives Foxwright the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
 - **synthetic**: the extension alone.
 - **trusted**: Firefox started with `--remote-debugging-port`, so input goes through WebDriver BiDi.
 
-## Summary (latest)
+## 0.8.1 platform round (2026-11-16)
+
+### Firefox versions (Linux, Docker, Node 22)
+
+Every cell passed; a failed suite was rerun up to twice. Two needed one rerun, both while other suites ran in the same container: `gaps-persistence` on 160 ("Allow this session" seemed to survive a Firefox restart once) and `gaps-fuzz` on 152 (a 2000-key repeat kept `read_page` waiting over 30 s).
+
+| Suite | 152.0 | 153.7.0esr | 160.0 | 161.0b2 | Nightly 162 |
+|---|---|---|---|---|---|
+| `e2e.mjs` synthetic / trusted | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 |
+| `e2e.mjs` on the store build, synthetic / trusted | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 | 79/79 · 79/79 |
+| `e2e-safety` / `e2e-permissions` | 9/9 · 5/5 | 9/9 · 5/5 | 9/9 · 5/5 | 9/9 · 5/5 | 9/9 · 5/5 |
+| `e2e-permission-modes` / `e2e-onboarding` | 14 · 12 | 14 · 12 | 14 · 12 | 14 · 12 | 14 · 12 |
+| `e2e-storebuild` synthetic / trusted (4 not testable) / `e2e-store` | 17 · 13 · 2/2 | 17 · 13 · 2/2 | 17 · 13 · 2/2 | 17 · 13 · 2/2 | 17 · 13 · 2/2 |
+| `e2e-resilience` / `e2e-multi` | 5/5 · 6/6 | 5/5 · 6/6 | 5/5 · 6/6 | 5/5 · 6/6 | 5/5 · 6/6 |
+| `e2e-idle` | n/a | n/a | pass | n/a | n/a |
+| gap suites (boundary 10, fuzz 6, hostile 17, persistence 4, secrets 7 + 1 known limit, stop 11, trusted 10) | pass | pass | pass | pass | pass |
+| `realsites.mjs` synthetic / trusted | n/a | n/a | 52/52 · 52/52 | 52/52 · 52/52 | n/a |
+
+### macOS 27 (Apple Silicon, Firefox 160.0 copy, `scripts/mac-test.sh` with a separate HOME)
+
+| Suite | Synthetic | Trusted |
+|---|---|---|
+| `e2e.mjs` | 79/79 | 79/79 (on a rerun; see below) |
+| `e2e-safety` / `e2e-permissions` / `e2e-store` | 9/9 · 5/5 (rerun) · 2/2 | n/a |
+| `e2e-storebuild` / `e2e-smoke` | 17 · 6/6 | 13 (4 not testable) · 6/6 |
+| `e2e-resilience` / `e2e-multi` / `e2e-idle` | 5/5 · 6/6 · pass | n/a |
+| `realsites.mjs` (home network) | 52/52 | 52/52 (on a rerun) |
+
+In the first full run, the trusted `e2e.mjs`, `e2e-permissions` and the trusted `realsites.mjs` lost the test Firefox partway ("extension disconnected" in the helper log, no crash report); each passed in full when rerun on its own. The cause wasn't found; other test runs shared the machine at the time. `e2e-permission-modes` needs the `.test` host names in `/etc/hosts` (now skipped with a note when they don't resolve). Firefox Developer Edition 161 couldn't be tested: a copy with the harness's `policies.json` added is killed at launch (its code signature), and macOS write-protects a copy once it has run.
+
+### Node versions (Firefox 160)
+
+Node 20.20.2 and 24.22.3 (helper and MCP server both on that Node): `e2e.mjs` 79/79 in both modes, and `e2e-safety`, `e2e-permissions`, `e2e-permission-modes`, `e2e-onboarding`, `e2e-storebuild`, `e2e-resilience`, `e2e-multi`, `e2e-smoke` all pass. Node 22 is the matrix above.
+
+### Setups real people have (Firefox 160, Linux)
+
+`FOXWRIGHT_E2E_PREFS` and `FOXWRIGHT_E2E_POLICIES` (see test/README.md) run any suite under these. "probe" is a 12-step check: read_page, screenshot, click by `find` coordinate and by ref, hover, typing ASCII symbols and non-ASCII text, select-all/Backspace/Tab, the zoom action, scroll and click.
+
+| Setup | Result |
+|---|---|
+| `privacy.resistFingerprinting` | `e2e.mjs` 79/79 both modes, `e2e-safety` 9/9, probe 12/12 |
+| Strict Enhanced Tracking Protection (strict category prefs, `cookieBehavior` 5, fingerprinting protection) | `e2e.mjs` 79/79 both modes, `e2e-permission-modes` 14/14 |
+| German and Japanese UI (Mozilla language packs, `intl.locale.requested`; checked `Services.locale.appLocalesAsBCP47`) | `e2e.mjs` 79/79 both modes, `e2e-safety` 9/9, `e2e-permission-modes` 14/14, probe 12/12. The permission window stays in English (the extension isn't localized). |
+| Page zoom 67 % and 130 % (Ctrl+-/Ctrl+= under Xvfb), both modes | probe 13/13 |
+| Page zoom 50 %, 150 %, 200 %; `devicePixelRatio` 0.5, 1.5, 2 | Screenshots, coordinates and the zoom action are right: every on-screen target was hit. The failures were elements below the shrunken viewport (`find` marks them "(off-screen)"); with DPR 2 in a window big enough, the probe passes 12/12. |
+| Windows 500x400 (headful) and 3840x2160 | Same: everything on screen works; the large window passes 12/12 in both modes. |
+| Container tabs (`privacy.userContext.enabled`) and private windows with the extension allowed there | Two bugs, below. Reading, clicking, screenshots and navigation inside a container tab work, and navigation stays in the container. Private tabs stay invisible. |
+| Keyboard layouts (de, fr, jp) | Not verified: the Xvfb in the test image accepts `setxkbmap`/`xmodmap` but keeps the US keymap, so those runs only repeat the US layout. |
+| Two Firefox profiles at once | `e2e-multi` 6/6 on every version above. |
+
+### Bugs found in this round (not fixed here)
+
+- **New agent tabs fail when another window is in front.** With the Foxwright group in one normal window and the person in a second normal window, `tabs_create_mcp` fails with "An unexpected error occurred"; with a private window in front (extension allowed there) it fails with "Cannot move non-private tabs to private window". Same on 152, 153 ESR, 160, 161 beta and Nightly. `createAgentTab` (src/background/tabs.js) opens the tab in the last-focused normal window and then moves it into the group with `tabs.group({ groupId })`, which Firefox refuses across windows.
+- **Container tabs in the group aren't listed.** A Multi-Account-Containers style tab dragged into the group works by its ID, but `tabs_context_mcp` doesn't list it: `browser.tabs.query({})` leaves container tabs out (seen from an extension page too), and `groupTabs()` relies on it.
+
+### Speed (`test/bench-actions.mjs`, Firefox 160, Linux arm64 Docker, median of 15)
+
+| Call | 0.5.0 (Mac, synthetic) | 0.8.x synthetic | 0.8.x trusted |
+|---|---|---|---|
+| click a button (no page load) | 120 ms | 107 ms | 120 ms |
+| type 10 characters | 46 ms | 33 ms | 115 ms |
+| press Tab | 25 ms | 5 ms | 114 ms |
+| click a link that loads a page | 114 ms | 29 ms | 41 ms |
+| navigate (local page) | n/a | 75 ms | 67 ms |
+| `read_page` / `find` / screenshot | 26 / 24 / 55 ms | 12 / 11 / 12 ms | 9 / 8 / 12 ms |
+
+Measured with nothing else running in the container (an earlier run next to other suites was up to 1.5x slower). The earlier column is the 0.5.0 Mac run below, so machines differ. In trusted mode each typed character and key goes through WebDriver BiDi, which costs about 110 ms per call regardless of length.
+
+## Summary (0.5.0, 2026-11-08)
 
 | Suite | Synthetic | Trusted |
 |---|---|---|
@@ -164,7 +232,8 @@ Click latency includes about 300 ms spent watching for a navigation the click mi
 
 ## Not covered yet
 
-- **Windows.** The code paths (named pipe, registry, `.bat` launcher) are written and CI now installs the npm package on Windows, but the extension hasn't been driven on Windows. [MANUAL-CHECKS.md](MANUAL-CHECKS.md) has the checklist.
+- **Windows.** CI runs `e2e-smoke` and `e2e.mjs` in both input modes and the store build (non-blocking jobs); results aren't in this report. Not tried: the key-file ACL against another local user. [MANUAL-CHECKS.md](MANUAL-CHECKS.md) has the checklist.
+- **Keyboard layouts other than US** (see above), and Firefox Developer Edition on macOS.
 - **Snap/Flatpak Firefox.**
 - **Logged-in sites.** Gmail, Google Docs and banking all need an account; see MANUAL-CHECKS.md.
 - **Strong anti-bot pages.** Cloudflare Turnstile and reCAPTCHA were unreachable from the sandbox. Trusted mode is expected to fare much better there than synthetic mode.

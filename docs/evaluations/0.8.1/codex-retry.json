@@ -1,0 +1,304 @@
+[
+  {
+    "id": "mui-autocomplete",
+    "rep": 1,
+    "ok": true,
+    "ms": 29200,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "find": 2,
+      "computer": 3,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1733,
+        "images": 0
+      },
+      "find": {
+        "chars": 853,
+        "images": 0
+      },
+      "computer": {
+        "chars": 287,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 226,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27881,
+      "output": 376,
+      "cacheRead": 118912,
+      "cacheWrite": 0
+    },
+    "answer": "Selected “The Godfather” in the first “Movie” combo box and verified the value. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "radix-select",
+    "rep": 1,
+    "ok": true,
+    "ms": 29481,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "computer": 2,
+      "find": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1721,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5514,
+        "images": 0
+      },
+      "computer": {
+        "chars": 210,
+        "images": 0
+      },
+      "find": {
+        "chars": 234,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 54962,
+      "output": 375,
+      "cacheRead": 124288,
+      "cacheWrite": 0
+    },
+    "answer": "Selected “Banana” in the top demo fruit select and verified it displays Banana. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "gov-uk",
+    "rep": 1,
+    "ok": true,
+    "ms": 21387,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1171,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1514,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27002,
+      "output": 203,
+      "cacheRead": 65664,
+      "cacheWrite": 0
+    },
+    "answer": "It costs **£102** to renew an adult UK passport online from within the UK, according to [GOV.UK](https://www.gov.uk/renew-adult-passport).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 1,
+    "ok": true,
+    "ms": 53151,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 338,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1002,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 3155,
+        "images": 0
+      },
+      "computer": {
+        "chars": 44,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 15854,
+      "output": 658,
+      "cacheRead": 213376,
+      "cacheWrite": 0
+    },
+    "answer": "Your membership code is **FOX-4BQCJR**. The confirmation tab is left open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": true,
+    "ms": 21398,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 192,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 16222,
+      "output": 269,
+      "cacheRead": 110976,
+      "cacheWrite": 0
+    },
+    "answer": "Shipment code: **SHIP-337aedf3**  \nStock count: **23**\n\nRead only the outline changes after refreshing. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 37653,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 325,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1122,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 4368,
+        "images": 0
+      },
+      "computer": {
+        "chars": 38,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 29194,
+      "output": 767,
+      "cacheRead": 175616,
+      "cacheWrite": 0
+    },
+    "answer": "Application submitted successfully. Your reference number is **APP-E5VJZ0**.\n\nThe confirmation tab is left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]

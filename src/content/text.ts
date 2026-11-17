@@ -50,7 +50,9 @@ export function pageText(args: { maxChars?: number } = {}) {
     text = best.innerText;
     source = best.tagName.toLowerCase() + (best.id ? '#' + best.id : '');
   }
-  text = text.replace(/[ \t ]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  // The lookbehind makes each run of spaces be tried once, not once per space (megabytes of
+  // spaces would otherwise take minutes here).
+  text = text.replace(/(?<![ \t])[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   const totalChars = text.length;
   const truncated = text.length > max;
   if (truncated)

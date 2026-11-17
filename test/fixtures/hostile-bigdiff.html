@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Hostile: a huge outline that keeps changing</title></head><body>
+<h1>Big list</h1>
+<ul id="l"></ul>
+<script>
+// 60,000 items; every 4 seconds, every 30th one changes: 2,000 scattered changes, which
+// is the expensive case for a line diff.
+const ul = document.getElementById('l');
+const frag = document.createDocumentFragment();
+for (let i = 0; i < 60000; i++) {
+  const li = document.createElement('li');
+  li.textContent = 'item ' + i;
+  frag.appendChild(li);
+}
+ul.appendChild(frag);
+let round = 0;
+setInterval(() => {
+  round++;
+  const items = ul.children;
+  for (let i = 0; i < items.length; i += 30)
+    items[i].textContent = 'changed ' + i + ' round ' + round;
+}, 4000);
+</script>
+</body></html>

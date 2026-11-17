@@ -36,6 +36,32 @@ Build: scripts are bundled with esbuild. The source zip has BUILDING.txt with ex
 To test: npx foxwright-firefox setup (or from the source zip: npm ci --prefix host && npm run build --prefix host && node host/dist/foxwright.mjs setup), connect an MCP client (claude mcp add foxwright -- node ~/.foxwright/app/foxwright.mjs mcp) and ask it to read a page. Foxwright's permission window appears the first time the agent opens a site. test/e2e-safety.mjs covers the permission window and pause controls.
 ```
 
+### 0.8.1 reviewer notes (ready to paste)
+
+Under 3,000 characters, ready to paste. The user-facing version notes are in [amo/LISTING.md](amo/LISTING.md) ("Release notes for 0.8.1").
+
+```text
+New in 0.8.1 (a fix release; no new permissions, no new data collection, manifest permissions unchanged): clearer first-run and permission screens. The setup page (welcome/) asks which AI app the user has and shows the matching setup command per OS, with help for a missing Node.js, Windows PowerShell's script policy, and Snap/Flatpak Firefox on Linux. The permission window (prompt/) has the same four answers in a 2x2 layout and explains "this session" and Read only. Popup, permission window and Activity page get better dark-mode contrast and wrapping. All UI text is set with textContent; no remote resources. Also: the built-in PDF text reader (background/pdftext.js) has time, size and nesting limits; agent tabs open in the group's own window and container tabs are listed; stricter permission and confirmation checks; the activity log stores less.
+
+Foxwright lets a user-installed local AI agent operate tabs in a dedicated Foxwright tab group. Page content travels only through runtime.connectNative('foxwright') to the helper the user installs (npx foxwright-firefox@0.8.1 setup; source in host/). The extension does nothing until the helper is installed and an agent connects.
+
+Permissions:
+- nativeMessaging: the only data channel, to the local helper.
+- <all_urls> and scripting: inject packaged scripts into agent tabs only after the user approves the site in an extension-owned window.
+- tabs/tabGroups: keep the agent in its own tab group.
+- webNavigation: frame-origin checks and page-load detection.
+- webRequest: non-blocking; request URLs/status of agent tabs (read_network_requests).
+- storage: approvals, settings and the local activity log. alarms: reconnect to the helper.
+
+This listed build cannot execute agent-supplied JavaScript strings; javascript_tool is compiled out. All injected code is packaged: content.js (page outline, input), hooks.js (console capture; dialogs while the agent works), page-hooks.js (pointer capture during the extension's own gestures only).
+
+Password values are masked. The activity log stays on the device (500 entries, can be disabled or cleared) and excludes typed text, form values, page content, file names and full URLs. Private tabs are refused.
+
+Vendored Playwright accessibility code is Apache-2.0 (NOTICE, THIRD-PARTY-NOTICES.txt). Scripts are bundled with esbuild; the source ZIP's BUILDING.txt rebuilds a byte-identical add-on.
+
+To test from the source ZIP: npm ci --prefix host && npm run build --prefix host && node host/dist/foxwright.mjs setup. Connect an MCP client (claude mcp add foxwright -- node ~/.foxwright/app/foxwright.mjs mcp) and ask it to read a page; approve the site when the window appears. The toolbar button opens setup help, approvals and the Activity page.
+```
+
 ### 0.8.0 reviewer notes (ready to paste)
 
 ```text

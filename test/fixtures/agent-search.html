@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Fox Shop catalog</title>
+<style>body{font-family:sans-serif;max-width:40em;margin:2em auto}</style>
+<h1>Fox Shop catalog</h1>
+<form id="f" role="search"><label>Search the catalog <input id="q" name="q" type="search"></label> <button>Search</button></form>
+<section id="trending"><h2>Trending now</h2><ol id="trend"></ol></section>
+<p id="status" role="status"></p>
+<section id="results-box" hidden><h2>Results</h2><ol id="results"></ol></section>
+<script>
+const sku = p => p + '-' + crypto.randomUUID().slice(0, 6).toUpperCase();
+window.catalog = { query: '', loaded: false, top: '', trending: sku('TR'), searches: 0 };
+document.getElementById('trend').innerHTML = `<li>Arctic fox mug — SKU ${catalog.trending}</li><li>Fox socks — SKU ${sku('TR')}</li>`;
+document.getElementById('f').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = document.getElementById('q').value.trim();
+  catalog.searches++;
+  catalog.loaded = false;
+  catalog.query = q;
+  document.getElementById('results-box').hidden = true;
+  document.getElementById('status').textContent = 'Searching…';
+  const n = catalog.searches;
+  // The search service is slow: results arrive after about eight seconds.
+  setTimeout(() => {
+    if (n !== catalog.searches)
+      return;
+    const items = /fennec/i.test(q) ? [['Fennec fox plush, large', sku('FX')], ['Fennec fox poster', sku('FX')], ['Fennec ears headband', sku('FX')]] : [];
+    catalog.top = items[0]?.[1] || '';
+    catalog.loaded = true;
+    document.getElementById('status').textContent = items.length ? `${items.length} results for “${q}”` : `No results for “${q}”`;
+    document.getElementById('results').innerHTML = items.map(([t, s]) => `<li>${t} — SKU ${s}</li>`).join('');
+    document.getElementById('results-box').hidden = !items.length;
+  }, 8000);
+});
+</script></html>

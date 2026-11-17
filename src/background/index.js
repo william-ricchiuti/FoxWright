@@ -3,10 +3,10 @@
 import { VERSION, FULL, state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send, getDoctorReport } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite } from './tabs.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite, noteGroupChange } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
-import { loadLog, flushLog, logEvent, describeForLog, resultOfError, logOrigin, readLog, clearLog, setLogEnabled, logEnabled } from './actionlog.js';
+import { loadLog, flushLog, logEvent, describeForLog, summaryForLog, resultOfError, logOrigin, readLog, clearLog, setLogEnabled, logEnabled } from './actionlog.js';
 
 const PUBLIC_TOOLS = new Set(['tabs_context_mcp', 'tabs_create_mcp', 'tabs_close_mcp', 'navigate', 'read_page', 'find', 'form_input', 'get_page_text', 'computer', 'javascript_tool', 'read_console_messages', 'read_network_requests', 'handle_dialog', 'resize_window', 'file_upload']);
 
@@ -72,7 +72,8 @@ function siteForLog(tool, args = {}) {
 }
 
 function logAction(tool, args = {}, where, result) {
-  const own = cleanSummary(args.action_summary);
+  // The agent's words, minus anything the log must not keep (full addresses, typed text, file names).
+  const own = summaryForLog(tool, args);
   const text = own || describeForLog(tool, args);
   if (!text)
     return;
@@ -254,6 +255,8 @@ function refreshSoon() {
   refreshTimer = setTimeout(() => groupTabs().catch(() => {}), 200);
 }
 browser.tabs.onUpdated.addListener((tabId, info) => {
+  if ('groupId' in info)
+    noteGroupChange(tabId, info.groupId);
   if ('groupId' in info || 'status' in info)
     refreshSoon();
 });

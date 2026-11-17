@@ -1,0 +1,65 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Library card application</title>
+<style>body{font-family:sans-serif;max-width:36em;margin:2em auto}label{display:block;margin:.6em 0}.err{color:#b00020}fieldset{border:1px solid #ccc;margin:.8em 0}</style>
+<h1>Fox Library: card application</h1>
+<p id="stepline">Step 1 of 4</p>
+<div id="errors" class="err" role="alert"></div>
+<form id="s1"><h2>About you</h2>
+  <label>Full name <input id="name" autocomplete="name"></label>
+  <label>Email <input id="email" type="email"></label>
+  <label>Phone (10 digits) <input id="phone" type="tel"></label>
+  <label>Date of birth <input id="dob" type="date"></label>
+  <button>Next</button></form>
+<form id="s2" hidden><h2>Address</h2>
+  <label>Street <input id="street"></label>
+  <label>City <input id="city"></label>
+  <label>Postcode <input id="postcode"></label>
+  <label>Country <select id="country"><option value="">Choose…</option><option value="IE">Ireland</option><option value="FR">France</option><option value="GB">United Kingdom</option><option value="US">United States</option></select></label>
+  <button type="button" id="back2">Back</button> <button>Next</button></form>
+<form id="s3" hidden><h2>Preferences</h2>
+  <fieldset><legend>How should we contact you?</legend>
+    <label><input type="radio" name="contact" value="email"> Email</label>
+    <label><input type="radio" name="contact" value="phone"> Phone</label>
+    <label><input type="radio" name="contact" value="post"> Post</label></fieldset>
+  <fieldset><legend>Newsletters</legend>
+    <label><input type="checkbox" id="nl-digest" checked> Weekly digest</label>
+    <label><input type="checkbox" id="nl-events"> Event invitations</label></fieldset>
+  <label>Why do you want to join? <textarea id="reason" rows="3"></textarea></label>
+  <button type="button" id="back3">Back</button> <button>Review</button></form>
+<form id="s4" hidden><h2>Review your application</h2><dl id="review"></dl>
+  <button type="button" id="back4">Back</button> <button>Submit application</button></form>
+<div id="done" hidden><h2>Application received</h2><p id="ref"></p></div>
+<script>
+const $ = id => document.getElementById(id);
+window.__apply = { step: 1, errors: 0, submitted: false, values: null, code: '' };
+const show = n => { for (let i = 1; i <= 4; i++) $('s' + i).hidden = i !== n; $('stepline').textContent = `Step ${n} of 4`; __apply.step = n; $('errors').textContent = ''; };
+const fail = msgs => { if (!msgs.length) return false; __apply.errors++; $('errors').innerHTML = '<p>Please fix:</p><ul>' + msgs.map(m => `<li>${m}</li>`).join('') + '</ul>'; return true; };
+const vals = () => ({
+  name: $('name').value.trim(), email: $('email').value.trim(), phone: $('phone').value.trim(), dob: $('dob').value,
+  street: $('street').value.trim(), city: $('city').value.trim(), postcode: $('postcode').value.trim(), country: $('country').value,
+  contact: document.querySelector('input[name=contact]:checked')?.value || '',
+  newsletters: [['digest', 'nl-digest'], ['events', 'nl-events']].filter(([, id]) => $(id).checked).map(([n]) => n),
+  reason: $('reason').value.trim(),
+});
+$('s1').addEventListener('submit', e => { e.preventDefault(); const v = vals(); if (fail([
+  !v.name && 'Full name is required.',
+  !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v.email) && 'Enter a valid email address.',
+  !/^\d{10}$/.test(v.phone) && 'Phone: enter exactly 10 digits, with no spaces or dashes.',
+  !v.dob && 'Date of birth is required.',
+].filter(Boolean))) return; show(2); });
+$('s2').addEventListener('submit', e => { e.preventDefault(); const v = vals(); if (fail([
+  !v.street && 'Street is required.', !v.city && 'City is required.',
+  !/^[A-Z]{1,2}\d[A-Z\d]? \d[A-Z]{2}$/.test(v.postcode) && 'Postcode: use capital letters and one space, like SW1A 1AA.',
+  !v.country && 'Choose a country.',
+].filter(Boolean))) return; show(3); });
+$('s3').addEventListener('submit', e => { e.preventDefault(); const v = vals(); if (fail([
+  !v.contact && 'Choose how we should contact you.',
+  v.reason.length < 20 && 'Tell us in at least 20 characters why you want to join.',
+].filter(Boolean))) return;
+  $('review').innerHTML = Object.entries(v).map(([k, x]) => `<dt>${k}</dt><dd>${Array.isArray(x) ? x.join(', ') || 'none' : x}</dd>`).join('');
+  show(4); });
+$('s4').addEventListener('submit', e => { e.preventDefault(); const v = vals();
+  let h = 0; for (const c of JSON.stringify(v)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  __apply.values = v; __apply.submitted = true; __apply.code = 'APP-' + h.toString(36).toUpperCase().slice(0, 6);
+  $('s4').hidden = true; $('stepline').textContent = 'Done'; $('done').hidden = false; $('ref').textContent = 'Your reference number is ' + __apply.code + '.'; });
+$('back2').onclick = () => show(1); $('back3').onclick = () => show(2); $('back4').onclick = () => show(3);
+</script></html>

@@ -154,13 +154,15 @@ async function waitFor(tab, cond, timeoutMs) {
 
 // The last outline read_page returned, per tab, frame and options; read_page {diff: true} compares to it.
 const lastOutlines = new Map(); // tabId -> Map(key -> { url, docId, yaml })
+const OUTLINE_KEEP_MAX = 2000000; // characters of one remembered outline (up to 12 per tab)
 browser.tabs.onRemoved.addListener(tabId => lastOutlines.delete(tabId));
 
 /**
  * Line diff (Myers' O(ND) algorithm) after trimming the common start and end. Returns a list of
  * ['=', i, j] / ['-', i] / ['+', j] or null when the lists differ in more than maxD lines.
  */
-export function diffLines(a, b, maxD = 1500) {
+export function diffLines(a, b, maxD = 1500, maxWork = 20000000) {
+  let work = 0; // comparisons made: a page with a huge outline must not keep the background busy for seconds
   let s = 0;
   while (s < a.length && s < b.length && a[s] === b[s])
     s++;
@@ -182,10 +184,13 @@ export function diffLines(a, b, maxD = 1500) {
     for (let k = -d; k <= d; k += 2) {
       let x = k === -d || (k !== d && v[off + k - 1] < v[off + k + 1]) ? v[off + k + 1] : v[off + k - 1] + 1;
       let y = x - k;
+      const x0 = x;
       while (x < N && y < M && A[x] === B[y]) {
         x++;
         y++;
       }
+      if ((work += x - x0 + 1) > maxWork)
+        return null;
       v[off + k] = x;
       if (x >= N && y >= M) {
         found = true;
@@ -266,10 +271,11 @@ function outlineDiff(oldYaml, newYaml) {
   const out = [];
   const shown = new Set(); // context lines already printed, by "side:index"
   let added = 0, removed = 0, changed = 0;
+  let walked = 0; // lines looked at to find parents: bounded, like the diff itself
   const context = (lines, idx, side) => {
     const chain = [];
     let ind = indentOf(lines[idx]);
-    for (let i = idx - 1; i >= 0 && ind > 0; i--) {
+    for (let i = idx - 1; i >= 0 && ind > 0 && walked < 5000000; i--, walked++) {
       const li = indentOf(lines[i]);
       if (li < ind) {
         chain.push(i);
@@ -364,8 +370,14 @@ async function pdfText(tab) {
     const notes = [];
     if (r.undecoded)
       notes.push(`${r.undecoded} of ${r.glyphs} characters couldn't be decoded (fonts without a Unicode map) and are left out.`);
-    if (r.truncated)
+    if (r.stopped === 'time')
+      notes.push(`Reading stopped after ${r.pages.length} of ${r.pageCount} pages: the PDF took longer to read than Foxwright allows (20 s). The rest is left out.`);
+    else if (r.stopped === 'size')
+      notes.push(`Reading stopped after ${r.pages.length} of ${r.pageCount} pages: the PDF expands to more data than Foxwright reads. The rest is left out.`);
+    else if (r.truncated)
       notes.push('The PDF has more text than Foxwright reads (5,000,000 characters); the rest is left out.');
+    if (r.skipped)
+      notes.push(`${r.skipped} part${r.skipped === 1 ? '' : 's'} of the PDF ${r.skipped === 1 ? 'was' : 'were'} too large to read and ${r.skipped === 1 ? 'is' : 'are'} left out.`);
     if (got.container)
       notes.push('This tab is in a Firefox container, but the PDF was downloaded with the default container\'s cookies.');
     const body = r.pages.map((p, i) => `[Page ${i + 1}]\n${p}`).join('\n\n');
@@ -386,7 +398,7 @@ function pagedText(head, full, args, { preformatted = false, notes = [] } = {}) 
   if (args.query) {
     // Return only the passages that mention the query words (cheap way to answer a question about a long page).
     const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
-    const paras = full.split(/\n+/).map(p => (preformatted ? p.replace(/\s+$/, '') : p.trim())).filter(p => p.trim());
+    const paras = full.split(/\n+/).map(p => (preformatted ? p.trimEnd() : p.trim())).filter(p => p.trim());
     const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
     scored.sort((a, b) => b.s - a.s || a.i - b.i);
     const picked = new Set();
@@ -1102,12 +1114,19 @@ export const tools = {
     if (!perTab)
       lastOutlines.set(tab.id, (perTab = new Map()));
     const prev = perTab.get(key);
-    perTab.set(key, { url: res.url, docId: res.docId, yaml: body });
+    // Kept per tab for diffs: an enormous outline (a page built to be huge) is not kept.
+    const keep = body.length <= OUTLINE_KEEP_MAX;
+    if (keep)
+      perTab.set(key, { url: res.url, docId: res.docId, yaml: body });
+    else
+      perTab.delete(key);
     if (perTab.size > 12)
       perTab.delete(perTab.keys().next().value);
     if (args.diff) {
       let why = '';
-      if (!prev)
+      if (!keep)
+        why = 'the page outline is too large to compare';
+      else if (!prev)
         why = 'there is no earlier read_page of this tab with the same options to compare with';
       else if (prev.url !== res.url || prev.docId !== res.docId)
         why = 'the page navigated since the last read_page';
@@ -1180,7 +1199,7 @@ export const tools = {
   async form_input(args) {
     const tab = await tabForPageTool(args, 'full');
     const frameId = frameForRef(tab.id, args.ref);
-    const r = await sendContent(tab.id, frameId, 'formInput', { ref: args.ref, value: args.value });
+    const r = await sendGuarded(tab, frameId, 'formInput', { ref: args.ref, value: args.value }, args.action_summary);
     return text([fmtResult('Set', r), ...await dialogNotes(tab.id)].join('\n'));
   },
 
@@ -1682,6 +1701,9 @@ export const tools = {
   /** Before a trusted click: note what the next real pointerdown in this frame lands on (see _click_check). */
   async _click_arm(args) {
     const tab = await requireTab(args.tabId);
+    // Nothing of Foxwright's goes into a frame whose site the user hasn't approved.
+    if (!(await isFrameAllowed(tab.id, args.frameId || 0)))
+      return { data: false };
     await browser.scripting.executeScript({ target: { tabId: tab.id, frameIds: [args.frameId || 0] }, func: armClickProbe });
     return { data: true };
   },
@@ -1696,8 +1718,11 @@ export const tools = {
 
   /** file_upload step 1: the user approves the paths (shown with sizes) before the MCP server reads any file. */
   async _upload_ask(args) {
-    const tab = await tabForPageTool(args);
+    // Full access first (a read-only site asks to be upgraded), then the upload question: not the other way round.
+    const tab = await tabForPageTool(args, 'full');
     const frameId = args.ref ? frameForRef(tab.id, args.ref) : 0;
+    if (frameId)
+      await ensureFrameLevel(tab.id, frameId, 'full');
     let x, y;
     if (!args.ref && Array.isArray(args.coordinate)) {
       const p = await toCss(tab, args.coordinate);
