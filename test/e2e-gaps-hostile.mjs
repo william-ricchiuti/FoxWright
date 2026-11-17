@@ -343,6 +343,34 @@ await test('hostile page: prototype pollution, JSON/Promise/addEventListener ove
   expect(/textbox "Name"[^\n]*Ada/.test(still.text), 'form_input value not visible: ' + still.text.slice(0, 500));
 }, { area: '1g' });
 
+await test('a page of megabytes of spaces can\'t freeze Foxwright (get_page_text with a query)', async () => {
+  expect(!(await h.call('navigate', { tabId, url: `${A}/hostile-spaces.html` })).isError, 'navigate');
+  const t0 = Date.now();
+  const r = await h.call('get_page_text', { tabId, query: 'needle' });
+  const ms = Date.now() - t0;
+  // While it runs, the extension must still answer other calls (Stop depends on that).
+  const t1 = Date.now();
+  const ctx = await h.call('tabs_context_mcp', {});
+  expect(!r.isError && /needle first line/.test(r.text) && /needle last line/.test(r.text), r.text.slice(0, 300));
+  expect(ms < 10000 && !ctx.isError && Date.now() - t1 < 3000, `get_page_text took ${ms} ms, the next call ${Date.now() - t1} ms`);
+}, { area: '1h' });
+
+await test('a huge outline that keeps changing can\'t freeze Foxwright (read_page diff)', async () => {
+  expect(!(await h.call('navigate', { tabId, url: `${A}/hostile-bigdiff.html` })).isError, 'navigate');
+  const first = await h.call('read_page', { tabId, max_chars: 2000 });
+  expect(!first.isError && /item 0/.test(first.text), first.text.slice(0, 200));
+  for (let i = 1; i <= 2; i++) {
+    await sleep(4500);
+    const t0 = Date.now();
+    const d = await h.call('read_page', { tabId, max_chars: 2000, diff: true });
+    const ms = Date.now() - t0;
+    const t1 = Date.now();
+    const ctx = await h.call('tabs_context_mcp', {});
+    expect(!d.isError && /changed 0|Full outline|too much changed/.test(d.text), d.text.slice(0, 300));
+    expect(ms < 15000 && !ctx.isError && Date.now() - t1 < 3000, `read_page diff took ${ms} ms, the next call ${Date.now() - t1} ms`);
+  }
+}, { area: '1h' });
+
 driver.close();
 await h.stop();
 xs.close();

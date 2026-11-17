@@ -136,11 +136,42 @@ await test('read-only site: acting asks once to upgrade; Deny leaves the page un
   expect(/Clicks: 0/.test(p) && !logOf(p).trim(), 'the read-only page was changed:\n' + p.slice(-400));
 });
 
+await test('read-only site: no other path acts on it either (batch, upload, screenshot upload, dialogs), and none of them opens a window', async () => {
+  const q = await refFor('Search');
+  const shot = await h.call('computer', { tabId, action: 'screenshot' });
+  const imageId = (/Screenshot ID: (\S+)/.exec(shot.text) || [])[1];
+  expect(imageId, 'no screenshot id: ' + shot.text);
+  const tmp = `${process.env.TMPDIR || '/tmp'}/fw-readonly-upload.txt`;
+  fs.writeFileSync(tmp, 'x');
+  const later = [
+    ['browser_batch', { tabId, actions: [{ tool: 'read_page', args: {} }, { tool: 'form_input', args: { ref: q, value: 'batch' } }] }],
+    ['browser_batch', { tabId, actions: [{ tool: 'computer', args: { action: 'left_click', ref: q } }, { tool: 'computer', args: { action: 'type', text: 'batch\n' } }] }],
+    ['browser_batch', { tabId, actions: [{ tool: 'computer', args: { action: 'key', text: 'Down Enter' } }] }],
+    ['browser_batch', { tabId, actions: [{ tool: 'handle_dialog', args: { accept: true } }] }],
+    ['computer', { tabId, action: 'left_click_drag', start_coordinate: [50, 50], coordinate: [200, 200] }],
+    ['computer', { tabId, action: 'right_click', ref: q }], ['computer', { tabId, action: 'double_click', coordinate: [100, 100] }],
+    ['computer', { tabId, action: 'key', text: 'space' }], ['computer', { tabId, action: 'key', text: 'shift+Down' }], ['computer', { tabId, action: 'key', text: 'ctrl+a' }],
+    ['file_upload', { tabId, ref: q, paths: [tmp] }], ['upload_image', { tabId, imageId, ref: q }],
+  ];
+  const bad = [];
+  for (const [tool, args] of later) {
+    const x = await noWindow(h.call(tool, args));
+    if (!x.isError || !/reading only/.test(x.text))
+      bad.push(`${tool} ${JSON.stringify(args).slice(0, 90)}: ${x.isError ? '' : 'SUCCEEDED '}${x.text.slice(0, 200)}`);
+  }
+  expect(!bad.length, bad.join('\n'));
+  const p = await page();
+  expect(/Clicks: 0/.test(p) && !logOf(p).trim() && !/batch/.test(p), 'the read-only page was changed:\n' + p.slice(-500));
+});
+
 await test('read-only "Always allow": accepting the upgrade lets the click through; the popup tags the site "read only"', async () => {
   const nav = await withWindow(h.call('navigate', { tabId, url: `${B}/consequence.html` }), 'always', { readOnly: true });
   expect(!nav.r.isError, nav.r.text);
   let s = await status();
   expect(s.allowed.includes(B) && s.readOnly.includes(B), JSON.stringify(s));
+  // Stored where a Foxwright from before 0.8 (which only knows `allowed`) would not take it for full access.
+  const st = await ext(`return browser.storage.local.get(['allowed', 'allowedRead', 'readOnly']);`);
+  expect(!st.allowed.includes(B) && st.allowedRead.includes(B) && !(st.readOnly || []).length, 'stored: ' + JSON.stringify(st));
   // The popup's site list shows the tag.
   let row = '';
   for (let i = 0; i < 40 && !/read only/.test(row); i++) {
@@ -230,13 +261,75 @@ await test('confirm before consequential actions: off by default; once ticked in
   const sub = await withWindow(h.call('computer', { tabId, action: 'left_click', ref: refOf((await h.call('find', { tabId, query: 'button Search' })).text, /button "Search"[^\n]*\[ref=([^\]]+)\]/) || await refFor('Search') }), 'once');
   expect(/submits a form/.test(sub.info.reason), JSON.stringify(sub.info));
   expect(/SUBMITTED/.test(logOf(await page())), 'Allow once did not submit');
-  // A newline in a textarea that isn't a form field: no question.
-  await h.call('computer', { tabId, action: 'left_click', ref: await refFor('Chat') });
+  // A newline in a plain textarea (notes, not a message box) that isn't a form field: no question.
+  await h.call('computer', { tabId, action: 'left_click', ref: await refFor('Notes') });
   expect(!(await noWindow(h.call('computer', { tabId, action: 'type', text: 'a\nb' }))).isError, 'textarea typing');
   // Off again: no questions.
   await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
   await sleep(300);
   expect(!(await noWindow(h.call('computer', { tabId, action: 'left_click', ref: sendRef }))).isError, 'send after turning it off');
+});
+
+await test('confirm before consequential actions also covers: message boxes, Ctrl+Enter, fields outside forms, menus, unlabelled and non-button controls, labels, switches', async () => {
+  if (!(await status()).confirmActions)
+    await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
+  for (let i = 0; i < 20 && !(await status()).confirmActions; i++)
+    await sleep(100);
+  expect((await status()).confirmActions === true, 'could not turn it on');
+  try {
+    expect(!(await noWindow(h.call('navigate', { tabId, url: `${S}/consequence2.html` }))).isError, 'navigate');
+    const p0 = await page();
+    const refIn = (re) => (re.exec(p0) || []).slice(1).find(Boolean);
+    const ask = async (what, args, re, tool = 'computer') => {
+      const call = h.call(tool, { tabId, ...args });
+      const x = await withWindow(call, 'deny').catch(async (e) => {
+        throw new Error(`${what}: ${e.message} (the call returned: ${(await call).text.slice(0, 200)})`);
+      });
+      expect(x.r.isError && /did not allow this action/.test(x.r.text), `${what}: not blocked: ${x.r.text.slice(0, 200)}`);
+      expect(re.test(`${x.info.element} | ${x.info.reason}`), `${what}: window said ${JSON.stringify([x.info.element, x.info.reason])}`);
+      return x.info;
+    };
+    const click = (ref) => ({ action: 'left_click', ref });
+    // A message box: Enter sends. A line break typed into it is the same key.
+    expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Message to the team')) }))).isError, 'focus composer');
+    await ask('Enter in a message box', { action: 'key', text: 'Enter' }, /usually sends/);
+    await ask('newline typed into a message box', { action: 'type', text: 'hello\nthere' }, /usually sends/);
+    expect(!(await noWindow(h.call('computer', { tabId, action: 'key', text: 'shift+Enter' }))).isError, 'shift+Enter is a line break: no question');
+    // A notes box: Enter is a line break (no question), Ctrl+Enter is the send shortcut (question).
+    expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Notes')) }))).isError, 'focus notes');
+    expect(!(await noWindow(h.call('computer', { tabId, action: 'key', text: 'Enter' }))).isError, 'Enter in notes');
+    await ask('Ctrl+Enter in a text box', { action: 'key', text: 'ctrl+Enter' }, /Ctrl\+Enter/);
+    await ask('Cmd+Enter in a text box', { action: 'key', text: 'cmd+Return' }, /Ctrl\+Enter/);
+    // A single-line field outside any form: only a script can react to Enter.
+    expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Quick add')) }))).isError, 'focus loose field');
+    await ask('Enter in a field outside a form', { action: 'key', text: 'Enter' }, /page's script decides/);
+    // Something clickable that isn't a button by its markup.
+    await ask('a clickable div named Delete account', click(refIn(/\[ref=([^\]]+)\][^\n]*Delete account|Delete account[^\n]*\[ref=([^\]]+)\]/)), /Delete account/);
+    // A button that shows only an icon: its id and class say what it does.
+    await ask('an icon-only button with id trash-btn and class delete-item', click(refIn(/- button \[ref=([^\]]+)\]/)), /no readable label/);
+    // A label whose control is a submit button.
+    const labelRef = refIn(/\[ref=([^\]]+)\][^\n]*Carry on from here|Carry on from here[^\n]*\[ref=([^\]]+)\]/);
+    if (labelRef)
+      await ask('a label for a submit button', click(labelRef), /submits a form/);
+    else
+      console.log('      (the label has no ref in the outline: not clicked)');
+    // A switch pressed through form_input.
+    await ask('form_input on a switch named Publish post', { ref: await refFor('Publish post'), value: true }, /Publish post/, 'form_input');
+    // A menu: arrow keys move the highlight, so Enter after them can't be judged in advance...
+    expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Row actions')) }))).isError, 'focus menu');
+    await ask('arrow keys then Enter in a menu', { action: 'key', text: 'Down Enter' }, /moving focus/);
+    // ...and once the highlight is on "Delete row", Enter alone asks about that item.
+    expect(!(await noWindow(h.call('computer', { tabId, action: 'key', text: 'Down' }))).isError, 'Down in the menu');
+    await ask('Enter on the highlighted menu item', { action: 'key', text: 'Enter' }, /Delete row/);
+    // A page-chosen name can't close the window's quotation marks and continue in Foxwright's voice.
+    const q = await ask('a name with quotation marks', click(await refFor('This is safe')), /Remove/);
+    expect((q.element.match(/[\u201c\u201d"]/g) || []).length === 2, 'quotation marks from the page reached the window: ' + q.element);
+    const log = logOf(await page());
+    expect(!log, 'something went through after Deny: ' + log);
+  } finally {
+    await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
+    await sleep(300);
+  }
 });
 
 await test('JSON re-fetch (get_page_text) never follows a redirect', async () => {
@@ -319,7 +412,9 @@ await test('"Allow for 1 hour": stored with its expiry, shown "until HH:MM", sur
   }
   expect(/until \d{1,2}:\d{2}/.test(row), 'popup row: ' + row);
   // Make it expire in a few seconds, then restart the extension (as Firefox may do with an idle event page).
-  await ext(`const t = (await browser.storage.local.get('timed')).timed; t[${JSON.stringify(C)}].until = Date.now() + 6000; await browser.storage.local.set({ timed: t }); setTimeout(() => browser.runtime.reload(), 100); return true;`).catch(() => {});
+  // Also left in storage for the restart to find: a read-only approval in the form 0.8.0 stored it
+  // (in `allowed`, marked by `readOnly`), and a 1-hour approval given while the clock was ten years ahead.
+  await ext(`const s = await browser.storage.local.get(['timed', 'allowed']); s.timed[${JSON.stringify(C)}].until = Date.now() + 6000; s.timed['http://skew.test:1'] = { until: Date.now() + 10 * 365 * 86400e3, level: 'full' }; await browser.storage.local.set({ timed: s.timed, allowed: [...(s.allowed || []), 'http://legacy.test:1'], readOnly: ['http://legacy.test:1'] }); setTimeout(() => browser.runtime.reload(), 100); return true;`).catch(() => {});
   popup = null;
   const t0 = Date.now();
   let back = null;
@@ -333,6 +428,12 @@ await test('"Allow for 1 hour": stored with its expiry, shown "until HH:MM", sur
   tabId = tabIdOf(back.text);
   const still = await noWindow(h.call('navigate', { tabId, url: `${C}/page2.html?after-restart` }));
   expect(!still.isError, 'the 1-hour approval did not survive the restart: ' + still.text);
+  const s2 = await status();
+  const st2 = await ext(`return browser.storage.local.get(['allowed', 'allowedRead', 'readOnly']);`);
+  expect(s2.allowed.includes('http://legacy.test:1') && s2.readOnly.includes('http://legacy.test:1'), 'a 0.8.0 read-only approval was lost: ' + JSON.stringify([s2.allowed, s2.readOnly]));
+  expect(!st2.allowed.includes('http://legacy.test:1') && st2.allowedRead.includes('http://legacy.test:1') && !st2.readOnly.length, 'a 0.8.0 read-only approval was not moved out of "allowed": ' + JSON.stringify(st2));
+  const skew = s2.timed.find(x => x.origin === 'http://skew.test:1');
+  expect(skew && skew.until - Date.now() <= 3600e3 + 5000, 'a 1-hour approval lasts longer than an hour: ' + JSON.stringify(skew));
   while (Date.now() - t0 < 8000)
     await sleep(250);
   const asked = await withWindow(h.call('navigate', { tabId, url: `${C}/page2.html?expired` }), 'deny');
@@ -377,6 +478,25 @@ await test('trusted input: a read-only site can be scrolled but not clicked (the
   const k = await T.call('computer', { tabId: ttab, action: 'type', text: 'x' });
   expect(k.isError && /reading only/.test(k.text), k.text);
   expect(/Clicks: 0/.test(await tpage()), 'the read-only page was clicked');
+});
+
+await test('trusted input with policy "confirmActions": message boxes, Ctrl+Enter, unlabelled and non-button controls wait for the person too', async () => {
+  expect(trusted, 'trusted input did not start');
+  expect(!(await T.call('navigate', { tabId: ttab, url: `${S}/consequence2.html` })).isError, 'navigate');
+  const tp = await tpage();
+  const refIn = (re) => (re.exec(tp) || []).slice(1).find(Boolean);
+  const div = await T.call('computer', { tabId: ttab, action: 'left_click', ref: refIn(/\[ref=([^\]]+)\][^\n]*Delete account|Delete account[^\n]*\[ref=([^\]]+)\]/) });
+  expect(div.isError && /timed out/.test(div.text) && /Delete account/.test(div.text), 'div: ' + div.text);
+  await T.call('computer', { tabId: ttab, action: 'left_click', ref: await tref('Message to the team') });
+  const enter = await T.call('computer', { tabId: ttab, action: 'type', text: 'hello\n' });
+  expect(enter.isError && /usually sends/.test(enter.text), 'composer: ' + enter.text);
+  await T.call('computer', { tabId: ttab, action: 'left_click', ref: await tref('Notes') });
+  const ce = await T.call('computer', { tabId: ttab, action: 'key', text: 'ctrl+Enter' });
+  expect(ce.isError && /Ctrl\+Enter/.test(ce.text), 'ctrl+Enter: ' + ce.text);
+  const plain = await T.call('computer', { tabId: ttab, action: 'key', text: 'Enter' });
+  expect(!plain.isError, 'Enter in a notes box should not ask: ' + plain.text);
+  const log = logOf(await tpage());
+  expect(!/DIVDELETE|COMPOSED|CTRLENTER/.test(log), 'log: ' + log);
 });
 
 await test('trusted input with policy "confirmActions": a plain button is clicked, Send and Enter-to-submit wait for the person', async () => {

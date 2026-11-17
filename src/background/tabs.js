@@ -240,7 +240,12 @@ export function levelOf(origin) {
     take(state.sessionReadOnly.includes(origin) ? 'read' : 'full');
   const t = state.timed[origin];
   if (t) {
-    if (t.until > Date.now())
+    const now = Date.now();
+    // "For 1 hour" never means longer than an hour from now, whatever the computer's clock said
+    // when it was given (a clock set forward and later corrected would otherwise stretch it).
+    if (t.until > now + HOUR_MS)
+      t.until = now + HOUR_MS;
+    if (t.until > now)
       take(t.level);
     else
       expireSoon();

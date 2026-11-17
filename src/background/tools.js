@@ -1199,7 +1199,7 @@ export const tools = {
   async form_input(args) {
     const tab = await tabForPageTool(args, 'full');
     const frameId = frameForRef(tab.id, args.ref);
-    const r = await sendContent(tab.id, frameId, 'formInput', { ref: args.ref, value: args.value });
+    const r = await sendGuarded(tab, frameId, 'formInput', { ref: args.ref, value: args.value }, args.action_summary);
     return text([fmtResult('Set', r), ...await dialogNotes(tab.id)].join('\n'));
   },
 

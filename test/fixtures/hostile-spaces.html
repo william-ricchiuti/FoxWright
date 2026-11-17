@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Hostile: megabytes of spaces</title></head><body>
+<pre id="p"></pre>
+<script>
+// A "plain text" page whose lines are megabytes of spaces followed by one letter: clean-up code
+// that strips trailing spaces with a regular expression takes minutes on it.
+const line = ' '.repeat(1500000) + 'x';
+document.getElementById('p').textContent = 'needle first line\n' + line + '\n' + line + '\nneedle last line\n';
+</script>
+</body></html>

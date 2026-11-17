@@ -62,14 +62,22 @@ export function noteAction(tabId, text, own) {
 }
 
 export async function loadSettings() {
-  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], browserId: '', browserName: '', paused: false, readOnly: [], timed: {}, confirmActions: false });
+  const local = await browser.storage.local.get({ mode: 'ask', allowed: [], allowedRead: [], browserId: '', browserName: '', paused: false, readOnly: [], timed: {}, confirmActions: false });
   state.browserId = /^[a-f0-9]{12}$/.test(local.browserId) ? local.browserId : [...crypto.getRandomValues(new Uint8Array(6))].map(b => b.toString(16).padStart(2, '0')).join('');
   state.browserName = cleanName(local.browserName) || 'Firefox';
   if (state.browserId !== local.browserId)
     await browser.storage.local.set({ browserId: state.browserId });
   state.mode = local.mode === 'all' ? 'all' : 'ask';
-  state.allowed = Array.isArray(local.allowed) ? local.allowed : [];
-  state.readOnly = Array.isArray(local.readOnly) ? local.readOnly.filter(o => typeof o === 'string') : [];
+  // Stored apart (see saveSettings): `allowed` holds only full-access sites, `allowedRead` the
+  // read-only ones. 0.8.0 kept read-only sites in `allowed` too, marked by `readOnly`: still read,
+  // and rewritten in the new form below.
+  const strings = (v) => (Array.isArray(v) ? v.filter(o => typeof o === 'string') : []);
+  const storedRead = strings(local.allowedRead);
+  const legacyRead = strings(local.readOnly);
+  state.allowed = [...new Set([...(Array.isArray(local.allowed) ? local.allowed : []), ...storedRead])];
+  state.readOnly = [...new Set([...legacyRead, ...storedRead])].filter(o => state.allowed.includes(o));
+  if (legacyRead.length)
+    await browser.storage.local.set(storedApprovals()).catch(() => {});
   state.timed = cleanTimed(local.timed);
   state.confirmActions = local.confirmActions === true;
   // Stop stays in force across a Firefox restart or an extension update, until the user resumes.
@@ -108,9 +116,22 @@ export function cleanName(s) {
   return typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) : '';
 }
 
+/**
+ * "Always allow" approvals as stored. Read-only sites are kept out of `allowed`, in a key of their
+ * own: a Foxwright from before 0.8 (someone installing an older version over this one) reads only
+ * `allowed`, and would otherwise treat every read-only site as fully approved.
+ */
+function storedApprovals() {
+  return {
+    allowed: state.allowed.filter(o => !state.readOnly.includes(o)),
+    allowedRead: state.allowed.filter(o => state.readOnly.includes(o)),
+    readOnly: [], // the 0.8.0 form, no longer written
+  };
+}
+
 export async function saveSettings() {
   pruneTimed();
-  await browser.storage.local.set({ mode: state.mode, allowed: state.allowed, browserName: state.browserName, paused: state.paused, readOnly: state.readOnly, timed: state.timed, confirmActions: state.confirmActions });
+  await browser.storage.local.set({ mode: state.mode, ...storedApprovals(), browserName: state.browserName, paused: state.paused, timed: state.timed, confirmActions: state.confirmActions });
   try {
     await browser.storage.session.set({ sessionAllowed: state.sessionAllowed, groupId: state.groupId, sessionReadOnly: state.sessionReadOnly });
   } catch { /* ignore */ }
@@ -121,8 +142,9 @@ function cleanTimed(t) {
   const out = {};
   if (t && typeof t === 'object') {
     for (const [o, v] of Object.entries(t)) {
+      // Never more than an hour from now: an approval given while the clock was wrong must not last for years.
       if (v && typeof v.until === 'number' && v.until > Date.now())
-        out[o] = { until: v.until, level: v.level === 'read' ? 'read' : 'full' };
+        out[o] = { until: Math.min(v.until, Date.now() + 60 * 60 * 1000), level: v.level === 'read' ? 'read' : 'full' };
     }
   }
   return out;
