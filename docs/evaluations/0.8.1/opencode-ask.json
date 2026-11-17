@@ -1,0 +1,1340 @@
+[
+  {
+    "id": "login",
+    "rep": 1,
+    "ok": true,
+    "ms": 17301,
+    "turns": null,
+    "cost": 0.000726996,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 2,
+      "computer": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 651,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 105,
+        "images": 0
+      },
+      "computer": {
+        "chars": 607,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 284,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1422,
+      "output": 524,
+      "cacheRead": 66432,
+      "cacheWrite": 0
+    },
+    "answer": "Logged in successfully. The site shows:\n\n**\"You logged into a secure area!\"** — followed by \"Welcome to the Secure Area. When you are done click logout below.\" and \"Logged in as tomsmith\".\n\nThe tab remains open on the secure page for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://the-internet.herokuapp.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "checkout",
+    "rep": 1,
+    "ok": true,
+    "ms": 27867,
+    "turns": null,
+    "cost": 0.0014565900000000002,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 3,
+      "computer": 3,
+      "read_page": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 10,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 246,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 2596,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1204,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 686,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 361,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2817,
+      "output": 1157,
+      "cacheRead": 113280,
+      "cacheWrite": 0
+    },
+    "answer": "Order complete. Confirmation page says:\n\n- **\"Checkout: Complete!\"**\n- **\"Thank you for your order!\"**\n- **\"Your order has been dispatched, and will arrive just as fast as the pony can get there!\"**\n\nIt also shows a \"Generate PDF order\" button and a \"Back Home\" button.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://www.saucedemo.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "practice-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 18812,
+    "turns": null,
+    "cost": 0.0007784999999999999,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 1,
+      "find": 1,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 864,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 495,
+        "images": 0
+      },
+      "find": {
+        "chars": 229,
+        "images": 0
+      },
+      "computer": {
+        "chars": 238,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1434,
+      "output": 651,
+      "cacheRead": 57600,
+      "cacheWrite": 0
+    },
+    "answer": "The confirmation dialog title says: **\"Thanks for submitting the form\"**\n\nThe form was submitted successfully with Ada Lovelace's details, Female, 5551234567, Reading hobby, and London address. The tab remains open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://demoqa.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "todos",
+    "rep": 1,
+    "ok": true,
+    "ms": 16478,
+    "turns": null,
+    "cost": 0.001051668,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 1,
+      "read_page": 2,
+      "form_input": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 316,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1254,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 658,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 4570,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 31,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2814,
+      "output": 696,
+      "cacheRead": 70656,
+      "cacheWrite": 0
+    },
+    "answer": "Done. All three todos added and \"feed the fox\" is checked.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://todomvc.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "wiki-facts",
+    "rep": 1,
+    "ok": true,
+    "ms": 13642,
+    "turns": null,
+    "cost": 0.000518076,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1727,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 3210,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1894,
+      "output": 205,
+      "cacheRead": 36992,
+      "cacheWrite": 0
+    },
+    "answer": "Scientific name: **Vulpes vulpes** (Linnaeus, 1758). IUCN status: **Least Concern** (IUCN 3.1).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://en.wikipedia.org"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "hn-top",
+    "rep": 1,
+    "ok": true,
+    "ms": 12037,
+    "turns": null,
+    "cost": 0.00042095999999999995,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1690,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1191,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1464,
+      "output": 150,
+      "cacheRead": 37120,
+      "cacheWrite": 0
+    },
+    "answer": "\"Carnegie Mellon is putting computer science courses on YouTube for free\"",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://news.ycombinator.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "docs-search",
+    "rep": 1,
+    "ok": true,
+    "ms": 23459,
+    "turns": null,
+    "cost": 0.001054794,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "computer": 2,
+      "find": 2,
+      "form_input": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 963,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1826,
+        "images": 0
+      },
+      "find": {
+        "chars": 1581,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 61,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1085,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2767,
+      "output": 624,
+      "cacheRead": 88448,
+      "cacheWrite": 0
+    },
+    "answer": "Opened https://react.dev/reference/react/useState (found via the site's search) and left the tab open.\n\n**`useState` returns an array with exactly two values:**\n1. The current state of this state variable (on the first render it equals the `initialState` you passed).\n2. A set function (conventionally `setSomething`) that lets you update the state and trigger a re-render.\n\nSo you typically destruct",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://react.dev"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "mui-autocomplete",
+    "rep": 1,
+    "ok": true,
+    "ms": 22619,
+    "turns": null,
+    "cost": 0.001092174,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "computer": 3,
+      "find": 2,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1736,
+        "images": 0
+      },
+      "computer": {
+        "chars": 250,
+        "images": 0
+      },
+      "find": {
+        "chars": 2540,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 226,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2825,
+      "output": 659,
+      "cacheRead": 91008,
+      "cacheWrite": 0
+    },
+    "answer": "Selected \"The Godfather\" in the first Movie combo box (value now shows \"The Godfather\"). Tab left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://mui.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "radix-select",
+    "rep": 1,
+    "ok": true,
+    "ms": 30840,
+    "turns": null,
+    "cost": 0.001948212,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "find": 2,
+      "computer": 5,
+      "read_page": 2
+    },
+    "toolCalls": 11,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1715,
+        "images": 0
+      },
+      "find": {
+        "chars": 564,
+        "images": 0
+      },
+      "computer": {
+        "chars": 666,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 972,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4390,
+      "output": 1498,
+      "cacheRead": 130304,
+      "cacheWrite": 0
+    },
+    "answer": "Done — the fruit select now shows \"Banana\". The task tab (tab 22) is left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://www.radix-ui.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "drag-drop",
+    "rep": 1,
+    "ok": true,
+    "ms": 16911,
+    "turns": null,
+    "cost": 0.0009305880000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "computer": 3
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 458,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 849,
+        "images": 0
+      },
+      "computer": {
+        "chars": 427,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2506,
+      "output": 584,
+      "cacheRead": 68096,
+      "cacheWrite": 0
+    },
+    "answer": "Done — the boxes swapped: A is now on the right, B on the left. Tab 24 remains open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "confirm-dialog",
+    "rep": 1,
+    "ok": true,
+    "ms": 13807,
+    "turns": null,
+    "cost": 0.000599742,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "handle_dialog": 1,
+      "computer": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 636,
+        "images": 0
+      },
+      "handle_dialog": {
+        "chars": 95,
+        "images": 0
+      },
+      "computer": {
+        "chars": 123,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 352,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1353,
+      "output": 381,
+      "cacheRead": 56064,
+      "cacheWrite": 0
+    },
+    "answer": "The page shows: **You clicked: Ok**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "excalidraw",
+    "rep": 1,
+    "ok": true,
+    "ms": 24615,
+    "turns": null,
+    "cost": 0.001430142,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "computer": 5,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1741,
+        "images": 0
+      },
+      "computer": {
+        "chars": 668,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1515,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4049,
+      "output": 899,
+      "cacheRead": 94464,
+      "cacheWrite": 0
+    },
+    "answer": "Rectangle drawn on the Excalidraw canvas and selected. Tab 26 remains open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://excalidraw.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "rich-editor",
+    "rep": 1,
+    "ok": true,
+    "ms": 37694,
+    "turns": null,
+    "cost": 0.0025224659999999997,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 5,
+      "browser_batch": 3
+    },
+    "toolCalls": 12,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 847,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1031,
+        "images": 0
+      },
+      "computer": {
+        "chars": 502,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 725,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4291,
+      "output": 2412,
+      "cacheRead": 143872,
+      "cacheWrite": 0
+    },
+    "answer": "Done. The editor now contains \"Kitsune was here.\" with **Kitsune** in bold (verified in the zoomed view). Tab left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://quilljs.com",
+      "once https://27dab949b4b8820-preview.sandpack-static-server.codesandbox.io"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "gov-uk",
+    "rep": 1,
+    "ok": true,
+    "ms": 15989,
+    "turns": null,
+    "cost": 0.0008000520000000001,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "get_page_text": 2
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 2159,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 3933,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2182,
+      "output": 498,
+      "cacheRead": 57984,
+      "cacheWrite": 0
+    },
+    "answer": "£102 for online renewal of a standard adult (16+) 34-page passport from the UK (£116 for the 54-page frequent traveller version). Source: gov.uk/passport-fees (tab 31, still open).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://www.gov.uk"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "two-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 14932,
+    "turns": null,
+    "cost": 0.001180686,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 3445,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 11352,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4397,
+      "output": 562,
+      "cacheRead": 61312,
+      "cacheWrite": 0
+    },
+    "answer": "The **red fox** is heavier on average.\n\n- **Red fox**: typically 2.2–14 kg (4.9–30.9 lb) across its range; British/European adults commonly fall in the mid-single-digit kg, with vixens 15–20% lighter than males.\n- **Arctic fox**: males average 3.5 kg (7.7 lb), range 3.2–9.4 kg; females average 2.9 kg (6.4 lb), range 1.4–3.2 kg.\n\nSo the red fox is the larger, heavier species; the Arctic fox is nota",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "upload",
+    "rep": 1,
+    "ok": true,
+    "ms": 14912,
+    "turns": null,
+    "cost": 0.0008048159999999999,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "find": 1,
+      "file_upload": 1,
+      "computer": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 351,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 558,
+        "images": 0
+      },
+      "find": {
+        "chars": 181,
+        "images": 0
+      },
+      "file_upload": {
+        "chars": 111,
+        "images": 0
+      },
+      "computer": {
+        "chars": 489,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 183,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 1576,
+      "output": 564,
+      "cacheRead": 76672,
+      "cacheWrite": 0
+    },
+    "answer": "The page says **\"File Uploaded!\"** with **`foxwright-agent-upload.txt`** listed below it.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once https://the-internet.herokuapp.com"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 1,
+    "ok": true,
+    "ms": 26203,
+    "turns": null,
+    "cost": 0.0015431580000000002,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 3,
+      "read_page": 3,
+      "get_page_text": 3,
+      "computer": 1
+    },
+    "toolCalls": 12,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 343,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 691,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 874,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 673,
+        "images": 0
+      },
+      "computer": {
+        "chars": 44,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2837,
+      "output": 1199,
+      "cacheRead": 132736,
+      "cacheWrite": 0
+    },
+    "answer": "Membership code: **FOX-4BQCJR**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once http://127.0.0.1:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 9745,
+    "turns": null,
+    "cost": 0.000308724,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 218,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 163,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 690,
+      "output": 159,
+      "cacheRead": 36608,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**; audit code: **AUDIT-662293b3**. (Page read only; tab left open for verifier.)",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 1,
+    "ok": true,
+    "ms": 10374,
+    "turns": null,
+    "cost": 0.000342624,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 225,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 784,
+      "output": 192,
+      "cacheRead": 36608,
+      "cacheWrite": 0
+    },
+    "answer": "Conservation status: **Least Concern**. The sentence: \"The quick brown fox jumps over the lazy dog.\"",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "late-page",
+    "rep": 1,
+    "ok": true,
+    "ms": 18378,
+    "turns": null,
+    "cost": 0.000374508,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 189,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 778,
+      "output": 246,
+      "cacheRead": 36736,
+      "cacheWrite": 0
+    },
+    "answer": "Delivery code: `DELIVERY-e105b058`",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": true,
+    "ms": 13842,
+    "turns": null,
+    "cost": 0.00122742,
+    "tools": {
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "navigate": {
+        "chars": 195,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5086,
+      "output": 499,
+      "cacheRead": 55040,
+      "cacheWrite": 0
+    },
+    "answer": "New shipment code: **SHIP-f851a790**, stock count: **23**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": false,
+    "ms": 23441,
+    "turns": null,
+    "cost": 0.0015066479999999998,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 2,
+      "get_page_text": 3,
+      "read_page": 3,
+      "computer": 2,
+      "read_console_messages": 1
+    },
+    "toolCalls": 13,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 720,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 895,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2228,
+        "images": 0
+      },
+      "computer": {
+        "chars": 119,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 148,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2824,
+      "output": 1295,
+      "cacheRead": 102016,
+      "cacheWrite": 0
+    },
+    "answer": "**Copper kettle — total $36.95** ($36.95 price with free shipping).\n\nSteel kettle: $30.34 + $9.99 shipping = $40.33, so copper is cheaper right now by $3.38. Both tabs remain open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 36097,
+    "turns": null,
+    "cost": 0.0020055059999999998,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 5,
+      "computer": 5,
+      "browser_batch": 3
+    },
+    "toolCalls": 15,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 350,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 4345,
+        "images": 0
+      },
+      "computer": {
+        "chars": 264,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 951,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 4519,
+      "output": 1327,
+      "cacheRead": 177152,
+      "cacheWrite": 0
+    },
+    "answer": "Submitted. Reference number: **APP-E5VJZ0**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 1,
+    "ok": true,
+    "ms": 50925,
+    "turns": null,
+    "cost": 0.002932464,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 11,
+      "get_page_text": 6,
+      "read_console_messages": 2,
+      "read_network_requests": 2
+    },
+    "toolCalls": 24,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 230,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 784,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1396,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 296,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 212,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 5496,
+      "output": 2252,
+      "cacheRead": 252288,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is **Fennec fox plush, large — SKU FX-C63D2B**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 24963,
+    "turns": null,
+    "cost": 0.0015951180000000002,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 3,
+      "get_page_text": 1,
+      "read_page": 1,
+      "read_network_requests": 1,
+      "tabs_create_mcp": 1,
+      "tabs_close_mcp": 1
+    },
+    "toolCalls": 9,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 856,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1791,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 108,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "tabs_close_mcp": {
+        "chars": 14,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 2473,
+      "output": 1527,
+      "cacheRead": 102656,
+      "cacheWrite": 0
+    },
+    "answer": "The **gray fox** — 6 years in the wild (the longest of the five species in the table).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "denied-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 9502,
+    "turns": null,
+    "cost": 0.000271992,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1
+    },
+    "toolCalls": 2,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 317,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 124,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 504,
+      "output": 191,
+      "cacheRead": 27264,
+      "cacheWrite": 0
+    },
+    "answer": "The site access request was denied, so I can't load the price list. If you approve Foxwright's access to `http://b.test:8765` (or ask me to retry), I'll fetch the Den membership price.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "deny http://b.test:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]

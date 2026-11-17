@@ -1,0 +1,172 @@
+[
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": false,
+    "ms": 20961,
+    "turns": 11,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 3,
+      "tabs_create_mcp": 2,
+      "get_page_text": 3,
+      "computer": 1,
+      "read_page": 1,
+      "tabs_close_mcp": 1
+    },
+    "toolCalls": 12,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 910,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 74,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 894,
+        "images": 0
+      },
+      "computer": {
+        "chars": 33,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 302,
+        "images": 0
+      },
+      "tabs_close_mcp": {
+        "chars": 13,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 168562,
+      "output": 1213,
+      "cacheRead": 157056,
+      "cacheWrite": 0
+    },
+    "answer": "**Steel kettle** is cheaper: **$24.96 total** (free shipping), vs. the copper kettle at $29.10 + $12.50 shipping = **$41.60**.\n\nBoth product tabs (tab 3: copper, tab 5: steel) are left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once http://127.0.0.1:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 28355,
+    "turns": 11,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 3,
+      "get_page_text": 1,
+      "read_page": 1,
+      "tabs_create_mcp": 1,
+      "read_network_requests": 1,
+      "run_shell_command": 1,
+      "tabs_close_mcp": 1
+    },
+    "toolCalls": 10,
+    "toolErrors": 2,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1597,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1791,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 108,
+        "images": 0
+      },
+      "run_shell_command": {
+        "chars": 132,
+        "images": 0
+      },
+      "tabs_close_mcp": {
+        "chars": 13,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 174979,
+      "output": 2402,
+      "cacheRead": 162688,
+      "cacheWrite": 0
+    },
+    "answer": "**Fennec fox — 6 years** in the wild.\n\nFrom the field guide table (5 species listed):\n\n| Species | Weight | Lifespan in the wild |\n|---|---|---|\n| Red fox | 3–14 kg | 4 years |\n| Arctic fox | 3–9 kg | 2 years |\n| **Fennec fox** | 0.7–1.6 kg | **6 years** |\n| Gray fox | 3.6–7 kg | 3 years |\n| Kit fox | 1.6–2.7 kg | 5 years |\n\nThe page also notes lifespans are for wild animals and that captive foxes",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "denied-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 10428,
+    "turns": 3,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1
+    },
+    "toolCalls": 2,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 423,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 43016,
+      "output": 217,
+      "cacheRead": 33024,
+      "cacheWrite": 0
+    },
+    "answer": "Foxwright was denied access to `http://b.test:8765`, so I couldn't load the price list. If you'd like me to try again, please approve the site access prompt (or let me know), and I'll read the Den membership price from that page.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "deny http://b.test:8765"
+    ],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]

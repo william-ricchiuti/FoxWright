@@ -1,0 +1,483 @@
+[
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 12811,
+    "turns": 7,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "read_page": 2,
+      "tabs_create_mcp": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 692,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1496,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 103844,
+      "output": 475,
+      "cacheRead": 92800,
+      "cacheWrite": 0
+    },
+    "answer": "**Copper kettle** is cheaper: $24.21 + $9.99 shipping = **$34.20** total.\n\nSteel kettle: $24.19 + $12.50 shipping = $36.69.\n\nBoth tabs (3: copper, 4: steel) are left open for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 1,
+    "ok": true,
+    "ms": 17501,
+    "turns": 8,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "browser_batch": 1,
+      "read_page": 2,
+      "get_page_text": 1,
+      "computer": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 228,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 214,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1492,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 208,
+        "images": 0
+      },
+      "computer": {
+        "chars": 36,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 119066,
+      "output": 606,
+      "cacheRead": 107904,
+      "cacheWrite": 0
+    },
+    "answer": "Top result: **Fennec fox plush, large — SKU FX-EA36BD**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 2,
+    "ok": true,
+    "ms": 14186,
+    "turns": 7,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "get_page_text": 2,
+      "read_page": 2,
+      "read_console_messages": 1,
+      "read_network_requests": 1
+    },
+    "toolCalls": 10,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 721,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 600,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1487,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 148,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 119,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 105908,
+      "output": 975,
+      "cacheRead": 94464,
+      "cacheWrite": 0
+    },
+    "answer": "Copper kettle is cheaper once shipping is included.\n\n| Kettle | Price | Shipping | Total |\n|---|---|---|---|\n| **Copper** | $23.91 (was $35.91) | $12.50 | **$36.41** |\n| Steel | $32.83 (was $45.83) | $4.99 | $37.82 |\n\n**Copper kettle total: $36.41** — $1.41 less than the steel kettle ($37.82), despite its much higher shipping cost.\n\nBoth product tabs are left open for the verifier (tab 3 = copper,",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 2,
+    "ok": true,
+    "ms": 26764,
+    "turns": 15,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 4,
+      "read_page": 3,
+      "read_console_messages": 1,
+      "read_network_requests": 1,
+      "get_page_text": 1,
+      "find": 1
+    },
+    "toolCalls": 14,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 228,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 487,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1395,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 148,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 106,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 340,
+        "images": 0
+      },
+      "find": {
+        "chars": 442,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 231471,
+      "output": 1463,
+      "cacheRead": 219008,
+      "cacheWrite": 0
+    },
+    "answer": "Top result for \"fennec\": **Fennec fox plush, large — SKU FX-5E1DDC**\n\n(Results below it: Fennec fox poster — FX-2E7430, Fennec ears headband — FX-3258E1.) The search tab is left open at `http://127.0.0.1:8765/agent-search.html` for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 3,
+    "ok": false,
+    "ms": 33315,
+    "turns": 18,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 2,
+      "navigate": 4,
+      "get_page_text": 4,
+      "computer": 3,
+      "read_page": 1,
+      "read_console_messages": 1,
+      "tabs_close_mcp": 1
+    },
+    "toolCalls": 17,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 74,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1122,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 726,
+        "images": 0
+      },
+      "computer": {
+        "chars": 308,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 740,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 148,
+        "images": 0
+      },
+      "tabs_close_mcp": {
+        "chars": 13,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 283198,
+      "output": 1781,
+      "cacheRead": 270080,
+      "cacheWrite": 0
+    },
+    "answer": "**Copper kettle** is cheaper.\n\n- Copper: $22.22 (was $27.22) + $9.99 shipping = **$32.21**\n- Steel: $33.08 (was $46.08) + $9.99 shipping = **$43.07**\n\nBoth product tabs (copper = tab 3, steel = tab 4) are left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 3,
+    "ok": true,
+    "ms": 23042,
+    "turns": 12,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "find": 1,
+      "form_input": 1,
+      "computer": 3,
+      "read_page": 3,
+      "get_page_text": 1
+    },
+    "toolCalls": 11,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 228,
+        "images": 0
+      },
+      "find": {
+        "chars": 173,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 153,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2090,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 340,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 181373,
+      "output": 880,
+      "cacheRead": 169344,
+      "cacheWrite": 0
+    },
+    "answer": "Top result for \"fennec\": **Fennec fox plush, large — SKU FX-5FA302**. The search tab is left open (tab 6) with the results showing.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 4,
+    "ok": true,
+    "ms": 10315,
+    "turns": 5,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "read_page": 2
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 721,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1486,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 74005,
+      "output": 505,
+      "cacheRead": 63232,
+      "cacheWrite": 0
+    },
+    "answer": "**Steel kettle — $35.79 total** ($30.80 + $4.99 shipping).\n\n- Copper: $32.37 + $9.99 shipping = **$42.36**\n- Steel: $30.80 + $4.99 shipping = **$35.79**\n\nBoth product tabs are left open (tabs 3 and 4) for the verifier.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 4,
+    "ok": true,
+    "ms": 29449,
+    "turns": 15,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "form_input": 1,
+      "computer": 3,
+      "get_page_text": 3,
+      "read_page": 3,
+      "read_console_messages": 1,
+      "read_network_requests": 1
+    },
+    "toolCalls": 14,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 228,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 122,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 756,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1818,
+        "images": 0
+      },
+      "read_console_messages": {
+        "chars": 148,
+        "images": 0
+      },
+      "read_network_requests": {
+        "chars": 106,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 229277,
+      "output": 1228,
+      "cacheRead": 216704,
+      "cacheWrite": 0
+    },
+    "answer": "Top result for \"fennec\": **Fennec fox plush, large — SKU FX-58058B**\n\n(Results took a few seconds to render; the tab is left open on the results.)",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]

@@ -1,0 +1,2255 @@
+[
+  {
+    "id": "login",
+    "rep": 1,
+    "ok": true,
+    "ms": 25516,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 649,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2571,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 767,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27926,
+      "output": 311,
+      "cacheRead": 92032,
+      "cacheWrite": 0
+    },
+    "answer": "The site shows: “You logged into a secure area!”\n\nI left the logged-in tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "checkout",
+    "rep": 1,
+    "ok": true,
+    "ms": 41910,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "browser_batch": 3,
+      "computer": 2
+    },
+    "toolCalls": 10,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 244,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3542,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 10859,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1137,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 32280,
+      "output": 662,
+      "cacheRead": 208896,
+      "cacheWrite": 0
+    },
+    "answer": "The order is complete. The confirmation page says:\n\n“Thank you for your order!”\n\n“Your order has been dispatched, and will arrive just as fast as the pony can get there!”\n\nI left the confirmation tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "practice-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 25874,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "browser_batch": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 882,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3286,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 6568,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30099,
+      "output": 446,
+      "cacheRead": 118656,
+      "cacheWrite": 0
+    },
+    "answer": "Submitted successfully. The confirmation dialog title says: **“Thanks for submitting the form”**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "todos",
+    "rep": 1,
+    "ok": true,
+    "ms": 36264,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 1,
+      "form_input": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1252,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 4341,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 4682,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 31,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30071,
+      "output": 450,
+      "cacheRead": 121856,
+      "cacheWrite": 0
+    },
+    "answer": "Added all three todos and verified “feed the fox” is completed. The other two remain active. Left the tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "wiki-facts",
+    "rep": 1,
+    "ok": true,
+    "ms": 20690,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1702,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 6309,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30937,
+      "output": 264,
+      "cacheRead": 91264,
+      "cacheWrite": 0
+    },
+    "answer": "According to [Wikipedia](https://en.wikipedia.org/wiki/Red_fox), the red fox’s scientific name is *Vulpes vulpes*, and its IUCN conservation status is **Least Concern (LC)**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "hn-top",
+    "rep": 1,
+    "ok": true,
+    "ms": 27815,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1665,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5194,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28441,
+      "output": 191,
+      "cacheRead": 65536,
+      "cacheWrite": 0
+    },
+    "answer": "The current #1 story is “Carnegie Mellon is putting computer science courses on YouTube for free.”",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "docs-search",
+    "rep": 1,
+    "ok": true,
+    "ms": 51950,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "find": 2,
+      "computer": 2,
+      "read_page": 2,
+      "form_input": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 11,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 939,
+        "images": 0
+      },
+      "find": {
+        "chars": 420,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1824,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 13380,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 61,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 4549,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 33930,
+      "output": 542,
+      "cacheRead": 238976,
+      "cacheWrite": 0
+    },
+    "answer": "According to the [useState reference](https://react.dev/reference/react/useState#returns), `useState` returns an array with exactly two values:\n\n1. The current state, matching `initialState` on the first render.\n2. A setter function that updates the state and triggers a re-render.\n\nI opened the reference using react.dev’s search and left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "mui-autocomplete",
+    "rep": 1,
+    "ok": false,
+    "ms": 3294,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "",
+    "exit": 1,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "radix-select",
+    "rep": 1,
+    "ok": false,
+    "ms": 3583,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "",
+    "exit": 1,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "drag-drop",
+    "rep": 1,
+    "ok": true,
+    "ms": 24691,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "computer": 2,
+      "read_page": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 456,
+        "images": 0
+      },
+      "computer": {
+        "chars": 273,
+        "images": 1
+      },
+      "read_page": {
+        "chars": 849,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 13354,
+      "output": 301,
+      "cacheRead": 107520,
+      "cacheWrite": 0
+    },
+    "answer": "Swapped successfully: B is on the left and A is on the right. Left the tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "confirm-dialog",
+    "rep": 1,
+    "ok": true,
+    "ms": 24364,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "handle_dialog": 1,
+      "computer": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 634,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2595,
+        "images": 0
+      },
+      "handle_dialog": {
+        "chars": 95,
+        "images": 0
+      },
+      "computer": {
+        "chars": 123,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28250,
+      "output": 322,
+      "cacheRead": 93568,
+      "cacheWrite": 0
+    },
+    "answer": "The page shows: **You clicked: Ok**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "excalidraw",
+    "rep": 1,
+    "ok": true,
+    "ms": 31343,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "computer": 3
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1790,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3970,
+        "images": 0
+      },
+      "computer": {
+        "chars": 373,
+        "images": 1
+      }
+    },
+    "usage": {
+      "input": 29466,
+      "output": 345,
+      "cacheRead": 93312,
+      "cacheWrite": 0
+    },
+    "answer": "Drew a rectangle on Excalidraw and verified it on the canvas. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "rich-editor",
+    "rep": 1,
+    "ok": true,
+    "ms": 49276,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "form_input": 1,
+      "computer": 4
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1167,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5439,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 61,
+        "images": 0
+      },
+      "computer": {
+        "chars": 303,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28941,
+      "output": 401,
+      "cacheRead": 93184,
+      "cacheWrite": 0
+    },
+    "answer": "Done: the editor contains “**Kitsune** was here.” The tab is left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "gov-uk",
+    "rep": 1,
+    "ok": false,
+    "ms": 10724,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "I’ll check the current fee on GOV.UK using the browser.",
+    "exit": 1,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "two-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 83378,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "get_page_text": 4
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 3460,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 11242,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 16314,
+      "output": 480,
+      "cacheRead": 194048,
+      "cacheWrite": 0
+    },
+    "answer": "The **red fox is generally heavier**.\n\n- [Red fox](https://en.wikipedia.org/wiki/Red_fox): Wikipedia lists adult weights of **2.2–14 kg (4.9–30.9 lb)**, rather than a single average; females typically weigh 15–20% less than males.\n- [Arctic fox](https://en.wikipedia.org/wiki/Arctic_fox): males average **3.5 kg (7.7 lb)** and females **2.9 kg (6.4 lb)**.\n\nBoth Wikipedia articles are open in separat",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "upload",
+    "rep": 1,
+    "ok": true,
+    "ms": 32685,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "file_upload": 1,
+      "computer": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 208,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1866,
+        "images": 0
+      },
+      "file_upload": {
+        "chars": 111,
+        "images": 0
+      },
+      "computer": {
+        "chars": 487,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 52577,
+      "output": 304,
+      "cacheRead": 93056,
+      "cacheWrite": 0
+    },
+    "answer": "The page says **“File Uploaded!”** and displays `foxwright-agent-upload.txt`.\n\nI left the tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 1,
+    "ok": true,
+    "ms": 57034,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 348,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1002,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 3155,
+        "images": 0
+      },
+      "computer": {
+        "chars": 44,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 29695,
+      "output": 685,
+      "cacheRead": 179200,
+      "cacheWrite": 0
+    },
+    "answer": "Your membership code is **FOX-4BQCJR**. The completed signup tab is open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 36423,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 203,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 26640,
+      "output": 259,
+      "cacheRead": 106624,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**  \nAudit code: **AUDIT-a9e69a51**\n\nLeft the tab open without clicking, typing, or changing anything.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 1,
+    "ok": true,
+    "ms": 20090,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 225,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 26392,
+      "output": 205,
+      "cacheRead": 65664,
+      "cacheWrite": 0
+    },
+    "answer": "The document states **“Conservation status: Least Concern.”**\n\nThe sentence is: **“The quick brown fox jumps over the lazy dog.”**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 1,
+    "ok": true,
+    "ms": 33003,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 209,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 26823,
+      "output": 224,
+      "cacheRead": 91264,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is **DELIVERY-5a42b948**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 1,
+    "ok": true,
+    "ms": 30260,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "computer": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 193,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 20827,
+        "images": 0
+      },
+      "computer": {
+        "chars": 37,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 31101,
+      "output": 286,
+      "cacheRead": 96128,
+      "cacheWrite": 0
+    },
+    "answer": "New shipment code: **SHIP-e402d0be**  \nStock count: **23**\n\nRead only the outline changes after refreshing. The tab remains open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 27636,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 2,
+      "read_page": 2
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 716,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1482,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27455,
+      "output": 303,
+      "cacheRead": 91776,
+      "cacheWrite": 0
+    },
+    "answer": "The **steel kettle is cheaper at $27.14 total**, with free shipping.\n\nThe copper kettle totals $42.06 ($37.07 + $4.99 shipping), so steel saves $14.92. Both tabs are open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-form",
+    "rep": 1,
+    "ok": false,
+    "ms": 9252,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "I’ll fill out and submit the library card application, correcting any format errors the form flags.",
+    "exit": 1,
+    "verifyError": "Fixture not open: /agent-apply.html",
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 1,
+    "ok": true,
+    "ms": 47647,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "form_input": 1,
+      "computer": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 228,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2066,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 26,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 40036,
+      "output": 327,
+      "cacheRead": 105728,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is “Fennec fox plush, large” — SKU **FX-9E228E**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 22952,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 604,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 41749,
+      "output": 202,
+      "cacheRead": 50560,
+      "cacheWrite": 0
+    },
+    "answer": "The **kit fox** lives longest among the species listed in the [field guide](http://localhost:8765/agent-research.html): **7 years in the wild**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "login",
+    "rep": 2,
+    "ok": true,
+    "ms": 33642,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "browser_batch": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 669,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1421,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 1433,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27902,
+      "output": 320,
+      "cacheRead": 118016,
+      "cacheWrite": 0
+    },
+    "answer": "The site shows: “You logged into a secure area!”\n\nI left the logged-in tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "checkout",
+    "rep": 2,
+    "ok": true,
+    "ms": 49304,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "browser_batch": 3,
+      "computer": 2
+    },
+    "toolCalls": 10,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 244,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3542,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 10859,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1137,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 32247,
+      "output": 665,
+      "cacheRead": 208640,
+      "cacheWrite": 0
+    },
+    "answer": "The order is complete. The confirmation page says:\n\n“Thank you for your order!”\n\n“Your order has been dispatched, and will arrive just as fast as the pony can get there!”\n\nI left the confirmation tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "practice-form",
+    "rep": 2,
+    "ok": true,
+    "ms": 35933,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "browser_batch": 1
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 882,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3286,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 6568,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 40789,
+      "output": 349,
+      "cacheRead": 108032,
+      "cacheWrite": 0
+    },
+    "answer": "Submitted successfully. The confirmation dialog title says: **“Thanks for submitting the form”**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "todos",
+    "rep": 2,
+    "ok": true,
+    "ms": 35158,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 1,
+      "computer": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1252,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 4341,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 4682,
+        "images": 0
+      },
+      "computer": {
+        "chars": 21,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30025,
+      "output": 448,
+      "cacheRead": 121728,
+      "cacheWrite": 0
+    },
+    "answer": "Added all three todos and marked “feed the fox” completed. Verified two items remain active. Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "wiki-facts",
+    "rep": 2,
+    "ok": true,
+    "ms": 36931,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1702,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 6716,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28528,
+      "output": 248,
+      "cacheRead": 65536,
+      "cacheWrite": 0
+    },
+    "answer": "According to [Wikipedia](https://en.wikipedia.org/wiki/Red_fox), the red fox’s scientific name is *Vulpes vulpes*, and its IUCN conservation status is **Least Concern (LC)**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "hn-top",
+    "rep": 2,
+    "ok": true,
+    "ms": 19225,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1666,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5194,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28426,
+      "output": 186,
+      "cacheRead": 65536,
+      "cacheWrite": 0
+    },
+    "answer": "The current #1 story is “Carnegie Mellon is putting computer science courses on YouTube for free.”",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "docs-search",
+    "rep": 2,
+    "ok": true,
+    "ms": 96836,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 4,
+      "computer": 3,
+      "find": 1,
+      "form_input": 1,
+      "get_page_text": 3
+    },
+    "toolCalls": 14,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 939,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 15638,
+        "images": 0
+      },
+      "computer": {
+        "chars": 1979,
+        "images": 0
+      },
+      "find": {
+        "chars": 1584,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 61,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 8122,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 35219,
+      "output": 650,
+      "cacheRead": 308096,
+      "cacheWrite": 0
+    },
+    "answer": "According to the [useState reference](https://react.dev/reference/react/useState#returns), `useState` returns an array with exactly two values:\n\n1. The current state, matching `initialState` on the first render.\n2. A set function that updates the state and triggers a re-render.\n\nI opened the reference using react.dev’s search and left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "mui-autocomplete",
+    "rep": 2,
+    "ok": true,
+    "ms": 28016,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "find": 2,
+      "computer": 3,
+      "read_page": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1734,
+        "images": 0
+      },
+      "find": {
+        "chars": 853,
+        "images": 0
+      },
+      "computer": {
+        "chars": 287,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 226,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 14799,
+      "output": 369,
+      "cacheRead": 131968,
+      "cacheWrite": 0
+    },
+    "answer": "Selected “The Godfather” in the first “Movie” combo box and verified the value. The tab remains open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "radix-select",
+    "rep": 2,
+    "ok": true,
+    "ms": 32623,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "computer": 2,
+      "find": 1
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1713,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 6606,
+        "images": 0
+      },
+      "computer": {
+        "chars": 210,
+        "images": 0
+      },
+      "find": {
+        "chars": 405,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 16441,
+      "output": 361,
+      "cacheRead": 163840,
+      "cacheWrite": 0
+    },
+    "answer": "Selected Banana in the top demo fruit select and verified it displays “Banana.” Left the tab open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "drag-drop",
+    "rep": 2,
+    "ok": true,
+    "ms": 41142,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "computer": 3
+    },
+    "toolCalls": 5,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 456,
+        "images": 0
+      },
+      "computer": {
+        "chars": 423,
+        "images": 2
+      }
+    },
+    "usage": {
+      "input": 14819,
+      "output": 339,
+      "cacheRead": 106112,
+      "cacheWrite": 0
+    },
+    "answer": "Done—B is now on the left and A on the right. The tab remains open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "confirm-dialog",
+    "rep": 2,
+    "ok": true,
+    "ms": 22154,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "handle_dialog": 1,
+      "computer": 1
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 634,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2595,
+        "images": 0
+      },
+      "handle_dialog": {
+        "chars": 95,
+        "images": 0
+      },
+      "computer": {
+        "chars": 123,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28299,
+      "output": 279,
+      "cacheRead": 93312,
+      "cacheWrite": 0
+    },
+    "answer": "The page shows: **You clicked: Ok**",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "excalidraw",
+    "rep": 2,
+    "ok": true,
+    "ms": 29474,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1,
+      "computer": 4
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1739,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 3970,
+        "images": 0
+      },
+      "computer": {
+        "chars": 523,
+        "images": 2
+      }
+    },
+    "usage": {
+      "input": 30017,
+      "output": 419,
+      "cacheRead": 122240,
+      "cacheWrite": 0
+    },
+    "answer": "Drew a rectangle on the Excalidraw canvas and left the tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "rich-editor",
+    "rep": 2,
+    "ok": true,
+    "ms": 25697,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "form_input": 1,
+      "computer": 4
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1167,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 5439,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 61,
+        "images": 0
+      },
+      "computer": {
+        "chars": 308,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 15752,
+      "output": 400,
+      "cacheRead": 106496,
+      "cacheWrite": 0
+    },
+    "answer": "Done: the editor contains “**Kitsune** was here.” The tab is left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "gov-uk",
+    "rep": 2,
+    "ok": true,
+    "ms": 18375,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 1172,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 1514,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 13854,
+      "output": 202,
+      "cacheRead": 78720,
+      "cacheWrite": 0
+    },
+    "answer": "It costs **£102** to renew an adult UK passport online from within the UK, according to [GOV.UK](https://www.gov.uk/renew-adult-passport).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "two-tabs",
+    "rep": 2,
+    "ok": true,
+    "ms": 43162,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "get_page_text": 4
+    },
+    "toolCalls": 8,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 3441,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 23656,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 20007,
+      "output": 451,
+      "cacheRead": 167936,
+      "cacheWrite": 0
+    },
+    "answer": "The **red fox is generally heavier**.\n\n- [Red fox](https://en.wikipedia.org/wiki/Red_fox): Wikipedia lists adult weights of **2.2–14 kg (4.9–30.9 lb)**, without a single average.\n- [Arctic fox](https://en.wikipedia.org/wiki/Arctic_fox): males average **3.5 kg (7.7 lb)**; females average **2.9 kg (6.4 lb)**.\n\nBoth articles are open in separate tabs and left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "upload",
+    "rep": 2,
+    "ok": true,
+    "ms": 31796,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "file_upload": 1,
+      "computer": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 371,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1829,
+        "images": 0
+      },
+      "file_upload": {
+        "chars": 111,
+        "images": 0
+      },
+      "computer": {
+        "chars": 487,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27974,
+      "output": 321,
+      "cacheRead": 143872,
+      "cacheWrite": 0
+    },
+    "answer": "The page says **“File Uploaded!”** and displays `foxwright-agent-upload.txt`.\n\nI left the tab open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "signup-wizard",
+    "rep": 2,
+    "ok": false,
+    "ms": 3724,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "",
+    "exit": 1,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-site",
+    "rep": 2,
+    "ok": true,
+    "ms": 21761,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 194,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 331,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 11541,
+      "output": 199,
+      "cacheRead": 80640,
+      "cacheWrite": 0
+    },
+    "answer": "Stock count: **17**  \nAudit code: **AUDIT-27750680**\n\nRead only; no controls used. Tab left open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-pdf",
+    "rep": 2,
+    "ok": true,
+    "ms": 17352,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 225,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 312,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 26368,
+      "output": 191,
+      "cacheRead": 65664,
+      "cacheWrite": 0
+    },
+    "answer": "The conservation status is **Least Concern**.\n\nThe sentence is: “The quick brown fox jumps over the lazy dog.”",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "late-page",
+    "rep": 2,
+    "ok": true,
+    "ms": 29856,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 4,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 209,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 299,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 28740,
+      "output": 223,
+      "cacheRead": 89344,
+      "cacheWrite": 0
+    },
+    "answer": "The delivery code is `DELIVERY-c5f0c8fd`.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-page-diff",
+    "rep": 2,
+    "ok": false,
+    "ms": 3520,
+    "turns": null,
+    "cost": null,
+    "tools": {},
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "resultChars": {},
+    "usage": {
+      "input": 0,
+      "output": 0,
+      "cacheRead": 0,
+      "cacheWrite": 0
+    },
+    "answer": "",
+    "exit": 1,
+    "verifyError": "Fixture not open: /agent-long.html",
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "compare-tabs",
+    "rep": 2,
+    "ok": true,
+    "ms": 23656,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 2,
+      "tabs_create_mcp": 1,
+      "get_page_text": 2
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 694,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 600,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 12184,
+      "output": 358,
+      "cacheRead": 106752,
+      "cacheWrite": 0
+    },
+    "answer": "The **copper kettle is cheaper**, totaling **$35.90** with shipping ($23.40 + $12.50).\n\nThe steel kettle totals $38.66 ($33.67 + $4.99), so copper saves $2.76. Both tabs are open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "long-form",
+    "rep": 2,
+    "ok": true,
+    "ms": 40980,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 348,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1122,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 4368,
+        "images": 0
+      },
+      "computer": {
+        "chars": 38,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 30871,
+      "output": 790,
+      "cacheRead": 200320,
+      "cacheWrite": 0
+    },
+    "answer": "Application submitted. Your reference number is **APP-E5VJZ0**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 2,
+    "ok": true,
+    "ms": 32277,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "browser_batch": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 38,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 250,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2090,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 109,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 12856,
+      "output": 355,
+      "cacheRead": 159232,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is “Fennec fox plush, large” — SKU **FX-5630B4**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 2,
+    "ok": true,
+    "ms": 21025,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "get_page_text": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 604,
+        "images": 0
+      },
+      "get_page_text": {
+        "chars": 561,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 26731,
+      "output": 199,
+      "cacheRead": 65664,
+      "cacheWrite": 0
+    },
+    "answer": "The Arctic fox lives longest among the species listed in the [field guide](http://localhost:8765/agent-research.html): **8 years in the wild**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false
+  }
+]

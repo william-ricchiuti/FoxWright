@@ -1,0 +1,246 @@
+[
+  {
+    "id": "compare-tabs",
+    "rep": 1,
+    "ok": true,
+    "ms": 21714,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 2,
+      "read_page": 2
+    },
+    "toolCalls": 6,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 710,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1482,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 38236,
+      "output": 307,
+      "cacheRead": 80896,
+      "cacheWrite": 0
+    },
+    "answer": "The **Copper kettle is cheaper**, totaling **$32.95** ($27.96 + $4.99 shipping).\n\nThe Steel kettle totals $33.11 with free shipping, so Copper saves $0.16. Both tabs are open.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "once http://127.0.0.1:8765"
+    ],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "long-form",
+    "rep": 1,
+    "ok": true,
+    "ms": 31747,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "tabs_create_mcp": 1,
+      "navigate": 1,
+      "read_page": 2,
+      "browser_batch": 3,
+      "computer": 1
+    },
+    "toolCalls": 9,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "tabs_create_mcp": {
+        "chars": 37,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 345,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1122,
+        "images": 0
+      },
+      "browser_batch": {
+        "chars": 4368,
+        "images": 0
+      },
+      "computer": {
+        "chars": 38,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 40169,
+      "output": 635,
+      "cacheRead": 164480,
+      "cacheWrite": 0
+    },
+    "answer": "Application submitted successfully. Your reference number is **APP-E5VJZ0**.\n\nThe confirmation tab is open for verification.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "slow-results",
+    "rep": 1,
+    "ok": true,
+    "ms": 29323,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 3,
+      "form_input": 1,
+      "computer": 1
+    },
+    "toolCalls": 7,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 227,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 2066,
+        "images": 0
+      },
+      "form_input": {
+        "chars": 43,
+        "images": 0
+      },
+      "computer": {
+        "chars": 26,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 12726,
+      "output": 331,
+      "cacheRead": 133248,
+      "cacheWrite": 0
+    },
+    "answer": "The top result is “Fennec fox plush, large” — SKU **FX-514A23**.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "read-only-research",
+    "rep": 1,
+    "ok": true,
+    "ms": 14629,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 0,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 314,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 603,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 1791,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 27127,
+      "output": 207,
+      "cacheRead": 65664,
+      "cacheWrite": 0
+    },
+    "answer": "The **Arctic fox** lives longest in the wild among the species listed: **7 years**, according to the [field guide](http://localhost:8765/agent-research.html).",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  },
+  {
+    "id": "denied-site",
+    "rep": 1,
+    "ok": true,
+    "ms": 16881,
+    "turns": null,
+    "cost": null,
+    "tools": {
+      "tabs_context_mcp": 1,
+      "navigate": 1,
+      "read_page": 1
+    },
+    "toolCalls": 3,
+    "toolErrors": 1,
+    "resultChars": {
+      "tabs_context_mcp": {
+        "chars": 315,
+        "images": 0
+      },
+      "navigate": {
+        "chars": 124,
+        "images": 0
+      },
+      "read_page": {
+        "chars": 56,
+        "images": 0
+      }
+    },
+    "usage": {
+      "input": 11271,
+      "output": 201,
+      "cacheRead": 80640,
+      "cacheWrite": 0
+    },
+    "answer": "Foxwright reported that access to the site was denied, so I couldn’t check the Den membership price. Please allow access and ask me to try again.",
+    "exit": 0,
+    "verifyError": null,
+    "prompts": [
+      "deny http://b.test:8765"
+    ],
+    "stderr": "Reading additional input from stdin...\n",
+    "hitTurnLimit": false,
+    "providerBlocked": false
+  }
+]
