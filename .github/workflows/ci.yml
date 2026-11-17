@@ -243,6 +243,48 @@ jobs:
           name: test-results-windows-${{ matrix.input }}
           path: test/results/
 
+  windows-users:
+    # A second local Windows account must not be able to read the first one's key or pipe name,
+    # talk to its helper, or squat its pipe (test/e2e-windows-users.mjs). Creates a throwaway local
+    # account, so CI only. Non-blocking until it has a track record.
+    name: Windows · second local user
+    runs-on: windows-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@v1
+        with:
+          firefox-version: latest
+      - name: Locate Firefox
+        shell: pwsh
+        run: |
+          $ff = (Get-Command firefox -ErrorAction SilentlyContinue).Source
+          if (-not $ff) { $ff = "C:\Program Files\Mozilla Firefox\firefox.exe" }
+          "FIREFOX=$ff" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Install dependencies and build
+        run: |
+          npm ci
+          npm ci --prefix host
+          npm run build
+          node test/build-fixtures.mjs
+      - name: Set up the helper
+        run: node host/dist/foxwright.mjs setup
+      - name: Two local users
+        run: node test/e2e-windows-users.mjs
+      - name: Intruder's stderr
+        if: always()
+        shell: pwsh
+        run: Get-Content C:\Users\Public\foxwright-users-test\err.txt -ErrorAction SilentlyContinue
+
   windows-store:
     # The addons.mozilla.org build (no javascript_tool) on Windows, both input modes. Non-blocking.
     name: Windows · store build
