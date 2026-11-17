@@ -27,6 +27,8 @@ function untrusted(s, max) {
   const oneOff = () => {
     $('always').hidden = true;
     $('hour').hidden = true;
+    $('once-help').hidden = true;
+    $('once').removeAttribute('aria-describedby');
   };
   if (req.type === 'upload') {
     document.title = 'Foxwright: allow file upload?';

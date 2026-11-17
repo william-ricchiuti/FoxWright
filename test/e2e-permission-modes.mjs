@@ -89,7 +89,7 @@ await test('the site window offers "Read only" (unticked by default) and "Allow 
   expect(info.origin === A, JSON.stringify(info));
   expect(info.readOnlyShown && !info.readOnlyChecked, 'Read only should be offered and unticked: ' + JSON.stringify(info));
   expect(info.hourShown && info.alwaysShown, 'Allow for 1 hour and Always allow should both be offered: ' + JSON.stringify(info.buttons));
-  expect(JSON.stringify(info.buttons) === JSON.stringify(['Deny', 'Always allow', 'Allow for 1 hour', 'Allow this session']), JSON.stringify(info.buttons));
+  expect(JSON.stringify(info.buttons) === JSON.stringify(['Deny', 'Allow this session', 'Allow for 1 hour', 'Always allow']), JSON.stringify(info.buttons));
   expect(!r.isError, r.text);
 });
 

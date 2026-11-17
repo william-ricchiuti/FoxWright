@@ -12,23 +12,34 @@
     <div class="hanko" aria-hidden="true">狐</div>
     <div>
       <h1>Set up Foxwright</h1>
-      <p class="sub">One command, then you're ready.</p>
+      <p class="sub">Three steps, about five minutes.</p>
     </div>
   </header>
 
-  <p class="lead">Foxwright lets an AI agent you run on this computer, such as Claude Code, read and operate Firefox tabs, with your permission for each site. To talk to the agent, Firefox needs a small helper program on this computer.</p>
+  <p class="lead">Foxwright lets an AI app on this computer, such as Claude Desktop, Claude Code, Cursor or Codex, read and use Firefox tabs. It asks you before it touches each website. Firefox needs a small free helper program to talk to your AI app.</p>
+
+  <p class="note" id="linux-note" hidden></p>
 
   <section class="card step" id="step-install" aria-labelledby="h-install">
     <h2 id="h-install">1 · Install the helper</h2>
+    <fieldset class="clients">
+      <legend>Which AI app will use Firefox?</legend>
+      <label><input type="radio" name="client" value="claude-desktop"> Claude Desktop</label>
+      <label><input type="radio" name="client" value="claude-code" checked> Claude Code</label>
+      <label><input type="radio" name="client" value="other"> Another app <small>(Cursor, Codex, VS Code, Gemini CLI, Windsurf, Zed…)</small></label>
+    </fieldset>
     <p id="terminal-hint">Open a terminal and run:</p>
     <div class="cmd">
       <pre><code id="cmd">npx foxwright-firefox setup --claude-code</code></pre>
       <button id="copy" type="button" aria-describedby="cmd">Copy</button>
     </div>
     <p class="fine"><span id="copied" role="status"></span></p>
-    <p class="fine">Needs Node.js 20 or newer (<code>node --version</code> shows yours). <span id="node-hint"></span></p>
-    <p class="fine">Using Claude Desktop? Use <code>--claude-desktop</code> instead (or both). For any other MCP client, leave the flag off: setup prints the settings to paste into it.</p>
-    <p class="note" id="linux-note" hidden></p>
+    <p class="fine" id="client-next"></p>
+    <details class="fine">
+      <summary>The terminal says “command not found”, “not recognized” or “needs Node.js 20”</summary>
+      <p>The helper runs on Node.js 20 or newer, which isn't installed yet (or is too old). <span id="node-hint"></span> Then run the command above again.</p>
+      <p id="win-ps-hint" hidden>In PowerShell, “running scripts is disabled on this system” means PowerShell blocked npx. Type <code>npx.cmd</code> instead of <code>npx</code>, or use Command Prompt.</p>
+    </details>
   </section>
 
   <section class="card step" id="step-connect" aria-labelledby="h-connect">
@@ -41,21 +52,22 @@
 
   <section class="card step" id="step-use" aria-labelledby="h-use">
     <h2 id="h-use">3 · Ask your AI to use Foxwright</h2>
-    <p>Restart your AI client so it picks up the new tool, then ask it something like:</p>
-    <blockquote id="example">“Use Foxwright to open my GitHub notifications and summarize them.”</blockquote>
+    <p id="restart-hint">Restart your AI app so it loads Foxwright, then ask it:</p>
+    <blockquote id="example">“Use Foxwright to open https://example.com, tell me the main heading, and close the tab when you're done.”</blockquote>
+    <p class="fine">A small Foxwright window then asks whether the agent may use example.com. Choose <b>Allow this session</b>. Tick <b>Read only</b> first if you only want it to look.</p>
   </section>
 
   <section class="card" aria-labelledby="h-control">
     <h2 id="h-control">How you stay in control</h2>
     <ul class="plain">
-      <li><b>You approve each site.</b> The first time the agent wants a site, Foxwright asks you in its own small window: Deny, Allow this session, or Always allow. Change your answers later in the toolbar popup.</li>
+      <li><b>You approve each site.</b> The first time the agent wants a site, Foxwright asks you in its own small window. <i>Allow this session</i> lasts until you quit Firefox, <i>Allow for 1 hour</i> ends after an hour, <i>Always allow</i> keeps it. <i>Read only</i> lets the agent look but not click or type. Change your answers later in the toolbar popup.</li>
       <li><b>The agent has its own tabs.</b> It works only in the <span class="group-swatch" aria-hidden="true"></span>orange “Foxwright” tab group. Drag a tab into the group to share it.</li>
       <li><b>Stop it at any time.</b> Press <b>Stop</b> on the page while the agent works, <b>Pause</b> in the toolbar popup, or <kbd id="stop-key">Alt+Shift+K</kbd>. Nothing happens until you resume.</li>
       <li><b>See what it did.</b> The <a href="../log/log.html" id="open-log">activity log</a> lists the agent's actions and your answers.</li>
     </ul>
   </section>
 
-  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/FoxWright#readme" target="_blank" rel="noopener">Documentation</a></footer>
+  <footer><span id="build"></span> · <a href="https://github.com/william-ricchiuti/FoxWright/blob/main/docs/CLIENTS.md" target="_blank" rel="noopener">Connect other AI apps</a> · <a href="https://github.com/william-ricchiuti/FoxWright#readme" target="_blank" rel="noopener">Documentation</a></footer>
 </main>
 <script src="welcome.js"></script>
 </body>
