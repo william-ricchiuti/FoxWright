@@ -11,6 +11,7 @@ import { HelperClient } from './client.js';
 import { connectedBrowsers } from './browsers.js';
 import { Bidi } from './bidi.js';
 import { startRecording, stopRecording, clearRecording, isRecording, addFrame, exportGif, frameCount } from './gif.js';
+import { adaptToExtension, explainOldExtensionError, describeVersionMismatch } from './compat.js';
 
 const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
 
@@ -34,6 +35,29 @@ const bidi = new Bidi();
 // shared socket over, say so instead of silently carrying on in a different profile.
 let knownBrowser = null; // { browserId, name }
 let browserNote = '';
+// The versions on the other end of the current connection (they change only with a new one: an
+// extension update or a helper restart ends the connection). Used to adapt calls to an older
+// extension and to say once, per connection, what to do about a mismatch (compat.js).
+let peer = { generation: -1, extension: null, helper: null, warned: false };
+function notePeer(st) {
+  if (peer.generation !== helper.generation)
+    peer = { generation: helper.generation, extension: null, helper: null, warned: false };
+  if (st?.extension?.version)
+    peer.extension = String(st.extension.version);
+  if (st?.helper?.version)
+    peer.helper = String(st.helper.version);
+}
+/** The connected extension's version, or null if it can't be told (never throws). */
+async function extensionVersion() {
+  try {
+    await helper.connect();
+    if (peer.generation !== helper.generation || !peer.extension)
+      notePeer(await helper.status());
+    return peer.generation === helper.generation ? peer.extension : null;
+  } catch {
+    return null;
+  }
+}
 helper.onConnect = async () => {
   // A new connection may lead to another browser: never reuse BiDi contexts found for the old one.
   bidi.contexts.clear();
@@ -44,6 +68,7 @@ helper.onConnect = async () => {
       await new Promise(r => setTimeout(r, 1000));
       st = await helper.status();
     }
+    notePeer(st);
     if (st?.extension)
       onExtensionBuild(!!st.extension.full);
     const b = st?.browser;
@@ -74,6 +99,7 @@ async function refreshBuild() {
   try {
     await helper.connect();
     const st = await helper.status();
+    notePeer(st);
     if (st?.extension)
       onExtensionBuild(!!st.extension.full);
   } catch { /* no Firefox yet */ }
@@ -142,13 +168,32 @@ function noteTab(tool, args, r) {
     lastTab = null;
 }
 
+// Tools with options or abilities that an older extension lacks (see adaptToExtension).
+const COMPAT_TOOLS = new Set(['read_page', 'find', 'computer', 'get_page_text', 'navigate']);
+
 async function call(tool, args, timeoutMs) {
   try {
     args = { ...args };
     if (!NO_TAB_TOOLS.has(tool) && typeof args.tabId !== 'number' && !(tool === 'navigate' && /^(back|forward)$/.test(args.url || '')))
       args.tabId = await defaultTab();
-    const r0 = await helper.call(tool, args, timeoutMs);
+    // An extension older than this MCP server ignores options it doesn't know and reports success:
+    // drop them and say so, or refuse where the call would mean something else (compat.js).
+    const extV = COMPAT_TOOLS.has(tool) ? await extensionVersion() : null;
+    const fit = adaptToExtension(tool, args, extV);
+    if (fit.error)
+      return errorResult(fit.error);
+    let r0;
+    try {
+      r0 = await helper.call(tool, fit.args, timeoutMs);
+    } catch (e) {
+      const better = e?.fromHelper && extV ? explainOldExtensionError(tool, e.message, extV) : null;
+      if (better)
+        return errorResult(better);
+      throw e;
+    }
     const r = r0 && Array.isArray(r0.content) ? r0 : { content: [{ type: 'text', text: typeof r0 === 'string' ? r0 : JSON.stringify(r0) }] };
+    if (fit.note)
+      r.content.unshift({ type: 'text', text: fit.note });
     if (browserNote) {
       r.content.unshift({ type: 'text', text: browserNote });
       browserNote = '';
@@ -498,37 +543,25 @@ function serialized(key, run) {
 }
 
 // ---------- version check ----------
-// `npx foxwright-firefox mcp` may run a newer release than the helper copied to ~/.foxwright/app
-// or the installed extension. Say so once, instead of failing in confusing ways later.
+// The three parts update separately: Firefox updates the extension from the add-ons store (days
+// after a release, while it is in review), `setup` updates the helper, and this MCP server runs
+// until the AI client restarts. Say once per connection what differs and what to do about it;
+// which advice depends on the direction (compat.js).
 let lastReportedMode = null;
-let versionChecked = false;
-
-function minor(v) {
-  return String(v || '').split('.').slice(0, 2).join('.');
-}
-
-export function describeVersionMismatch(mine, helperV, extV) {
-  const bad = [];
-  if (helperV && minor(helperV) !== minor(mine))
-    bad.push(`helper ${helperV}`);
-  if (extV && minor(extV) !== minor(mine))
-    bad.push(`extension ${extV}`);
-  if (!bad.length)
-    return null;
-  return `Warning: version mismatch (MCP server ${mine}, ${bad.join(', ')}). Tell the user to run \`npx foxwright-firefox@latest setup\` and update the Foxwright extension; some tools may misbehave until then.`;
-}
 
 async function versionWarning() {
-  if (versionChecked)
-    return null;
-  versionChecked = true;
   try {
-    const st = await helper.status();
-    return describeVersionMismatch(VERSION, st?.helper?.version, st?.extension?.version);
+    await extensionVersion();
+    if (peer.generation !== helper.generation || peer.warned)
+      return null;
+    peer.warned = true;
+    return describeVersionMismatch(VERSION, peer.helper, peer.extension);
   } catch {
     return null;
   }
 }
+
+export { describeVersionMismatch };
 
 // ---------- server ----------
 

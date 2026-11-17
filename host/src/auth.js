@@ -24,8 +24,10 @@ import { foxwrightDir } from './paths.js';
 
 export const AUTH_VERSION = 1;
 
-export const OLD_HELPER_MSG = 'The Foxwright helper is older than this MCP server (it does not do the secure handshake added in Foxwright 0.8). Ask the user to run `npx foxwright-firefox@latest setup` and then restart Firefox.';
-export const OLD_CLIENT_MSG = 'This Foxwright MCP server is older than the Foxwright helper and cannot authenticate to it (the helper now requires the secure handshake added in Foxwright 0.8). Update the MCP server: use `npx -y foxwright-firefox@latest mcp` in the AI client\'s MCP settings (or run `npx foxwright-firefox@latest setup`), then restart the AI client.';
+// Both sides of the 0.8 handshake say who has to do what. The helper side also tells the person
+// (host.js noteOldClient): an agent may not pass the message on.
+export const OLD_HELPER_MSG = 'The Foxwright helper that Firefox is running is older than this MCP server (it does not do the secure handshake added in Foxwright 0.8). Ask the user to run `npx foxwright-firefox@latest setup` in a terminal: it updates the helper and restarts the one Firefox is running. If this message comes back afterwards, they should restart Firefox.';
+export const OLD_CLIENT_MSG = 'This Foxwright MCP server is older than the Foxwright helper Firefox is running: it was started before Foxwright was updated, and the helper now requires the secure handshake added in Foxwright 0.8. Tell the user to restart this AI client: quit it completely and open it again, which starts the updated MCP server. If this message is still there after that, the AI client\'s MCP settings name an old version: change them to `npx -y foxwright-firefox@latest mcp`, or run `npx foxwright-firefox@latest setup --claude-code` (or --claude-desktop).';
 
 export function tokenPath(dir = foxwrightDir()) {
   return path.join(dir, 'auth-token');

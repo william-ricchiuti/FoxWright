@@ -117,13 +117,27 @@ function broadcastClientCount() {
   writeToExtension({ type: 'clients', count: clientCount() });
 }
 
+// An MCP server from before 0.8 (an AI client that wasn't restarted after `setup`) talks without
+// the handshake and is refused. Its agent gets OLD_CLIENT_MSG, but only the person can restart the
+// AI client: tell the extension (its popup says so), the log, and `doctor` (through status).
+let oldClientAt = 0;
+function noteOldClient() {
+  const again = Date.now() - oldClientAt < 30000; // such a server knocks again on every tool call
+  oldClientAt = Date.now();
+  if (again)
+    return;
+  log('refused an MCP server from before 0.8 (no handshake): the AI client that runs it must be restarted');
+  writeToExtension({ type: 'old-client', at: oldClientAt });
+}
+const helloAck = () => ({ type: 'hello-ack', error: serverError, version: VERSION, doctorReport: true, oldClient: oldClientAt || undefined });
+
 function onClientMessage(clientId, msg) {
   if (msg.type === 'request') {
     const gid = nextId++;
     pending.set(gid, { clientId, id: msg.id });
     writeToExtension({ type: 'request', id: gid, tool: msg.tool, args: msg.args || {} });
   } else if (msg.type === 'status') {
-    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clientCount(), pid: process.pid, browser: { ...browserInfo, primary: ownsSocket } });
+    sendClient(clientId, { type: 'status', id: msg.id, extension: extensionInfo, helper: { version: VERSION }, clients: clientCount(), pid: process.pid, browser: { ...browserInfo, primary: ownsSocket }, oldClientAt: oldClientAt || undefined });
   } else if (msg.type === 'bidi') {
     // Per client: Firefox allows one BiDi session, so a second MCP server may not have one
     // while the first still does.
@@ -176,7 +190,7 @@ function onExtensionMessage(msg) {
     browserInfo = { browserId: /^[a-f0-9]{12}$/.test(msg.browserId || '') ? msg.browserId : '', name: cleanName(msg.name) || 'Firefox' };
     writeRegistry();
     log('extension connected', extensionInfo, browserInfo);
-    writeToExtension({ type: 'hello-ack', error: serverError, version: VERSION, doctorReport: true });
+    writeToExtension(helloAck());
     broadcastClientCount();
     return;
   }
@@ -292,10 +306,13 @@ function onClientSocket(socket) {
       return;
     }
     // An MCP server from before 0.8 talks without the handshake: tell it (and its agent) to update.
-    if (msg?.type === 'request')
+    if (msg?.type === 'request') {
+      noteOldClient();
       socket.write(JSON.stringify({ type: 'response', id: msg.id, error: OLD_CLIENT_MSG }) + '\n');
-    else if (msg?.type === 'status')
+    } else if (msg?.type === 'status') {
+      noteOldClient();
       socket.write(JSON.stringify({ type: 'status', id: msg.id, error: OLD_CLIENT_MSG, helper: { version: VERSION } }) + '\n');
+    }
   };
   socket.on('data', (d) => {
     buf += d;
@@ -397,7 +414,7 @@ function listen() {
     ownsSocket = true;
     if (serverError) {
       serverError = null;
-      writeToExtension({ type: 'hello-ack', error: null, version: VERSION, doctorReport: true });
+      writeToExtension(helloAck());
     }
   }
   server.listen(sp, onListening);

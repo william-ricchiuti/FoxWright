@@ -183,7 +183,7 @@ await test('doctor prints the installed helper\'s version next to its own, and f
   fs.writeFileSync(app, 'console.log("0.6.9");\n');
   const r = main.run(['doctor']);
   fs.writeFileSync(app, real);
-  expect(/Installed helper 0\.6\.9/.test(r.out) && /installed helper is 0\.6\.9, but this command is \d/.test(r.out), r.out);
+  expect(/Installed helper 0\.6\.9/.test(r.out) && /installed helper is 0\.6\.9; this command is the newer \d/.test(r.out) && /npx foxwright-firefox@latest setup/.test(r.out), r.out);
 });
 
 await test('doctor: the launcher\'s Node.js is gone (it then says no Node in the helper log, exit 127)', () => {
@@ -246,6 +246,19 @@ await test('uninstall keeps a Claude Desktop config that has other servers, and 
   expect(left.mcpServers.other && !left.mcpServers.foxwright, JSON.stringify(left));
   expect(fs.existsSync(path.join(sb.nmDir, 'other.json')) && !fs.existsSync(path.join(sb.nmDir, 'foxwright.json')), r.out);
 });
+
+await test('doctor: a Snap or Flatpak Firefox that is the only one installed is flagged even when it is not running', () => {
+  const sb = sandbox();
+  const only = (paths) => S.sandboxedFirefoxOnly({ home: sb.home, env: { PATH: sb.bin }, exists: p => paths.includes(p) });
+  expect(only([]) === null, 'no Firefox at all: nothing to say');
+  expect(only(['/snap/bin/firefox']) === 'snap', `snap only: ${only(['/snap/bin/firefox'])}`);
+  expect(only([path.join(sb.home, '.var', 'app', 'org.mozilla.firefox')]) === 'flatpak', 'flatpak only');
+  // Ubuntu's /usr/bin/firefox wrapper script for the Snap is not another Firefox; a real binary is.
+  fs.writeFileSync(path.join(sb.bin, 'firefox'), '#!/bin/sh\nexec /snap/bin/firefox "$@"\n', { mode: 0o755 });
+  expect(S.sandboxedFirefoxOnly({ home: sb.home, env: { PATH: sb.bin }, exists: p => p === '/snap/bin/firefox' || fs.existsSync(p) }) === 'snap', 'the Snap wrapper script counted as a Firefox');
+  fs.writeFileSync(path.join(sb.bin, 'firefox'), Buffer.alloc(20000, 1), { mode: 0o755 });
+  expect(S.sandboxedFirefoxOnly({ home: sb.home, env: { PATH: sb.bin }, exists: p => p === '/snap/bin/firefox' || fs.existsSync(p) }) === null, 'a real Firefox next to the Snap');
+}, { skip: !isLinux && 'Linux only' });
 
 await test('LibreWolf/Floorp in ~/.config use the Firefox registration; ~/.librewolf gets its own', () => {
   const sb = sandbox();
