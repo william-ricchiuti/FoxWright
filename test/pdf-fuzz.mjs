@@ -27,8 +27,13 @@ const MAX_MEMORY_MB = 1400; // heap + array buffers, sampled
 
 if (!isMainThread) {
   const { extractPdfText, PdfError } = await import('../src/background/pdftext.js');
+  let gc = () => {};
+  try {
+    (await import('node:v8')).setFlagsFromString('--expose-gc');
+    gc = (await import('node:vm')).runInNewContext('gc');
+  } catch { /* memory readings then include what earlier inputs left behind */ }
   parentPort.on('message', async ({ id, bytes }) => {
-    globalThis.gc?.(); // what an earlier input left behind doesn't count
+    gc(); // what an earlier input left behind doesn't count
     let last = performance.now(), maxBlock = 0, peak = 0;
     const sample = () => {
       const now = performance.now();
@@ -189,8 +194,9 @@ const HOSTILE = {
       objs.push([100 + i, stream('/Type/ObjStm/N 1/First 10/Filter/FlateDecode', bomb)]);
     return pdf(objs);
   },
+  'a file over the size limit': () => Buffer.concat([B('%PDF-1.7\n'), Buffer.alloc(101 * 1048576, 32)]),
   'Flate bombs drawn as 2000 form XObjects': () => {
-    const bomb = deflate(Buffer.alloc(60 * 1048576, 32));
+    const bomb = zlib.deflateSync(Buffer.alloc(60 * 1048576, 32), { level: 9 });
     const objs = [[1, '<</Type/Catalog/Pages 2 0 R>>'], [2, '<</Type/Pages/Kids[3 0 R]/Count 1>>'], [5, FONT]];
     const names = [];
     for (let i = 0; i < 2000; i++) {
@@ -457,7 +463,7 @@ if (isMainThread) {
   let worker = null;
   let waiting = null;
   const spawn = () => {
-    worker = new Worker(fileURLToPath(import.meta.url), { execArgv: ['--expose-gc'], resourceLimits: { maxOldGenerationSizeMb: 1024 } });
+    worker = new Worker(fileURLToPath(import.meta.url), { resourceLimits: { maxOldGenerationSizeMb: 1024 } });
     worker.on('message', (m) => waiting?.(m));
     worker.on('error', (e) => waiting?.({ crashed: String(e?.message || e) }));
     worker.on('exit', (code) => {
