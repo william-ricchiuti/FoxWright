@@ -724,7 +724,7 @@ export async function runMcp() {
   });
 
   server.registerTool('computer', {
-    description: `Use mouse and keyboard on a Foxwright tab, or take screenshots.
+    description: `Use mouse and keyboard on a Foxwright tab, or take screenshots. Click only what the task needs: looking up or comparing needs no clicks on buttons like "Add to basket".
 Actions:
 * screenshot: capture the visible viewport. Coordinates for other actions use this image's pixel grid.
 * left_click / right_click / double_click / triple_click / hover: at coordinate [x, y] or on ref. Optional modifiers like "ctrl", "shift", "cmd+shift".
