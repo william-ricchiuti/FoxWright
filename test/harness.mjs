@@ -18,6 +18,8 @@
 //                            -> extra Firefox prefs (JSON object) for every Firefox the suite starts,
 //                               to run the suites under a setup real people have (locale, zoom,
 //                               resistFingerprinting, strict tracking protection, ...).
+//   FOXWRIGHT_E2E_POLICIES='{"ExtensionSettings":{...}}'
+//                            -> extra enterprise policies (JSON), e.g. to install a language pack.
 //   FOXWRIGHT_E2E_FIREFOX_ARGS='--window-size=640,480'
 //                            -> extra Firefox command-line arguments (space-separated).
 import http from 'node:http';
@@ -230,8 +232,6 @@ export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
   const dist = mac ? path.join(path.dirname(firefoxBin), '..', 'Resources', 'distribution') : path.join(path.dirname(firefoxBin), 'distribution');
   if (/^\/Applications\//.test(firefoxBin) && !process.env.FOXWRIGHT_E2E_ALLOW_SYSTEM_FIREFOX)
     throw new Error('The tests write a policies.json into the Firefox install. Point FIREFOX at a copy of Firefox.app (scripts/mac-test.sh does this) instead of /Applications/Firefox.app.');
-  fs.mkdirSync(dist, { recursive: true });
-  const file = path.join(dist, 'policies.json');
   // Always keep the test Firefox from updating itself: a throwaway copy once updated mid-suite
   // (macOS) and hung the run.
   const policies = { DisableAppUpdate: true };
@@ -241,23 +241,42 @@ export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
       ext[id] = policy;
     policies['3rdparty'] = { Extensions: ext };
   }
-  fs.writeFileSync(file, JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2));
+  const json = JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2);
+  try {
+    fs.mkdirSync(dist, { recursive: true });
+    fs.writeFileSync(path.join(dist, 'policies.json'), json);
+  } catch (e) {
+    if (mac && (e.code === 'EPERM' || e.code === 'EACCES'))
+      throw new Error(`macOS refused a write into the Firefox copy (${e.code}: ${dist}); it protects app bundles that have run. Use a fresh copy of Firefox.app for each run. (Developer Edition copies are also killed at launch once the file is added: their code signature doesn't allow it.)`);
+    throw e;
+  }
 }
 
-/** FOXWRIGHT_E2E_PREFS: extra Firefox prefs (a JSON object), e.g. a locale or privacy setup. */
-function extraPrefs() {
-  const raw = process.env.FOXWRIGHT_E2E_PREFS;
+/** A JSON object from the environment ({} when unset). */
+function jsonEnv(name) {
+  const raw = process.env[name];
   if (!raw)
     return {};
-  let prefs;
+  let v;
   try {
-    prefs = JSON.parse(raw);
+    v = JSON.parse(raw);
   } catch (e) {
-    throw new Error(`FOXWRIGHT_E2E_PREFS is not valid JSON: ${e.message}`);
+    throw new Error(`${name} is not valid JSON: ${e.message}`);
   }
-  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
-    throw new Error('FOXWRIGHT_E2E_PREFS must be a JSON object of pref name to value.');
-  return prefs;
+  if (!v || typeof v !== 'object' || Array.isArray(v))
+    throw new Error(`${name} must be a JSON object.`);
+  return v;
+}
+
+/** FOXWRIGHT_E2E_PREFS: extra Firefox prefs, e.g. a locale or privacy setup. */
+const extraPrefs = () => jsonEnv('FOXWRIGHT_E2E_PREFS');
+
+/** Suite policies win; ExtensionSettings entries from both are kept (e.g. a langpack plus a suite's own). */
+function mergePolicies(fromEnv, fromSuite) {
+  const out = { ...fromEnv, ...fromSuite };
+  if (fromEnv.ExtensionSettings && fromSuite.ExtensionSettings)
+    out.ExtensionSettings = { ...fromEnv.ExtensionSettings, ...fromSuite.ExtensionSettings };
+  return out;
 }
 
 // ---------- suite watchdog ----------
@@ -484,7 +503,7 @@ export async function start({ build, trusted = false, testDriver = false, policy
   const firefox = process.env.FIREFOX;
   if (!firefox || !fs.existsSync(firefox))
     throw new Error('Set FIREFOX to the Firefox binary to test with, e.g. FIREFOX=/path/to/firefox/firefox (see docs/TESTING.md).');
-  writePolicies(firefox, policy, extraPolicies);
+  writePolicies(firefox, policy, mergePolicies(jsonEnv('FOXWRIGHT_E2E_POLICIES'), extraPolicies));
 
   build = build || process.env.FOXWRIGHT_E2E_BUILD || 'full';
   const sourceDir = build === 'full' || build === 'store' ? path.join(root, 'dist', build) : path.resolve(build);
