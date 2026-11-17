@@ -555,6 +555,9 @@ async function main() {
           resultChars: run.m.resultChars, usage: u, answer: answer.slice(0, 400), exit: run.code, verifyError,
           prompts: ctx.prompts.map(p => `${p.button} ${p.origin}`),
           stderr: run.stderr.slice(-400), hitTurnLimit: /max_turns/.test(String(f.subtype || '')),
+          // The agent CLI failed before touching the browser (usage limit, model at capacity, login):
+          // a provider problem, reported apart from Foxwright results.
+          providerBlocked: !ok && run.code !== 0 && run.m.calls.length === 0,
         };
         rows.push(row);
         fs.writeFileSync(path.join(outDir, `agent-eval-${MODE}.json`), JSON.stringify(rows, null, 2));
@@ -597,10 +600,11 @@ async function main() {
     REPEAT > 1 ? `Each task ran ${REPEAT} times. pass@1: **${Math.round(100 * passed / rows.length)}%** (${passed}/${rows.length} runs). pass@${REPEAT}: ${passAtN}/${taskIds.length} tasks. Passed every time: ${allPass}/${taskIds.length} tasks.\n` : '',
     `**${passed}/${rows.length} ${REPEAT > 1 ? 'runs' : 'tasks'} succeeded** (checked in the browser, not taken from the agent's word). Median ${Math.round(med(rows.map(r => r.ms)) / 1000)} s and ${med(rows.map(r => r.toolCalls))} tool calls per task${totalCost ? `; total cost $${totalCost.toFixed(2)}` : ''}.`,
     '',
+    rows.some(r => r.providerBlocked) ? `${rows.filter(r => r.providerBlocked).length} run(s) never reached the browser: the agent CLI exited with an error before its first tool call (usage limit, model capacity or login; see the transcripts). Excluding them: ${passed}/${rows.filter(r => !r.providerBlocked).length}.\n` : '',
     ASK ? `Foxwright was in "ask" mode: a scripted user answered ${approvalCount} permission window(s).\n` : '',
     '| Task | Result | Time | Tool calls | Errors | Tokens (in+cache / out) | Cost | Answer |',
     '|---|---|---|---|---|---|---|---|',
-    ...rows.map(r => `| ${r.id} | ${r.ok ? 'pass' : '**fail**'} | ${Math.round(r.ms / 1000)} s | ${r.toolCalls} | ${r.toolErrors} | ${Math.round((r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / 1000)}k / ${Math.round(r.usage.output / 1000)}k | ${r.cost != null ? '$' + r.cost.toFixed(3) : '–'} | ${r.answer.replace(/\s+/g, ' ').replace(/\|/g, '/').slice(0, 90)} |`),
+    ...rows.map(r => `| ${r.id} | ${r.ok ? 'pass' : r.providerBlocked ? 'provider error' : '**fail**'} | ${Math.round(r.ms / 1000)} s | ${r.toolCalls} | ${r.toolErrors} | ${Math.round((r.usage.input + r.usage.cacheRead + r.usage.cacheWrite) / 1000)}k / ${Math.round(r.usage.output / 1000)}k | ${r.cost != null ? '$' + r.cost.toFixed(3) : '–'} | ${r.answer.replace(/\s+/g, ' ').replace(/\|/g, '/').slice(0, 90)} |`),
     '',
     '## What the tools cost in context',
     '',

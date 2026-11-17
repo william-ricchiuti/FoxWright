@@ -125,7 +125,7 @@ export const USER_TASKS = [
     verify: async (c) => {
       const all = await c.inspectAll('/agent-product.html', 'window.product');
       const byItem = Object.fromEntries(all.map(p => [p.item, p]));
-      if (!byItem.copper || !byItem.steel) // both pages open at once: two tabs
+      if (!byItem.copper || !byItem.steel || all.some(p => p.basket)) // both pages open at once (two tabs); nothing added to the basket
         return false;
       const [cheap, dear] = [byItem.copper, byItem.steel].sort((a, b) => a.totalNum - b.totalNum);
       const tie = Math.abs(cheap.totalNum - dear.totalNum) < 0.01;

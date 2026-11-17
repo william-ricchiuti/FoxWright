@@ -35,6 +35,7 @@ const cmp = { answer: 'The steel kettle is cheaper: $31.49 with shipping.', insp
 await check('compare-tabs', cmp, true);
 await check('compare-tabs', { ...cmp, answer: 'The copper kettle is cheaper: $33.98.' }, false);
 await check('compare-tabs', { ...cmp, inspectAll: async () => [product('steel', 31.49)] }, false);
+await check('compare-tabs', { ...cmp, inspectAll: async () => [product('copper', 33.98), { ...product('steel', 31.49), basket: 1 }] }, false);
 const form = { phone: '5551234567', dob: '1990-12-10', postcode: 'SW1Y 4JH', country: 'GB', name: 'Ada Lovelace', email: 'ada@example.com', street: "12 St James's Square", city: 'London', contact: 'email', newsletters: ['events'], reason: 'I want to borrow books on mathematics and engines.' };
 const apply = { answer: 'Reference APP-X1', inspectFixture: async () => ({ submitted: true, code: 'APP-X1', values: form }) };
 await check('long-form', apply, true);
