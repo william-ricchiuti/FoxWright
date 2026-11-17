@@ -6,7 +6,7 @@
 // ctx = { answer, texts(): text of every Foxwright tab, outline(filter?): outline of the agent's active tab,
 //         js(code, urlRe?): run JS in the tab matching urlRe (default: active), tabs(): [{ id, url, title }],
 //         inspectFixture(path, expr): evaluate expr in the open fixture page with that path,
-//         inspectAll(path, expr): the same for every open page with that path (synthetic input only),
+//         inspectAll(path, expr): the same for every open page with that path,
 //         prompts: [{ origin, button }] permission windows the scripted user answered (--ask),
 //         calls: [{ name, input, isError, resultText }] the agent's tool calls, in order }
 // Prompts may use __LOCAL__ (the harness's fixture server), __READ_ONLY__ (the same server as

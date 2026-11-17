@@ -505,9 +505,18 @@ async function main() {
             return h.pageEval(t.id, expression);
           },
           inspectAll: async (pathname, expression) => {
-            // Every open page with this path (e.g. two product pages in two tabs), through the driver.
-            if (!driver) throw new Error('inspectAll needs the test driver (synthetic input)');
+            // Every open page with this path (e.g. two product pages in two tabs).
             const out = [];
+            if (!driver) { // trusted input: the Foxwright tabs, through the fixture pages' probe
+              for (const t of tabs) {
+                try {
+                  const u = new URL(t.url);
+                  if (['localhost', '127.0.0.1'].includes(u.hostname) && u.pathname === pathname)
+                    out.push(await h.pageEval(t.id, expression));
+                } catch { /* not a fixture page */ }
+              }
+              return out;
+            }
             for (const c of await driver.contexts()) {
               try {
                 const u = new URL(c.url);
