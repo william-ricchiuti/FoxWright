@@ -1656,7 +1656,7 @@ export const tools = {
     }
     if (args.watermark) {
       g.font = '600 11px ui-sans-serif, system-ui, sans-serif';
-      const t = '狐 Foxwright';
+      const t = 'Foxwright';
       const tw = g.measureText(t).width;
       g.fillStyle = 'rgba(20, 16, 14, 0.55)';
       g.fillRect(w - tw - 18, h - 26, tw + 12, 18);

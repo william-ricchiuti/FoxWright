@@ -35,7 +35,7 @@ const CSS = `
 }
 .pill.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 .pill.top { bottom: auto; top: 14px; }
-.pill .mark { width: 18px; height: 18px; flex: none; }
+.pill .mark { width: 20px; height: 20px; flex: none; }
 .pill .what { max-width: min(60vw, 520px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pill .what b { font-weight: 600; }
 .pill button {
@@ -49,15 +49,24 @@ function foxMark(): SVGSVGElement {
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('class', 'mark');
-  svg.setAttribute('viewBox', '0 0 32 32');
+  // The same drawing as extension/icons/foxwright.svg (the toolbar and store icon).
+  svg.setAttribute('viewBox', '4 4 56 56');
   svg.setAttribute('aria-hidden', 'true');
-  const face = document.createElementNS(NS, 'path');
-  face.setAttribute('fill', '#f6efe3');
-  face.setAttribute('d', 'M4 3l7 7h10l7-7v12c0 7-5.4 13-12 13S4 22 4 15z');
-  const marks = document.createElementNS(NS, 'path');
-  marks.setAttribute('fill', '#d64024');
-  marks.setAttribute('d', 'M9 14l5 3-5 1zM23 14l-5 3 5 1zM16 22l-2.4-2h4.8z');
-  svg.append(face, marks);
+  const tile = document.createElementNS(NS, 'rect');
+  for (const [k, v] of Object.entries({ x: '4', y: '4', width: '56', height: '56', rx: '13', fill: '#c8321b' }))
+    tile.setAttribute(k, v);
+  const path = (fill: string, d: string, opacity?: string) => {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('fill', fill);
+    p.setAttribute('d', d);
+    if (opacity)
+      p.setAttribute('opacity', opacity);
+    return p;
+  };
+  svg.append(tile,
+    path('#fbeee0', 'M12 12l13 13h14l13-13v21c0 12.2-9 22-20 22S12 45.2 12 33z'),
+    path('#c8321b', 'M20 31l9 5-9 2zM44 31l-9 5 9 2zM32 46l-4-3.4h8z'),
+    path('#1b1714', 'M17 17l6 6-5 1zM47 17l-6 6 5 1z', '.85'));
   return svg;
 }
 

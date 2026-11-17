@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Look**
+- The popup, permission window, setup page and Activity page show the Foxwright logo instead of the old 狐 badge, which appeared as an empty box on computers without Japanese fonts. The pill on the page and the GIF watermark use the same logo and name.
+- Plain page background instead of the dotted texture, headings in normal case, and the popup footer says "Extension 0.8.1" so it can't be confused with the helper version.
+
 ## 0.8.1 (2026-11-17)
 
 A fix release, prepared with a five-part review before the 0.8 extension reaches the store: agents, upgrades, security, platforms and first-time setup. No new permissions and no new data collection.
