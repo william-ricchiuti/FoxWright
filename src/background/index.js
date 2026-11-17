@@ -3,7 +3,7 @@
 import { VERSION, FULL, state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send, getDoctorReport } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
-import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite } from './tabs.js';
+import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite, noteGroupChange } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
 import { startNetLog } from './netlog.js';
 import { loadLog, flushLog, logEvent, describeForLog, summaryForLog, resultOfError, logOrigin, readLog, clearLog, setLogEnabled, logEnabled } from './actionlog.js';
@@ -255,6 +255,8 @@ function refreshSoon() {
   refreshTimer = setTimeout(() => groupTabs().catch(() => {}), 200);
 }
 browser.tabs.onUpdated.addListener((tabId, info) => {
+  if ('groupId' in info)
+    noteGroupChange(tabId, info.groupId);
   if ('groupId' in info || 'status' in info)
     refreshSoon();
 });

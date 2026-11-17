@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GROUPS = {
-  gaps: ['e2e-gaps-boundary', 'e2e-gaps-fuzz', 'e2e-gaps-hostile', 'e2e-gaps-persistence', 'e2e-gaps-secrets', 'e2e-gaps-stop', 'e2e-gaps-trusted'],
+  gaps: ['e2e-gaps-boundary', 'e2e-gaps-fuzz', 'e2e-gaps-hostile', 'e2e-gaps-persistence', 'e2e-gaps-secrets', 'e2e-gaps-stop', 'e2e-gaps-trusted', 'e2e-gaps-windows'],
 };
 const HEADFUL = new Set(GROUPS.gaps);
 
