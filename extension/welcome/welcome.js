@@ -5,36 +5,68 @@ const $ = (id) => document.getElementById(id);
 
 const PLATFORM = {
   mac: {
-    terminal: 'Open Terminal (Applications › Utilities) and run:',
-    node: 'Get it from nodejs.org, or with Homebrew: brew install node.',
+    terminal: 'Open Terminal (press Cmd+Space, type Terminal, press Return), paste this command and press Return:',
+    node: 'Download the “LTS” installer for macOS from nodejs.org and run it, then open a new Terminal window.',
     stopKey: 'Option+Shift+K',
+    desktopRestart: 'When it finishes, quit Claude Desktop completely (Claude menu › Quit Claude, or Cmd+Q) and open it again. Closing its window is not enough.',
   },
   win: {
-    terminal: 'Open PowerShell (Start menu, type “PowerShell”) and run:',
-    node: 'Get it from nodejs.org, or run winget install OpenJS.NodeJS.LTS, then open a new PowerShell window.',
+    terminal: 'Open Command Prompt (press the Windows key, type cmd, press Enter), paste this command and press Enter:',
+    node: 'Download the “LTS” installer for Windows from nodejs.org (or run winget install OpenJS.NodeJS.LTS) and run it, then open a new Command Prompt window.',
     stopKey: 'Alt+Shift+K',
+    desktopRestart: 'When it finishes, quit Claude Desktop completely (right-click its icon next to the clock and choose Quit) and open it again. Closing its window is not enough.',
   },
   linux: {
     terminal: 'Open a terminal and run:',
-    node: 'Get it from nodejs.org or your distribution\'s packages.',
+    node: 'Install it from nodejs.org or your distribution\'s packages (some distributions ship an older one).',
     stopKey: 'Alt+Shift+K',
-    note: 'Firefox from a Snap (Ubuntu\'s default) or Flatpak runs in a sandbox that may stop it from starting the helper. If the status below stays at “Helper not found” after setup, install Firefox from Mozilla\'s .deb package or tarball (support.mozilla.org, “Install Firefox on Linux”).',
+    desktopRestart: 'When it finishes, quit Claude Desktop completely and open it again.',
+    note: 'Using Ubuntu\'s built-in Firefox? It is a Snap. Snap and Flatpak Firefox run in a sandbox that often can\'t start the helper, so step 2 stays at “Helper not found”. Check with snap list firefox or flatpak list | grep -i firefox. If either lists Firefox, install Firefox from Mozilla\'s own .deb repository or tarball (search support.mozilla.org for “Install Firefox on Linux”) and add Foxwright to that Firefox. Firefox Sync can bring your bookmarks and passwords along.',
   },
 };
 
-async function applyPlatform() {
-  let os = 'linux';
-  try {
-    os = (await browser.runtime.getPlatformInfo()).os;
-  } catch { /* keep the default */ }
+// The setup command and what to do after it, per AI app.
+const CLIENTS = {
+  'claude-desktop': { flag: ' --claude-desktop', next: null, restart: 'Once Claude Desktop is open again, ask it:' },
+  'claude-code': { flag: ' --claude-code', next: 'When it finishes, start a new Claude Code session. Typing /mcp there should list “foxwright”.', restart: 'Start a new Claude Code session, then ask it:' },
+  other: { flag: '', next: 'When it finishes, setup prints the settings for Cursor, Codex, VS Code, Gemini CLI, Windsurf, Zed and other MCP apps. Copy the lines for your app into its MCP settings and restart the app. “Connect other AI apps” at the bottom of this page shows where each app keeps them.', restart: 'Restart your AI app so it loads Foxwright, then ask it:' },
+};
+
+let platform = PLATFORM.linux;
+let isLinux = false; // until applyPlatform() knows
+let connected = false;
+
+function applyClient() {
+  const choice = document.querySelector('input[name=client]:checked')?.value;
+  const c = CLIENTS[choice] || CLIENTS['claude-code'];
+  $('cmd').textContent = `npx foxwright-firefox setup${c.flag}`;
+  $('client-next').textContent = c.next || platform.desktopRestart;
+  $('restart-hint').textContent = c.restart;
+}
+for (const r of document.querySelectorAll('input[name=client]'))
+  r.addEventListener('change', applyClient);
+
+/** force: 'mac' | 'win' | 'linux' to preview another system's text (screenshots); else this one's. */
+async function applyPlatform(force) {
+  let os = force || 'linux';
+  if (!force) {
+    try {
+      os = (await browser.runtime.getPlatformInfo()).os;
+    } catch { /* keep the default */ }
+  }
   const p = PLATFORM[os] || PLATFORM.linux;
+  platform = p;
+  isLinux = !!p.note;
   document.documentElement.dataset.os = os;
   $('terminal-hint').textContent = p.terminal;
   $('node-hint').textContent = p.node;
   $('stop-key').textContent = p.stopKey;
-  $('linux-note').hidden = !p.note;
+  $('win-ps-hint').hidden = os !== 'win';
+  // Once connected, the sandbox warning no longer applies.
+  $('linux-note').hidden = !p.note || connected;
   if (p.note)
     $('linux-note').textContent = p.note;
+  applyClient();
 }
 
 $('copy').addEventListener('click', async () => {
@@ -66,6 +98,8 @@ $('open-log').addEventListener('click', (e) => {
 let last = null;
 function render(s) {
   last = s;
+  connected = !!s.connected;
+  $('linux-note').hidden = !isLinux || connected;
   const dot = $('dot');
   let live, diag = '';
   if (s.connected) {
@@ -79,11 +113,13 @@ function render(s) {
   } else if (s.errorKind === 'not-installed') {
     dot.className = 'dot bad';
     live = 'Helper not found';
-    diag = 'Firefox can\'t find the Foxwright helper on this computer yet. Run the command above.';
+    diag = 'Firefox can\'t find the Foxwright helper on this computer yet. Run the command in step 1.';
+    if (isLinux)
+      diag += ' Already ran it? Read the note about Snap and Flatpak Firefox at the top of this page.';
   } else if (s.errorKind === 'exited') {
     dot.className = 'dot bad';
     live = 'Helper found, but it stopped';
-    diag = `Firefox started the helper, but it exited${s.lastError ? ` (${s.lastError})` : ''}. Check that Node.js 20 or newer is installed, then run npx foxwright-firefox doctor in a terminal to see what's wrong.`;
+    diag = `Firefox started the helper, but it stopped${s.lastError ? ` (${s.lastError})` : ''}. The usual cause is a missing or old Node.js: install Node.js 20 or newer, run the command in step 1 again, then press Check again. For details, run npx foxwright-firefox doctor in a terminal.`;
   } else {
     dot.className = 'dot wait';
     live = 'Looking for the helper…';
