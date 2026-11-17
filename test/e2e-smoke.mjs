@@ -5,6 +5,7 @@
 //
 //   node host/dist/foxwright.mjs setup         (macOS/Windows: the harness uses your real HOME)
 //   FIREFOX=... node test/e2e-smoke.mjs
+//   FOXWRIGHT_E2E_TRUSTED=1 node test/e2e-smoke.mjs   real input (Firefox with --remote-debugging-port)
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,9 +15,10 @@ import { runner, expect, tabIdOf } from './gap-lib.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE = `http://127.0.0.1:${process.env.FOXWRIGHT_P1}`;
 const { test, finish } = runner('e2e-smoke');
+const TRUSTED = !!process.env.FOXWRIGHT_E2E_TRUSTED;
 
-console.log(`Foxwright smoke test (${process.platform}, Node ${process.versions.node})`);
-const h = await start({});
+console.log(`Foxwright smoke test (${process.platform}, Node ${process.versions.node}, ${TRUSTED ? 'trusted' : 'synthetic'} input)`);
+const h = await start({ trusted: TRUSTED });
 let tabId;
 const call = async (name, args = {}) => {
   const r = await h.call(name, { tabId, ...args });
@@ -35,6 +37,8 @@ await test('tabs_context_mcp', async () => {
   const r = await h.call('tabs_context_mcp', { createIfEmpty: true });
   tabId = tabIdOf(r.text);
   expect(tabId > 0, r.text);
+  const mode = TRUSTED ? 'trusted' : 'synthetic';
+  expect(new RegExp(`Input mode: ${mode}`).test(r.text), `expected ${mode} input: ${r.text}`);
 });
 
 await test('navigate to a local fixture + read_page', async () => {

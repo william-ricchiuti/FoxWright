@@ -14,6 +14,12 @@
 //                            -> give up on a whole suite after this many minutes, printing which
 //                               test and tool call it was stuck in and the helper log tail.
 //   FOXWRIGHT_E2E_ISOLATE=0  -> on Linux, use your real ~/.foxwright instead of a temporary HOME.
+//   FOXWRIGHT_E2E_PREFS='{"intl.locale.requested":"de"}'
+//                            -> extra Firefox prefs (JSON object) for every Firefox the suite starts,
+//                               to run the suites under a setup real people have (locale, zoom,
+//                               resistFingerprinting, strict tracking protection, ...).
+//   FOXWRIGHT_E2E_FIREFOX_ARGS='--window-size=640,480'
+//                            -> extra Firefox command-line arguments (space-separated).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -236,6 +242,22 @@ export function writePolicies(firefoxBin, policy, extraPolicies = {}) {
     policies['3rdparty'] = { Extensions: ext };
   }
   fs.writeFileSync(file, JSON.stringify({ policies: { ...extraPolicies, ...policies } }, null, 2));
+}
+
+/** FOXWRIGHT_E2E_PREFS: extra Firefox prefs (a JSON object), e.g. a locale or privacy setup. */
+function extraPrefs() {
+  const raw = process.env.FOXWRIGHT_E2E_PREFS;
+  if (!raw)
+    return {};
+  let prefs;
+  try {
+    prefs = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`FOXWRIGHT_E2E_PREFS is not valid JSON: ${e.message}`);
+  }
+  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs))
+    throw new Error('FOXWRIGHT_E2E_PREFS must be a JSON object of pref name to value.');
+  return prefs;
 }
 
 // ---------- suite watchdog ----------
@@ -544,6 +566,8 @@ export async function start({ build, trusted = false, testDriver = false, policy
   const args = [];
   if (!process.env.FOXWRIGHT_E2E_HEADFUL)
     args.push('--headless');
+  if (process.env.FOXWRIGHT_E2E_FIREFOX_ARGS)
+    args.push(...process.env.FOXWRIGHT_E2E_FIREFOX_ARGS.split(/\s+/).filter(Boolean));
   if (bidiPort)
     args.push(`--remote-debugging-port=${bidiPort}`);
   if (testDriver) {
@@ -567,6 +591,7 @@ export async function start({ build, trusted = false, testDriver = false, policy
       'app.update.disabledForTesting': true,
       ...(profileDir ? { 'extensions.webextensions.keepStorageOnUninstall': true, 'extensions.webextensions.keepUuidOnUninstall': true } : {}),
       ...proxyPrefs,
+      ...extraPrefs(),
     },
   };
   // Firefox (and the helper it starts) inherit the environment at launch: point HOME at the
