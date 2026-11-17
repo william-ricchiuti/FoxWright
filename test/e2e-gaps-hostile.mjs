@@ -351,14 +351,15 @@ await test('a page of megabytes of spaces can\'t freeze Foxwright (get_page_text
   // While it runs, the extension must still answer other calls (Stop depends on that).
   const t1 = Date.now();
   const ctx = await h.call('tabs_context_mcp', {});
-  expect(!r.isError && /needle first line/.test(r.text) && /needle last line/.test(r.text), r.text.slice(0, 300));
+  // (The second match is cut off by max_chars: the lines of spaces around it come along as context.)
+  expect(!r.isError && /2 matching lines/.test(r.text) && /needle first line/.test(r.text), r.text.slice(0, 300));
   expect(ms < 10000 && !ctx.isError && Date.now() - t1 < 3000, `get_page_text took ${ms} ms, the next call ${Date.now() - t1} ms`);
 }, { area: '1h' });
 
 await test('a huge outline that keeps changing can\'t freeze Foxwright (read_page diff)', async () => {
   expect(!(await h.call('navigate', { tabId, url: `${A}/hostile-bigdiff.html` })).isError, 'navigate');
   const first = await h.call('read_page', { tabId, max_chars: 2000 });
-  expect(!first.isError && /item 0/.test(first.text), first.text.slice(0, 200));
+  expect(!first.isError && /item 1/.test(first.text), first.text.slice(0, 400));
   for (let i = 1; i <= 2; i++) {
     await sleep(4500);
     const t0 = Date.now();
