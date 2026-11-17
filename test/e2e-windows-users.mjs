@@ -38,12 +38,17 @@ fs.copyFileSync(process.execPath, nodeExe);
 execFileSync('icacls', [PUBLIC, '/grant', 'Users:(OI)(CI)M'], { stdio: 'ignore' });
 
 const USER = 'fwprobe';
-const PASS = `Fw!${crypto.randomBytes(9).toString('base64url')}9a`;
+// At most 14 characters: for longer ones `net user` stops to ask whether to continue.
+const PASS = `Fw!${crypto.randomBytes(6).toString('base64url')}9a`;
 const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' });
 try {
   execFileSync('net', ['user', USER, '/delete'], { stdio: 'ignore' });
 } catch { /* not there */ }
-execFileSync('net', ['user', USER, PASS, '/add'], { stdio: 'ignore' });
+try {
+  execFileSync('net', ['user', USER, PASS, '/add'], { encoding: 'utf8', input: 'N\n' });
+} catch (e) {
+  throw new Error(`Could not create the test account: ${(e.stdout || '') + (e.stderr || '') || e.message}`);
+}
 try {
   ps('Start-Service seclogon');
 } catch { /* already running */ }
