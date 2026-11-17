@@ -27,7 +27,7 @@ async function main() {
   }
   if (cmd === 'doctor') {
     const { doctor } = await import('./setup.js');
-    await doctor();
+    await doctor({ share: rest.includes('--share') });
     return;
   }
   if (cmd === 'uninstall') {
@@ -44,6 +44,8 @@ Usage:
   foxwright doctor      Check the installation and the live connection to Firefox, and
                       say what to do about each problem. Prints the installed
                       helper's version as well as this command's.
+  foxwright doctor --share
+                      Print setup status suitable for a public issue.
   foxwright mcp         Run the MCP server on stdio (what your AI client launches).
   foxwright uninstall   Remove the helper.
   foxwright --version   Print this command's version (\`doctor\` also shows the installed helper's).

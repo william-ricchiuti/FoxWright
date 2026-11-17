@@ -10,11 +10,13 @@
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { socketPath, foxwrightDir, logPath, browsersDir, browserSocketPath } from './paths.js';
 import { AUTH_VERSION, OLD_CLIENT_MSG, readToken, nonce, proof, sameMac, b64, SecureChannel } from './auth.js';
 
 const MAX_TO_EXTENSION = 1024 * 1024; // Firefox limit for host -> extension messages
 const CHUNK_BYTES = 600 * 1024;
+const DOCTOR_OUTPUT_LIMIT = 1500;
 
 let logStream = null;
 function log(...args) {
@@ -132,7 +134,38 @@ function onClientMessage(clientId, msg) {
   }
 }
 
+let doctorRunning = false;
+
+function sendDoctorReport(id) {
+  if (!Number.isSafeInteger(id))
+    return;
+  if (doctorRunning) {
+    writeToExtension({ type: 'doctor-result', id });
+    return;
+  }
+  doctorRunning = true;
+  // Use the running helper's CLI. No arguments or shell commands come from Firefox.
+  execFile(process.execPath, [process.argv[1], 'doctor', '--share'], {
+    encoding: 'utf8',
+    timeout: 8000,
+    killSignal: 'SIGKILL',
+    maxBuffer: DOCTOR_OUTPUT_LIMIT,
+    windowsHide: true,
+  }, (error, stdout) => {
+    doctorRunning = false;
+    // Doctor exits 1 for failed checks, which are useful to include.
+    const output = ((!error || error.code === 1) && stdout.startsWith('Foxwright doctor (shareable)\n'))
+      ? stdout.trim() : undefined;
+    writeToExtension({ type: 'doctor-result', id, output });
+  });
+}
+
 function onExtensionMessage(msg) {
+  if (msg.type === 'doctor-report') {
+    if (extensionInfo)
+      sendDoctorReport(msg.id);
+    return;
+  }
   if (msg.type === 'name') {
     browserInfo.name = cleanName(msg.name) || browserInfo.name;
     writeRegistry();
@@ -143,7 +176,7 @@ function onExtensionMessage(msg) {
     browserInfo = { browserId: /^[a-f0-9]{12}$/.test(msg.browserId || '') ? msg.browserId : '', name: cleanName(msg.name) || 'Firefox' };
     writeRegistry();
     log('extension connected', extensionInfo, browserInfo);
-    writeToExtension({ type: 'hello-ack', error: serverError, version: VERSION });
+    writeToExtension({ type: 'hello-ack', error: serverError, version: VERSION, doctorReport: true });
     broadcastClientCount();
     return;
   }
@@ -364,7 +397,7 @@ function listen() {
     ownsSocket = true;
     if (serverError) {
       serverError = null;
-      writeToExtension({ type: 'hello-ack', error: null, version: VERSION });
+      writeToExtension({ type: 'hello-ack', error: null, version: VERSION, doctorReport: true });
     }
   }
   server.listen(sp, onListening);

@@ -60,6 +60,34 @@ const hidden = (ctx, id) => d.evalIn(ctx, `document.getElementById('${id}').hidd
 const readLog = ctx => d.evalIn(ctx, `browser.runtime.sendMessage({ kind: 'log-read' }).then(r => JSON.stringify(r))`).then(JSON.parse);
 const storedLog = ctx => d.evalIn(ctx, `browser.storage.local.get('activityLog').then(r => JSON.stringify(r.activityLog || []))`).then(JSON.parse);
 
+async function openReport() {
+  const p = await openPage('popup/popup.html');
+  const reportPage = 'https://github.com/william-ricchiuti/FoxWright/issues/new';
+  await d.bidi('session.subscribe', { events: ['network.beforeRequestSent'] });
+  const { intercept } = await d.bidi('network.addIntercept', {
+    phases: ['beforeRequestSent'],
+    urlPatterns: [{ type: 'pattern', protocol: 'https', hostname: 'github.com', pathname: '/william-ricchiuti/FoxWright/issues/new' }],
+  });
+  const from = d.events.length;
+  try {
+    await d.evalIn(p, `document.getElementById('report-problem').click()`);
+    const { params } = await until(() => Promise.resolve(d.events.slice(from).find(e =>
+      e.method === 'network.beforeRequestSent' && e.params.isBlocked && e.params.request.url.startsWith(reportPage + '?'))),
+    12000, 'no GitHub issue form navigation');
+    // Capture the prefill without contacting GitHub or opening an issue.
+    await d.bidi('network.failRequest', { request: params.request.request });
+    await d.bidi('browsingContext.close', { context: params.context }).catch(() => {});
+    const url = new URL(params.request.url);
+    expect(params.request.method === 'GET' && url.searchParams.get('template') === 'bug.yml', 'expected a navigation to the new bug form');
+    expect(/^Foxwright \d/.test(url.searchParams.get('versions')), 'extension version missing from bug form');
+    expect(/^Firefox \d/.test(url.searchParams.get('firefox')), 'Firefox version missing from bug form');
+    return url.searchParams.get('doctor') || '';
+  } finally {
+    await d.bidi('network.removeIntercept', { intercept });
+    await d.bidi('browsingContext.close', { context: p }).catch(() => {});
+  }
+}
+
 let welcome = null;
 await test('installing the add-on opens the setup page (real runtime.onInstalled, reason "install")', async () => {
   // web-ext installs the build as a temporary add-on into a fresh profile: a real "install" event.
@@ -99,6 +127,11 @@ await test('before setup: the popup explains what is wrong and links to setup he
   await d.bidi('browsingContext.close', { context: p }).catch(() => {});
 });
 
+await test('Report a problem opens the bug form with terminal instructions before setup', async () => {
+  const report = await openReport();
+  expect(/helper was not connected/.test(report) && /doctor --share/.test(report), 'missing offline diagnostic and command');
+});
+
 await test('after `foxwright setup` runs, the open setup page flips to "Connected" by itself', async () => {
   const t0 = Date.now();
   h = await boot.runSetup();
@@ -131,7 +164,7 @@ await test('popup when connected: helper version, input mode, no mismatch warnin
     await d.bidi('input.performActions', { context: popup, actions: [{ type: 'key', id: 'kb', actions: [{ type: 'keyDown', value: '' }, { type: 'keyUp', value: '' }] }] });
     seen.add(await d.evalIn(popup, `document.activeElement.id || document.activeElement.name || document.activeElement.tagName`));
   }
-  for (const id of ['mode', 'bname', 'pause', 'footer-log', 'footer-help'])
+  for (const id of ['mode', 'bname', 'pause', 'footer-log', 'footer-help', 'report-problem'])
     expect(seen.has(id), `Tab never reached #${id}; reached: ${[...seen].join(', ')}`);
 });
 
@@ -196,6 +229,29 @@ await test('agent actions are logged with site origin, tab and outcome, never ty
     });
   }
 }
+
+await test('Only the popup can request a report, and connected doctor output omits private data', async () => {
+  const message = "{ kind: 'report-problem' }";
+  expect(await d.evalIn(welcome, `browser.runtime.sendMessage(${message}).then(value => value === undefined)`),
+    'welcome page could request a report');
+  const rejected = await d.evalIn(popup, `browser.scripting.executeScript({
+    target: { tabId: ${tabId} },
+    func: async () => (await browser.runtime.sendMessage({ kind: 'report-problem' })) === undefined,
+  }).then(results => results[0].result)`);
+  expect(rejected, 'content script could request a report');
+  expect((await h.call('doctor-report')).isError, 'MCP client could request a report');
+
+  const browserName = 'PRIVATE-BROWSER-NAME-1337';
+  const logMarker = 'PRIVATE-HELPER-LOG-5555';
+  await d.evalIn(popup, `browser.runtime.sendMessage({ kind: 'setName', name: '${browserName}' }).then(() => true)`);
+  fs.appendFileSync(path.join(h.home, '.foxwright', 'helper.log'), logMarker + '\n');
+  const report = await openReport();
+  expect(/Foxwright doctor \(shareable\)/.test(report), 'the popup did not collect doctor output');
+  expect(/Firefox connection: connected/.test(report), 'doctor did not see the live connection');
+  expect(/Connected extension: \d+(?:\.\d+)+.*helper: \d+/.test(report), 'doctor did not report connected versions');
+  for (const secret of [...SECRETS, ALLOWED, DENIED, h.home, browserName, logMarker, 'auth-token'])
+    expect(!report.includes(secret), `report contained private data: ${secret}`);
+});
 
 let logPage = null;
 await test('Activity page lists entries, filters by site, and exports JSON without secrets', async () => {

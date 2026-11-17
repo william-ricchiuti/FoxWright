@@ -4,6 +4,16 @@
 
 **Let Claude (or any MCP-capable AI agent) use your real Firefox**: your tabs, your logins, your extensions. It works the same way Claude in Chrome does in Chrome.
 
+## Your first 5 minutes
+
+1. **Install [Foxwright for Firefox](https://addons.mozilla.org/firefox/addon/foxwright/).** You’ll need Firefox 152+ and Node.js 20+.
+2. **Connect your AI client.** Run `npx foxwright-firefox setup --claude-code`, then restart Claude Code. For Claude Desktop use `--claude-desktop`. For other MCP clients, use the config printed by `npx foxwright-firefox setup`. The toolbar popup should say **Ready** or **Connected**.
+3. **Try the prompt below.** Approve example.com when Foxwright asks. **Allow this session** with **Read only** is enough.
+
+> Use Foxwright to open https://example.com, tell me the main heading, and close the tab when you’re done.
+
+See [installation details](#install) for platform-specific setup or share the [Foxwright agent guide](docs/AGENT-GUIDE.md) with your AI client.
+
 *Foxwright was called Zenko in versions 0.6.0 and 0.6.1, and Kitsune before that. It's unrelated to [junyeong-nero/kitsune](https://github.com/junyeong-nero/kitsune), a different project that happens to share the old name.*
 
 ![A Claude Code agent buying a backpack on saucedemo.com through Foxwright: log in, add to cart, fill checkout details, finish](docs/demo.gif)
@@ -82,15 +92,17 @@ You need Firefox 152 or newer (153 ESR works) and Node.js 20 or newer.
 
 > **Linux:** Ubuntu's default Firefox is a Snap, and Snap/Flatpak Firefox is sandboxed and may not be able to start the helper. If the toolbar fox keeps its `!` badge, install Firefox from [Mozilla's .deb repository or tarball](https://support.mozilla.org/kb/install-firefox-linux). Setup also registers the helper with Flatpak Firefox, LibreWolf, Waterfox and Floorp when it finds them.
 
-1. **Install the helper** and register it with Firefox. Add `--claude-code` and/or `--claude-desktop` to also register the MCP server with those apps:
-   ```sh
-   npx foxwright-firefox setup --claude-code --claude-desktop
-   ```
-   Setup copies one self-contained file to `~/.foxwright/app/` (on Windows, `%USERPROFILE%\.foxwright\app\`) and registers it with Firefox. It then prints the exact MCP config for any other client.
-2. **Install the extension** from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/foxwright/). It opens a setup page with the command for your system, which shows "Connected" as soon as the helper is found (no Firefox restart needed). The fox in your toolbar loses its `!` badge at the same time.
-3. **Ask Claude to use it**, e.g. *"Use Foxwright to open my GitHub notifications and summarize them."*
+Run this to register the helper with Firefox and add the MCP server to both Claude clients. Use either flag on its own if you only use one client.
 
-Run `npx foxwright-firefox doctor` any time to check every link in the chain. `npx foxwright-firefox uninstall` removes the helper and the Claude Code / Claude Desktop entries again.
+```sh
+npx foxwright-firefox setup --claude-code --claude-desktop
+```
+
+Setup copies one self-contained file to `~/.foxwright/app/` (on Windows, `%USERPROFILE%\.foxwright\app\`) and registers it with Firefox. It prints the exact MCP config for other clients. The extension's setup page shows **Connected** as soon as Firefox finds the helper.
+
+Run `npx foxwright-firefox doctor` to check every link in the chain. To open a GitHub bug report with shareable diagnostics, choose **Report a problem** in the toolbar popup. Review the draft and add what happened before submitting. If the helper is unavailable, run `npx foxwright-firefox@latest doctor --share` in a terminal and paste the output into the draft.
+
+Run `npx foxwright-firefox uninstall` to remove the helper and the Claude Code and Claude Desktop entries.
 
 **Upgrading to 0.8 or later.** The MCP server and the helper check each other with a key stored in `~/.foxwright/auth-token` (readable only by you) and encrypt what they exchange. After updating, run `npx foxwright-firefox@latest setup`, restart Firefox, and restart your AI client so both sides are on the same version.
 

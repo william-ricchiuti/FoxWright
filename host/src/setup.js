@@ -750,22 +750,41 @@ function logTail(n = 3) {
   }
 }
 
-export async function doctor() {
+// Shareable diagnostics are assembled from check results, never from terminal output.
+function reportVersion(value) {
+  return typeof value === 'string' && /^\d{1,6}(?:\.\d{1,6}){1,3}$/.test(value) ? value : 'unknown';
+}
+
+export async function doctor({ share = false } = {}) {
+  const report = ['Foxwright doctor (shareable)',
+    `Foxwright command: ${reportVersion(VERSION)}`,
+    `Node.js: ${reportVersion(process.versions.node)}`,
+    `Operating system: ${process.platform}`,
+  ];
+  const detail = (line) => {
+    if (!share)
+      console.log(line);
+  };
   const fixes = [];
   let problems = 0;
-  const ok = (s) => console.log(c.ok(s));
+  const ok = (s) => detail(c.ok(s));
   const bad = (s, fix) => {
-    console.log(c.bad(s));
+    detail(c.bad(s));
     problems++;
     if (fix && !fixes.includes(fix))
       fixes.push(fix);
   };
   const warn = (s, fix) => {
-    console.log(c.warn(s));
+    detail(c.warn(s));
     if (fix && !fixes.includes(fix))
       fixes.push(fix);
   };
   const finish = () => {
+    if (share) {
+      console.log(report.join('\n'));
+      process.exitCode = problems ? 1 : 0;
+      return;
+    }
     console.log(c.dim(`  Helper log: ${logPath()}`));
     if (fixes.length)
       console.log(`\n${c.b(problems ? `${problems} problem(s) found. What to do:` : 'Suggestions:')}\n${fixes.map((f, i) => `  ${i + 1}. ${f}`).join('\n')}`);
@@ -773,8 +792,8 @@ export async function doctor() {
       console.log(problems ? `\n${problems} problem(s) found.` : '\nAll good.');
     process.exit(problems ? 1 : 0);
   };
-  console.log(c.b('Foxwright doctor\n'));
-  console.log(`  This command: foxwright ${VERSION} (${fileURLToPath(import.meta.url)})`);
+  detail(c.b('Foxwright doctor\n'));
+  detail(`  This command: foxwright ${VERSION} (${fileURLToPath(import.meta.url)})`);
   ok(`Node.js ${process.versions.node} (${process.execPath})`);
   if (parseInt(process.versions.node) < 20)
     bad(`Node.js ${process.versions.node} is too old`, 'Install Node.js 20 or newer.');
@@ -788,11 +807,15 @@ export async function doctor() {
     manifestError = e.code === 'ENOENT' ? 'missing' : `unreadable: ${e.message}`;
   }
   const hasApp = fs.existsSync(appScript());
+  report.push(`Helper installation: ${hasApp ? 'found' : 'missing'}`);
+  report.push(`Firefox native registration: ${manifest ? 'found' : manifestError === 'missing' ? 'missing' : 'unreadable'}`);
   if (!hasApp && !manifest) {
     bad(`Foxwright isn't set up for this user (no helper at ${appScript()}, no registration at ${manifestFile()})`, `Run: ${SETUP_CMD}`);
     const ff = firefoxStatus();
     if (ff.running === false)
-      console.log(c.dim('  Firefox is not running.'));
+      detail(c.dim('  Firefox is not running.'));
+    report.push(`Firefox process: ${ff.running === null ? 'unknown' : ff.running ? 'running' : 'not running'}`);
+    report.push('Firefox connection: no helper installation found');
     return finish();
   }
 
@@ -801,7 +824,10 @@ export async function doctor() {
   if (fs.existsSync(wrapperPath()))
     nodes = launcherNodes(fs.readFileSync(wrapperPath(), 'utf8'));
   const usable = nodes.find(n => fs.existsSync(n));
-  const installed = hasApp ? installedVersion(usable) : null;
+  // The installed script is ours. Use this process's Node for the shareable report.
+  const installed = hasApp ? installedVersion(share ? null : usable) : null;
+  if (hasApp)
+    report.push(`Installed helper: ${reportVersion(installed)}`);
   if (hasApp)
     ok(`Installed helper ${installed || '(version unknown)'} at ${appScript()}`);
   else
@@ -814,14 +840,20 @@ export async function doctor() {
   else
     bad(`Native-messaging registration ${manifestFile()} ${manifestError}`, `Re-run setup to register the helper with Firefox: ${SETUP_CMD}`);
   if (manifest) {
-    if (!EXTENSION_IDS.every(id => manifest.allowed_extensions?.includes(id)))
+    const permitsExtension = EXTENSION_IDS.every(id => manifest.allowed_extensions?.includes(id));
+    report.push(`Registration allows the Foxwright extension: ${permitsExtension ? 'yes' : 'no'}`);
+    const launcherExists = !!manifest.path && fs.existsSync(manifest.path);
+    report.push(`Registered launcher: ${launcherExists ? 'found' : 'missing'}`);
+    if (!permitsExtension)
       bad('The registration does not allow the Foxwright extension IDs', `Re-run setup: ${SETUP_CMD}`);
-    if (!manifest.path || !fs.existsSync(manifest.path))
+    if (!launcherExists)
       bad(`The registration points at a launcher that doesn't exist: ${manifest.path}`, `Re-run setup: ${SETUP_CMD}`);
     else if (path.resolve(manifest.path) !== path.resolve(wrapperPath()))
       warn(`The registration points at ${manifest.path}, not ${wrapperPath()}`, `Re-run setup: ${SETUP_CMD}`);
   }
-  if (fs.existsSync(wrapperPath())) {
+  report.push(`Configured launcher Node.js: ${usable ? 'found' : nodes.length ? 'missing' : 'unknown'}`);
+  // Don't execute binaries named by the launcher when preparing a shareable report.
+  if (!share && fs.existsSync(wrapperPath())) {
     if (!nodes.length)
       warn(`Couldn't tell which Node.js the launcher ${wrapperPath()} uses`);
     else if (usable) {
@@ -843,13 +875,18 @@ export async function doctor() {
     try {
       execFileSync('reg', ['query', REG_KEY], { stdio: 'ignore' });
       ok(`Registry key ${REG_KEY}`);
+      report.push('Windows registry entry: found');
     } catch {
       bad(`Registry key ${REG_KEY} missing`, `Re-run setup: ${SETUP_CMD}`);
+      report.push('Windows registry entry: missing');
     }
   }
 
   // 3. Firefox and the extension.
   const ff = firefoxStatus();
+  report.push(`Firefox process: ${ff.running === null ? 'unknown' : ff.running ? 'running' : 'not running'}`);
+  if (ff.sandbox)
+    report.push(`Firefox packaging: ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}`);
   if (ff.sandbox)
     warn(`Firefox is running as a ${ff.sandbox === 'snap' ? 'Snap' : 'Flatpak'}. Its sandbox may not let the extension start the helper`,
       'Install Firefox from Mozilla\'s .deb repository or tarball instead of the Snap/Flatpak: https://support.mozilla.org/kb/install-firefox-linux');
@@ -871,6 +908,8 @@ export async function doctor() {
       live.push(e);
       continue;
     }
+    if (share)
+      continue; // Registry cleanup belongs to the interactive command.
     for (const f of [file, !isWin && typeof e?.socket === 'string' && path.dirname(path.resolve(e.socket)) === path.resolve(browsersDir()) ? e.socket : null].filter(Boolean)) {
       try {
         fs.unlinkSync(f);
@@ -896,6 +935,14 @@ export async function doctor() {
       connected.push(s);
   }
   const withExt = connected.filter(s => s.extension);
+  if (share) {
+    report.push(`Firefox connection: ${withExt.length ? 'connected' : connected.length ? 'waiting for the extension' : live.length ? 'helper did not answer' : 'no running helper found'}`);
+    if (!withExt.length)
+      problems++;
+    for (const connection of withExt.slice(0, 4))
+      report.push(`Connected extension: ${reportVersion(connection.extension.version)}${connection.extension.full ? ' (Full build)' : ''}, helper: ${reportVersion(connection.helper?.version)}`);
+    return finish();
+  }
   if (withExt.length) {
     for (const s of withExt) {
       ok(`Firefox connected${s.browser?.name ? ` ("${s.browser.name}")` : ''}: extension ${s.extension.version || '?'}${s.extension.full ? ' (full build)' : ''}, helper ${s.helper?.version || '?'} (pid ${s.pid})`);

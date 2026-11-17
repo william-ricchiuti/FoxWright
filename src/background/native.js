@@ -9,6 +9,35 @@ let retryTimer = null;
 let retryMs = 2000;
 const chunks = new Map();
 let requestHandler = null;
+let supportsDoctor = false;
+let nextDoctorId = 1;
+let doctorRequest = null;
+
+function finishDoctor(output) {
+  if (doctorRequest) {
+    clearTimeout(doctorRequest.timer);
+    const { resolve } = doctorRequest;
+    doctorRequest = null;
+    resolve(output);
+  }
+}
+
+export function getDoctorReport() {
+  if (!port || !state.connected || !supportsDoctor)
+    return Promise.resolve(null);
+  if (doctorRequest)
+    return doctorRequest.promise;
+  const id = nextDoctorId++;
+  let complete;
+  const promise = new Promise(resolve => { complete = resolve; });
+  doctorRequest = { id, promise, resolve: complete, timer: setTimeout(() => finishDoctor(null), 9000) };
+  try {
+    send({ type: 'doctor-report', id });
+  } catch {
+    finishDoctor(null);
+  }
+  return promise;
+}
 
 export function onRequest(fn) {
   requestHandler = fn;
@@ -54,6 +83,8 @@ export function connect() {
     state.clients = 0;
     state.bidi = false;
     port = null;
+    supportsDoctor = false;
+    finishDoctor(null);
     chunks.clear();
     updateBadge();
     scheduleRetry();
@@ -104,7 +135,13 @@ async function onMessage(msg) {
       onMessage(full);
     return;
   }
+  if (msg.type === 'doctor-result') {
+    if (doctorRequest?.id === msg.id)
+      finishDoctor(typeof msg.output === 'string' && msg.output.length <= 1500 ? msg.output : null);
+    return;
+  }
   if (msg.type === 'hello-ack') {
+    supportsDoctor = msg.doctorReport === true;
     state.connected = true;
     state.connecting = false;
     state.lastError = msg.error || null;

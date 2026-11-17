@@ -1,7 +1,7 @@
 // Foxwright background (event page).
 /* global browser */
-import { state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
-import { connect, reconnectNow, onRequest, send } from './native.js';
+import { VERSION, FULL, state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
+import { connect, reconnectNow, onRequest, send, getDoctorReport } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
 import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite } from './tabs.js';
 import { handlePromptMessage, denyAllPrompts } from './prompt.js';
@@ -142,6 +142,29 @@ function isOwnPage(sender) {
   return sender?.id === browser.runtime.id && typeof sender.url === 'string' && OWN_PAGES.some(p => sender.url.startsWith(browser.runtime.getURL(p)));
 }
 
+async function openProblemReport() {
+  const [doctor, info] = await Promise.all([
+    getDoctorReport(),
+    browser.runtime.getBrowserInfo(),
+  ]);
+  const extension = `Foxwright ${VERSION}${FULL ? ' (Full build)' : ''}`;
+  const inputMode = state.bidi ? 'Trusted (WebDriver BiDi)' : 'Synthetic events';
+  const firefox = `Firefox ${info.version}`;
+  const fallback = state.connected
+    ? 'The connected helper could not provide a shareable doctor report.'
+    : 'The Foxwright helper was not connected when this report was opened.';
+  const report = doctor || `${fallback}\nRun npx foxwright-firefox@latest doctor --share in a terminal and paste the output here.`;
+  const url = new URL('https://github.com/william-ricchiuti/FoxWright/issues/new');
+  url.search = new URLSearchParams({
+    template: 'bug.yml',
+    versions: extension,
+    firefox,
+    doctor: `${extension}\n${firefox}\nInput mode: ${inputMode}\n\n${report}`,
+  }).toString();
+  await browser.tabs.create({ url: url.href });
+  return true;
+}
+
 async function pauseAgent() {
   state.paused = true;
   // Stop work already in progress, not just new commands: open permission windows are denied
@@ -170,6 +193,10 @@ browser.runtime.onMessage.addListener(async (msg, sender) => {
   if (!isOwnPage(sender))
     return undefined;
   switch (msg.kind) {
+    case 'report-problem':
+      if (sender.url === browser.runtime.getURL('popup/popup.html'))
+        return openProblemReport();
+      return undefined;
     case 'status':
       if (!state.connected && msg.initial)
         reconnectNow(); // only when the popup opens: its 1.5 s refresh must not reset the reconnect backoff
