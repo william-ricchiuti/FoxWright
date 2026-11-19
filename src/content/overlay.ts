@@ -31,7 +31,7 @@ const CSS = `
   display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px;
   background: #1b1714; color: #f6efe3; border-radius: 999px;
   font: 500 13px/1.2 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-  box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.06);
+  box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.2);
 }
 .pill.on { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 .pill.top { bottom: auto; top: 14px; }
@@ -43,6 +43,11 @@ const CSS = `
   background: #d64024; color: #fff; font-weight: 600; font-size: 12px; letter-spacing: .02em;
 }
 .pill button:hover { background: #ec5534; }
+.pill button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .glow.on { animation: none; }
+  .glow, .pill { transition: none; }
+}
 `;
 
 function foxMark(): SVGSVGElement {
