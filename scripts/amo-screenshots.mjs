@@ -44,7 +44,7 @@ const STUB = {
     version: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version, full: false, connected: true, lastError: null,
     clients: 1, bidi: false, paused: false, mode: 'ask', managedMode: false, managedAllowed: [],
     allowed: ['https://github.com', 'https://en.wikipedia.org'], sessionAllowed: ['https://www.saucedemo.com'], groupTabs: 2,
-    browserName: 'Work',
+    browserName: 'Work', helperVersion: JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version,
     recentActions: [
       { at: Date.now() - 4000, text: 'Opens the notifications filter', own: true },
       { at: Date.now() - 9000, text: 'Typed 12 characters', own: false },
@@ -55,7 +55,9 @@ const STUB = {
 const stub = (page) => `window.close = () => {};
 window.browser = { runtime: { sendMessage: async (m) => ${page === 'prompt'
   ? `(m.kind === 'prompt-details' ? ${JSON.stringify(STUB.prompt)} : new Promise(() => {}))`
-  : `(${JSON.stringify(STUB.status)})`} } };`;
+  : `(${JSON.stringify(STUB.status)})`},
+  getPlatformInfo: async () => ({ os: 'mac' }) },
+  tabs: { create: async () => {} } };`;
 for (const page of ['prompt', 'popup']) {
   fs.writeFileSync(path.join(stubDir, page, 'stub.js'), stub(page));
   const html = path.join(stubDir, page, `${page}.html`);
@@ -80,8 +82,9 @@ async function renderUi(page, width, height) {
   await d.bidi('browsingContext.close', { context });
   return file;
 }
-const promptPng = await renderUi('prompt', 500, 360);
-const popupPng = await renderUi('popup', 360, 750); // tall enough for the action list and the Pause button
+// The size of the real window's page area: src/background/prompt.js opens it at 520x410 with a title bar.
+const promptPng = await renderUi('prompt', 520, 374);
+const popupPng = await renderUi('popup', 340, 750); // tall enough for the action list and the Pause button
 
 // The real agent tab: open the fixture page, approving it in the real permission window.
 const nav = h.call('navigate', { tabId, url });
