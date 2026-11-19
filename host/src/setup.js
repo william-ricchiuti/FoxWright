@@ -17,12 +17,16 @@ const STORE_URL = 'https://addons.mozilla.org/firefox/addon/foxwright/';
 const CLIENTS_URL = 'https://github.com/william-ricchiuti/FoxWright/blob/main/docs/CLIENTS.md';
 const SETUP_CMD = 'npx foxwright-firefox setup';
 const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
+// Colour only on a terminal, and never with NO_COLOR (https://no-color.org): AI agents, logs and
+// pasted output get plain text instead of escape codes.
+const color = !!process.stdout.isTTY && !process.env.NO_COLOR;
+const sgr = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
 const c = {
-  ok: (s) => `\x1b[32m✓\x1b[0m ${s}`,
-  bad: (s) => `\x1b[31m✗\x1b[0m ${s}`,
-  warn: (s) => `\x1b[33m!\x1b[0m ${s}`,
-  b: (s) => `\x1b[1m${s}\x1b[0m`,
-  dim: (s) => `\x1b[2m${s}\x1b[0m`,
+  ok: (s) => `${sgr(32, '✓')} ${s}`,
+  bad: (s) => `${sgr(31, '✗')} ${s}`,
+  warn: (s) => `${sgr(33, '!')} ${s}`,
+  b: (s) => sgr(1, s),
+  dim: (s) => sgr(2, s),
 };
 
 function appDir() {
