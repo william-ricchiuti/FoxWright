@@ -1040,8 +1040,11 @@ function conseqText(c) {
  */
 async function confirmAction(tab, c, summary) {
   const a = await askUser({ type: 'action', origin: c.origin, tabTitle: tab.title, element: { role: c.role, name: c.name, reason: c.reason }, summary: cleanSummary(summary) });
-  if (a === 'once')
+  if (a === 'once') {
+    // The window can stay open for minutes: the user may have dragged the tab out of the group.
+    await requireTab(tab.id);
     return;
+  }
   if (a === 'timeout')
     throw new Error(`Waiting for the user to confirm this action on ${c.origin} (${conseqText(c)}) timed out. Ask the user to answer the Foxwright window, then try again.`);
   throw new Error(`The user did not allow this action on ${c.origin}: ${conseqText(c)}. Foxwright asks before consequential actions because the user turned that on. Do not retry it unless the user asks you to.`);
@@ -1591,6 +1594,7 @@ export const tools = {
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths || names }) : 'once';
     if (ok !== 'once')
       throw new Error(uploadRefusal(ok));
+    await requireTab(tab.id); // still in the group after the user answered
     const r = await sendContent(tab.id, frameId, 'upload', { ref: args.ref, x, y, files: args.files });
     return text(`Attached ${r.files.join(', ')} to ${r.target}.${(r.notes || []).map(n => '\n' + n).join('')}`);
   },
@@ -1860,6 +1864,7 @@ export const tools = {
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths }) : 'once';
     if (ok !== 'once')
       throw new Error(uploadRefusal(ok));
+    await requireTab(tab.id); // still in the group after the user answered
     const token = crypto.randomUUID();
     approvedUploads.set(token, { tabId: tab.id, frameId, origin, ref: args.ref, x, y, count: args.paths.length, at: Date.now() });
     return { data: { token } };

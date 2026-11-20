@@ -366,6 +366,32 @@ await test('confirm before consequential actions also covers: message boxes, Ctr
   }
 });
 
+await test('confirm before sending: a tab dragged out of the group while the window is open is not acted on', async () => {
+  if (!(await status()).confirmActions)
+    await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
+  for (let i = 0; i < 20 && !(await status()).confirmActions; i++)
+    await sleep(100);
+  const gid = await ext(`return (await browser.tabs.get(${tabId})).groupId;`);
+  // A second tab keeps the group alive while this one is out of it.
+  const keep = tabIdOf((await h.call('tabs_create_mcp', {})).text.replace(/tab (\d+)/, 'tabId $1'));
+  try {
+    expect(!(await noWindow(h.call('navigate', { tabId, url: `${S}/consequence.html?ungroup` }))).isError, 'navigate');
+    const call = h.call('computer', { tabId, action: 'left_click', ref: await refFor('Send message') });
+    const w = await d.promptWindow(15000);
+    await ext(`await browser.tabs.ungroup(${tabId}); return true;`);
+    await d.answer('once', w);
+    const r = await call;
+    expect(r.isError && /not in the Foxwright tab group/.test(r.text), r.text);
+    const log = await ext(`const [x] = await browser.scripting.executeScript({ target: { tabId: ${tabId} }, func: () => document.getElementById('log').textContent }); return x.result;`);
+    expect(!/SENT/.test(log), 'the click went through on a tab the user took back: ' + log);
+  } finally {
+    await ext(`await browser.tabs.group({ tabIds: [${tabId}], groupId: ${gid} }); return true;`).catch(() => {});
+    await h.call('tabs_close_mcp', { tabId: keep });
+    await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
+    await sleep(300);
+  }
+});
+
 await test('screenshot: a page that moves to another unapproved site while the permission window is open is not captured', async () => {
   const X = `http://b.test:${P2}`, Y = `http://c.test:${P2}`;
   const y = `${Y}/basic.html?moved`;
