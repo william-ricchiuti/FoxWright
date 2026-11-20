@@ -181,7 +181,10 @@ const handlers: Record<string, (args: any) => any> = {
   scroll: (a) => input.scroll(a),
   scrollTo: (a) => input.scrollTo(a),
   drag: (a) => input.drag(a),
-  formInput: (a) => guardForm(a) || input.formInput(a),
+  formInput: (a) => guardForm(a) || input.formInput(a, a.guard ? (opt: Element) => {
+    const c = clickConsequence(opt, hereOrigin());
+    return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
+  } : undefined),
   upload: (a) => input.uploadFiles(a),
   refPoint: (a) => {
     const r = input.refPoint(a);

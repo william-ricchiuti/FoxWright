@@ -345,6 +345,8 @@ await test('confirm before consequential actions also covers: message boxes, Ctr
     await ask('form_input on a switch named Publish post', { ref: await refFor('Publish post'), value: true }, /Publish post/, 'form_input');
     // form_input on a custom combobox clicks the matching option; in a comment editor, a line break is Enter.
     await ask('form_input choosing "Delete thread" in a combobox', { ref: await refFor('Choose an action'), value: 'Delete thread' }, /Delete thread/, 'form_input');
+    // The option actually picked counts, not the words the agent sent ("Del" picks "Delete thread").
+    await ask('form_input "Del" in a combobox, which picks "Delete thread"', { ref: await refFor('Choose an action'), value: 'Del' }, /Delete thread/, 'form_input');
     await ask('form_input with a line break in a comment editor', { ref: await refFor('Write a comment'), value: 'hello\nthere' }, /usually sends/, 'form_input');
     // A menu: arrow keys move the highlight, so Enter after them can't be judged in advance...
     expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Row actions')) }))).isError, 'focus menu');

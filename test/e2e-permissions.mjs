@@ -76,7 +76,8 @@ await test('file uploads need a human confirmation', async () => {
   await sleep(1500);
   snap('upload-window');
   const r = await pending;
-  expect(r.isError && /did not approve/.test(r.text), r.text);
+  // Nobody answers the window here: the agent is told it timed out and to ask the user.
+  expect(r.isError && /timed out/.test(r.text) && /Ask them/.test(r.text), r.text);
 });
 
 await test('credential files are refused outright', async () => {

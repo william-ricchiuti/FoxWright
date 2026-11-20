@@ -467,8 +467,12 @@ async function trustedComputerInner(a, st) {
           const all = Array.from({ length: times }, () => combos).flat();
           progress.total = all.length;
           for (let i = 0; i < all.length; i++) {
-            if (i > 0)
-              await helper.call('_focus', { tabId: a.tabId, action: 'key', text: all[i], action_summary: a.action_summary });
+            if (i > 0) {
+              const g = (await helper.call('_focus', { tabId: a.tabId, action: 'key', text: all[i], action_summary: a.action_summary }))?.data || { frameId: 0 };
+              // Focus moved into another frame: the checks were for that one, not where the keys go.
+              if ((g.frameId || 0) !== (f.frameId || 0))
+                throw Object.assign(new Error(`Stopped pressing keys after ${i} of ${all.length}: focus moved into another frame. Check the page (read_page or a screenshot) before continuing.`), { fromHelper: true });
+            }
             await send(() => bidi.keys(ctx, [all[i]], 1, guard, {}));
             progress.sent = i + 1;
           }

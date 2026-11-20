@@ -1228,8 +1228,8 @@ export async function drag(args: { startX: number; startY: number; x: number; y:
 
 // ---------- form_input ----------
 
-function visibleOptions(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="menuitemradio"]')).filter(o => {
+function visibleOptions(root: ParentNode = document): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('[role="option"], [role="menuitem"], [role="menuitemradio"]')).filter(o => {
     const r = o.getBoundingClientRect();
     return r.width > 0 && r.height > 0 && getComputedStyle(o).visibility !== 'hidden' && o.getAttribute('aria-disabled') !== 'true';
   });
@@ -1239,11 +1239,25 @@ function optionText(o: HTMLElement) {
   return (o.getAttribute('aria-label') || o.innerText || o.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
-async function pickOption(value: string, timeoutMs = 2500): Promise<HTMLElement | null> {
+/** The lists a combobox says it controls (aria-controls / aria-owns), on it or on its focused input. */
+function ownLists(combo: Element | null): Element[] {
+  const ids = new Set<string>();
+  for (const e of [combo, deepActiveElement()])
+    for (const a of ['aria-controls', 'aria-owns'])
+      for (const id of (e?.getAttribute(a) || '').split(/\s+/).filter(Boolean))
+        ids.add(id);
+  return [...ids].map(id => document.getElementById(id)).filter((x): x is HTMLElement => !!x);
+}
+
+async function pickOption(value: string, combo: Element | null = null, timeoutMs = 2500): Promise<HTMLElement | null> {
   const want = value.trim().toLowerCase();
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
-    const opts = visibleOptions();
+    // Only the combobox's own list when it names one: an unrelated menu elsewhere on the page
+    // (a row's "Delete row") must not be clicked because its text happens to match.
+    const lists = ownLists(combo);
+    const scoped = lists.flatMap(l => visibleOptions(l));
+    const opts = lists.length ? scoped : visibleOptions().sort((a, b) => Number(a.getAttribute('role') !== 'option') - Number(b.getAttribute('role') !== 'option'));
     const exact = opts.find(o => optionText(o).toLowerCase() === want);
     const prefix = opts.find(o => optionText(o).toLowerCase().startsWith(want));
     const contains = opts.find(o => optionText(o).toLowerCase().includes(want));
@@ -1262,7 +1276,7 @@ function clickCenter(el: Element) {
 }
 
 /** Custom comboboxes (MUI, react-select, Radix, Headless UI...): open, type, and click the matching option. */
-async function setCombobox(el: HTMLElement, value: string): Promise<any> {
+async function setCombobox(el: HTMLElement, value: string, check?: (opt: Element) => any): Promise<any> {
   const notes: string[] = [];
   clickCenter(el);
   await tick();
@@ -1272,8 +1286,12 @@ async function setCombobox(el: HTMLElement, value: string): Promise<any> {
     document.execCommand('delete');
     await typeText({ text: value });
   }
-  const opt = await pickOption(value);
+  const opt = await pickOption(value, el);
   if (opt) {
+    // Confirm-before-sending judges the option actually found ("thread" can pick "Delete thread").
+    const stop = check?.(opt);
+    if (stop)
+      return stop;
     const label = optionText(opt);
     clickCenter(opt);
     await tick();
@@ -1335,7 +1353,7 @@ async function setRichText(el: HTMLElement, text: string): Promise<any> {
   return { target: describe(host), value: valueOf(host), notes };
 }
 
-export async function formInput(args: { ref: string; value: string | boolean | number | string[] }): Promise<any> {
+export async function formInput(args: { ref: string; value: string | boolean | number | string[] }, check?: (opt: Element) => any): Promise<any> {
   const el = resolveRef(args.ref) as HTMLElement;
   const v = args.value;
   el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
@@ -1345,7 +1363,7 @@ export async function formInput(args: { ref: string; value: string | boolean | n
     || (el instanceof HTMLInputElement && (el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox'))
     || (el instanceof HTMLButtonElement && el.getAttribute('aria-haspopup') === 'listbox');
   if (isCustomCombo && typeof v !== 'boolean')
-    return setCombobox(el, String(v));
+    return setCombobox(el, String(v), check);
 
   if (el instanceof HTMLSelectElement) {
     const opts = Array.from(el.options);

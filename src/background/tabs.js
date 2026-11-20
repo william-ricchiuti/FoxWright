@@ -684,6 +684,7 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
     await ensureFramePermission(await browser.tabs.get(tabId), f.frameId);
     await ensureContent(tabId, f.frameId);
     const next = { ...args, ...(f.args || {}) };
+    delete next.readOnlyKeys; // decided again for the frame's own site, which may have full access
     if (f.x !== undefined) {
       next.x = f.x;
       next.y = f.y;

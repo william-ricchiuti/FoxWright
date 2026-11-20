@@ -695,12 +695,22 @@ async function zoom(tab, region, scaleArg) {
 /** True for patterns like (a+)+ or (a|aa)*: a repeated group containing a repeat or alternatives,
  *  which can freeze the extension for minutes on the wrong input. */
 function slowRegex(src) {
-  let s = src.replace(/\\./g, 'x').replace(/\[[^\]]*\]/g, 'x');
-  // Three or more unbounded repeats in one alternative (a+a+a+$, .*.*.*x) backtrack in cubic or
-  // worse time on a long non-matching message, freezing the background page (and Stop) as well.
-  for (const branch of s.replace(/[()]/g, '').split('|'))
-    if ((branch.match(/[+*]|\{\d*,\}/g) || []).length > 2)
+  // Each distinct escape or [class] becomes its own placeholder letter, so \w+\s+ stay different atoms.
+  const atoms = new Map();
+  const atom = (t) => {
+    if (!atoms.has(t))
+      atoms.set(t, String.fromCharCode(0xe000 + atoms.size));
+    return atoms.get(t);
+  };
+  let s = src.replace(/\[(?:\\.|[^\]])*\]|\\./g, atom);
+  // Two unbounded repeats of the same thing side by side (a+a+, x*x+), or three of "." (.*.*.*,
+  // .*a.*b.*c), backtrack in polynomial-or-worse time on a long message that doesn't match,
+  // freezing the background page (and Stop) as well. Runs with a fixed separator (\d+-\d+-\d+) are fine.
+  for (const branch of s.replace(/[()]/g, '').split('|')) {
+    const q = branch.replace(/\{\d*,\}/g, '*');
+    if (/(.)[+*]\??\1[+*]/.test(q) || (q.match(/\.[+*]/g) || []).length > 2)
       return true;
+  }
   for (let i = 0; i < 100; i++) {
     const m = /\(([^()]*)\)([+*]|\{\d*,?\d*\})?/.exec(s);
     if (!m)
@@ -1070,6 +1080,17 @@ function uploadRefusal(answer) {
   return answer === 'timeout'
     ? 'Waiting for the user to approve the upload timed out. Ask them to answer the Foxwright window, then call file_upload again.'
     : 'The user declined this upload. Don\'t retry it unless the user asks you to.';
+}
+
+/**
+ * The origin a trusted action was checked for. The frame may have navigated during the checks
+ * (a permission window can stay open for minutes): then refuse rather than approve the new site.
+ */
+async function pinnedOrigin(tabId, frameId, checked) {
+  const now = await frameOriginOf(tabId, frameId).catch(() => null);
+  if (!checked || now !== checked)
+    throw new Error(`The frame changed from ${checked || 'an unknown site'} to ${now || 'another page'} while Foxwright was checking this action, so nothing was sent. Check the page (read_page or a screenshot) and try again.`);
+  return checked;
 }
 
 /** Same consequential target (role, name and reason), as the content script's sameConsequence. */
@@ -1505,6 +1526,9 @@ export const tools = {
 
   async read_console_messages(args) {
     const tab = await tabForPageTool(args);
+    // Check the pattern before anything else: with clear: true a refused call must not lose the messages.
+    if (args.pattern && (String(args.pattern).length > 300 || slowRegex(String(args.pattern))))
+      throw new Error('That pattern could take very long to evaluate (a repeated group that contains a repeat or alternatives, or more than two * or + in a row of alternatives). Use a simpler pattern, e.g. plain words or "word1|word2".');
     const hooked = await ensureConsoleHook(tab.id);
     const entries = await sendContent(tab.id, 0, 'console', { clear: !!args.clear });
     let list = entries;
@@ -1512,8 +1536,6 @@ export const tools = {
       list = list.filter(e => e.level === 'error' || e.level === 'exception');
     if (args.pattern) {
       let re;
-      if (String(args.pattern).length > 300 || slowRegex(String(args.pattern)))
-        throw new Error('That pattern could take very long to evaluate (a repeated group that contains a repeat or alternatives, or more than two * or + in a row of alternatives). Use a simpler pattern, e.g. plain words or "word1|word2".');
       try {
         re = new RegExp(args.pattern, 'i');
       } catch {
@@ -1624,6 +1646,7 @@ export const tools = {
     if (!p)
       return { data: null };
     let frameId = frameIdFromPrefix(tab.id, p.prefix);
+    const checked = await frameOriginOf(tab.id, frameId).catch(() => null); // the site the checks below are about
     if (act)
       await ensureFrameLevel(tab.id, frameId, 'full');
     // Same check as a synthetic click, made on the element the trusted click will land on.
@@ -1652,7 +1675,7 @@ export const tools = {
         shot = [Math.round((p.x + o.x) * s), Math.round((p.y + o.y) * s)];
     } catch { /* not needed for input */ }
     // The site this action was approved for, so trusted input can check the frame still shows it.
-    const origin = await frameOriginOf(tab.id, frameId).catch(() => null);
+    const origin = await pinnedOrigin(tab.id, frameId, checked);
     return { data: { x: p.x, y: p.y, target: p.target, partOf: p.partOf, draggable: !!p.draggable, frameId, shot, origin } };
   },
 
@@ -1672,6 +1695,7 @@ export const tools = {
     const guard = state.confirmActions && !reading && (args.action === 'type' || args.action === 'key') ? { action: args.action, text: String(args.text ?? ''), repeat: args.repeat } : undefined;
     let f = await sendContent(tab.id, 0, 'focusInfo', { guard, waitEditable: !!args.forType });
     const frameId = frameIdFromPrefix(tab.id, f.prefix);
+    const checked = await frameOriginOf(tab.id, frameId).catch(() => null);
     if (!reading || f.control)
       await ensureFrameLevel(tab.id, frameId, 'full');
     if (f.conseq) {
@@ -1682,7 +1706,7 @@ export const tools = {
         throw new Error(`Focus moved while the user was confirming "${f.conseq.name || f.conseq.role}", so Foxwright didn't ${args.action === 'type' ? 'type' : 'press the keys'}. Check the page and try again.`);
       f = { ...f, target: again.target, editable: again.editable };
     }
-    const origin = await frameOriginOf(tab.id, frameId).catch(() => null);
+    const origin = await pinnedOrigin(tab.id, frameId, checked);
     // Reading keys on a read-only site: the helper sends them one at a time and asks again before
     // each, because the page may move focus onto a form control part-way.
     const readOnlyKeys = reading && !f.control && levelOf(origin) !== 'full';
