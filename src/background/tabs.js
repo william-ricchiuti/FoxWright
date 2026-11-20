@@ -385,7 +385,10 @@ async function upgradeOrigin(origin, tabTitle) {
     return;
   }
   if (answer === 'deny' || answer === 'dismissed') {
-    upgradeDenied.add(origin);
+    // Stop answers every open window with "deny": that's not the user declining this site, so
+    // don't stop asking after they resume.
+    if (!state.paused)
+      upgradeDenied.add(origin);
     throw readOnlyError(origin, true);
   }
   throw new Error(`${origin} is approved for reading only, and waiting for the user to allow clicking and typing there timed out. Ask the user to answer the Foxwright window, then try again.`);
@@ -654,6 +657,8 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
     const f = await sendContent(tabId, frameId, 'focusInfo', {}, 5000, hops);
     if (f?.control)
       await ensureFrameLevel(tabId, frameIdFromPrefix(tabId, f.prefix), 'full');
+    else
+      args = { ...args, readOnlyKeys: true }; // the page may move focus onto a control part-way: check before each key
   }
   const msg = { foxwright: true, cmd, args, prefix, expectOrigin };
   let r;

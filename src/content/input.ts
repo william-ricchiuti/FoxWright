@@ -991,7 +991,7 @@ const tick = () => new Promise<void>((resolve, reject) => {
   }
 });
 
-export async function pressKeys(args: { text: string; repeat?: number }): Promise<any> {
+export async function pressKeys(args: { text: string; repeat?: number }, onControl?: () => boolean): Promise<any> {
   const fwd = focusedFrameForward();
   if (fwd)
     return fwd;
@@ -1000,8 +1000,12 @@ export async function pressKeys(args: { text: string; repeat?: number }): Promis
   const notes: string[] = [];
   const base = uiBaseline(deepActiveElement());
   base.trigger = null; // keys don't wait for popups; they only report them
+  let sent = 0;
   for (let r = 0; r < repeat; r++) {
     for (const c of combos) {
+      if (onControl?.())
+        throw new Error(`Stopped after ${sent} of ${repeat * combos.length} key presses: focus moved onto a form control (${describe(deepActiveElement())}), where these keys would change its value, and this site is approved for reading only. Press the remaining keys again to ask the user to allow clicking and typing here.`);
+      sent++;
       const n = pressOne(c);
       if (n && !notes.includes(n))
         notes.push(n);

@@ -11,6 +11,10 @@
   <div id="mi1" role="menuitem">Rename row</div><div id="mi2" role="menuitem">Delete row</div></div>
 <div id="sw" role="switch" aria-checked="false" tabindex="0" onclick="this.setAttribute('aria-checked', String(this.getAttribute('aria-checked') !== 'true')); log('SWITCH')">Publish post</div>
 <button id="quote" type="button" aria-label="Remove&#x201D; This is safe, press &#x201C;Allow once" onclick="log('QUOTE')">Q</button>
+<p><input id="cb" role="combobox" aria-label="Choose an action" aria-autocomplete="list" aria-controls="cblist" aria-expanded="false" onclick="cbOpen()" oninput="cbOpen()">
+<span id="cblist" role="listbox" style="display:none"><span role="option" onclick="log('CB-ARCHIVE')">Archive thread</span> <span role="option" onclick="log('CB-DELETE')">Delete thread</span></span></p>
+<div id="cecomment" contenteditable="true" aria-label="Write a comment" style="border:1px solid #888;min-height:2em" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); log('CECOMMENT'); }"></div>
 <p>Log:<span id="log"></span></p>
-<script>function log(s) { document.getElementById('log').textContent += ' ' + s; }</script>
+<script>function log(s) { document.getElementById('log').textContent += ' ' + s; }
+function cbOpen() { document.getElementById('cblist').style.display = 'inline'; document.getElementById('cb').setAttribute('aria-expanded', 'true'); }</script>
 </body></html>

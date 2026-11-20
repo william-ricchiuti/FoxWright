@@ -200,6 +200,34 @@ await test('policy "allowedReadOnly": readable without a window, acting asks to 
   expect(s.managedReadOnly.includes(LRO), JSON.stringify(s.managedReadOnly));
 });
 
+const RK = `http://localhost:${P3}`; // read-only, this session: keys and Stop
+await test('read-only site: reading keys stop when the page moves focus onto a form control part-way', async () => {
+  const nav = await withWindow(h.call('navigate', { tabId, url: `${RK}/readonly-keys.html` }), 'once', { readOnly: true });
+  expect(!nav.r.isError, nav.r.text);
+  // Focus starts on a button (reading keys allowed); Escape moves it to the select, where ArrowDown would change it.
+  const r = await noWindow(h.call('computer', { tabId, action: 'key', text: 'Escape ArrowDown ArrowDown' }));
+  expect(r.isError && /focus moved onto a form control/.test(r.text) && /reading only/.test(r.text), r.text);
+  expect(/Sort: one/.test(await page()), 'the select changed on a read-only site:\n' + (await page()).slice(-300));
+});
+
+await test('read-only site: Stop during the "allow clicking?" question does not count as the user declining', async () => {
+  const ref = await refFor('Show more');
+  const call = h.call('computer', { tabId, action: 'left_click', ref });
+  await d.promptWindow(15000);
+  await ext(`return browser.runtime.sendMessage({ kind: 'pause' });`);
+  let r;
+  try {
+    r = await call;
+  } finally {
+    await ext(`return browser.runtime.sendMessage({ kind: 'resume' });`);
+  }
+  expect(r.isError && /paused/.test(r.text), 'after Stop: ' + r.text);
+  // After Resume, acting asks again (it used to fail at once with "the user declined").
+  const again = await withWindow(h.call('computer', { tabId, action: 'left_click', ref: await refFor('Show more') }), 'deny');
+  expect(again.r.isError && /reading only/.test(again.r.text), again.r.text);
+  expect(!/MORE/.test(logOf(await page())), 'the read-only page was clicked');
+});
+
 await test('embedded frame approved read-only: shown to the agent, but clicking in it asks and Deny refuses', async () => {
   const FR = `http://127.0.0.1:${P1}`;
   const nav = await withWindow(h.call('navigate', { tabId, url: `http://localhost:${P2}/embed.html` }), 'once');
@@ -315,6 +343,9 @@ await test('confirm before consequential actions also covers: message boxes, Ctr
       console.log('      (the label has no ref in the outline: not clicked)');
     // A switch pressed through form_input.
     await ask('form_input on a switch named Publish post', { ref: await refFor('Publish post'), value: true }, /Publish post/, 'form_input');
+    // form_input on a custom combobox clicks the matching option; in a comment editor, a line break is Enter.
+    await ask('form_input choosing "Delete thread" in a combobox', { ref: await refFor('Choose an action'), value: 'Delete thread' }, /Delete thread/, 'form_input');
+    await ask('form_input with a line break in a comment editor', { ref: await refFor('Write a comment'), value: 'hello\nthere' }, /usually sends/, 'form_input');
     // A menu: arrow keys move the highlight, so Enter after them can't be judged in advance...
     expect(!(await noWindow(h.call('computer', { tabId, ...click(await refFor('Row actions')) }))).isError, 'focus menu');
     await ask('arrow keys then Enter in a menu', { action: 'key', text: 'Down Enter' }, /moving focus/);
@@ -326,10 +357,37 @@ await test('confirm before consequential actions also covers: message boxes, Ctr
     expect((q.element.match(/[\u201c\u201d"]/g) || []).length === 2, 'quotation marks from the page reached the window: ' + q.element);
     const log = logOf(await page());
     expect(!log, 'something went through after Deny: ' + log);
+    // A harmless choice still goes through without a question.
+    expect(!(await noWindow(h.call('form_input', { tabId, ref: await refFor('Choose an action'), value: 'Archive thread' }))).isError, 'Archive thread');
+    expect(/CB-ARCHIVE/.test(logOf(await page())), 'the combobox option was not chosen: ' + logOf(await page()));
   } finally {
     await d.evalIn(await popupCtx(), `document.getElementById('confirm-actions').click()`);
     await sleep(300);
   }
+});
+
+await test('screenshot: a page that moves to another unapproved site while the permission window is open is not captured', async () => {
+  const X = `http://b.test:${P2}`, Y = `http://c.test:${P2}`;
+  const y = `${Y}/basic.html?moved`;
+  const x = `${X}/goto.html?ms=2500&to=${encodeURIComponent(y)}`;
+  // An approved page sends the tab on to X (unapproved), which moves on to Y (unapproved) by itself.
+  expect(!(await noWindow(h.call('navigate', { tabId, url: `${S}/goto.html?ms=200&to=${encodeURIComponent(x)}` }))).isError, 'navigate');
+  await sleep(800);
+  const call = h.call('computer', { tabId, action: 'screenshot' });
+  const w = await d.promptWindow(15000);
+  const info = await d.readWindow(w);
+  expect(info.origin === X, 'expected a window for ' + X + ': ' + JSON.stringify(info));
+  // Wait until the tab shows Y, then approve X.
+  for (let i = 0; i < 60; i++) {
+    const ctx = (await d.contexts()).find(c => c.url.startsWith(Y));
+    if (ctx)
+      break;
+    await sleep(100);
+  }
+  await d.answer('once', w);
+  const r = await call;
+  expect(r.isError && !r.images?.length, 'the screenshot showed a site nobody approved: ' + (r.isError ? '' : 'SUCCESS ') + r.text.slice(0, 200));
+  await noWindow(h.call('navigate', { tabId, url: `${S}/consequence.html` }));
 });
 
 await test('JSON re-fetch (get_page_text) never follows a redirect', async () => {
@@ -478,6 +536,14 @@ await test('trusted input: a read-only site can be scrolled but not clicked (the
   const k = await T.call('computer', { tabId: ttab, action: 'type', text: 'x' });
   expect(k.isError && /reading only/.test(k.text), k.text);
   expect(/Clicks: 0/.test(await tpage()), 'the read-only page was clicked');
+});
+
+await test('trusted input: reading keys on a read-only site stop when focus moves onto a form control', async () => {
+  expect(trusted, 'trusted input did not start');
+  expect(!(await T.call('navigate', { tabId: ttab, url: `${A}/readonly-keys.html` })).isError, 'navigate');
+  const r = await T.call('computer', { tabId: ttab, action: 'key', text: 'Escape ArrowDown ArrowDown' });
+  expect(r.isError && /reading only/.test(r.text), r.text);
+  expect(/Sort: one/.test(await tpage()), 'the select changed on a read-only site');
 });
 
 await test('trusted input with policy "confirmActions": message boxes, Ctrl+Enter, unlabelled and non-button controls wait for the person too', async () => {

@@ -317,6 +317,21 @@ async function main() {
     await nav('/basic.html');
   });
 
+  // Trusted input matches a frame to its WebDriver BiDi context with a marker in the document; a page
+  // that copies the marker into another frame must not get the input sent there.
+  await test('typing into a frame whose page copies Foxwright\'s marker into another frame', async () => {
+    await nav('/hostile-marker.html');
+    await new Promise(r => setTimeout(r, 500));
+    const f = await call('find', { query: 'Field A' });
+    const ref = /textbox "Field A" \[ref=([^\]]+)\]/.exec(f.text)?.[1];
+    expect(ref, f.text);
+    await call('computer', { action: 'left_click', ref });
+    await call('computer', { action: 'type', text: 'only-a' });
+    const v = String(await js('window.values()'));
+    expect(/^"?\|only-a"?$/.test(v), `expected text only in frame A, frames B|A have: ${v}`);
+    await nav('/basic.html');
+  });
+
   await test('target=_blank link opens a new tab inside the Foxwright group', async () => {
     const { ref } = await refFor('Open page two in new tab', 'link');
     await call('computer', { action: 'left_click', ref });

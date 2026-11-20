@@ -238,6 +238,12 @@ export function typeConsequence(text: string, focused: Element | null, origin: s
   return /[\r\n]/.test(String(text || '')) ? enterConsequence(focused, origin, 'Enter') : null;
 }
 
+/** Choosing `value` from a custom list (form_input on a combobox) presses an option named that. */
+export function optionConsequence(value: string, origin: string): Consequence | null {
+  const name = clean(String(value ?? ''));
+  return WORDS.test(name) ? { role: 'option', name, reason: LABEL_REASON, origin } : null;
+}
+
 /** Same element as the one the person approved (role, name and reason unchanged)? */
 export function sameConsequence(a: Consequence | null, b: any): boolean {
   return !!a && !!b && a.role === b.role && a.name === b.name && a.reason === b.reason;

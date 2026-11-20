@@ -1,0 +1,5 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Foxwright test: moves on by itself</title></head><body>
+<h1>This page moves on by itself</h1>
+<p>After <code>?ms=</code> milliseconds it loads <code>?to=</code> (a page that changes site on its own, as sign-in redirects do).</p>
+<script>const q = new URLSearchParams(location.search); setTimeout(() => { location.href = q.get('to'); }, Number(q.get('ms') || 300));</script>
+</body></html>

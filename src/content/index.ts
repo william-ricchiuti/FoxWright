@@ -1,6 +1,6 @@
 // Foxwright content script: injected on demand into tabs the agent controls.
 import { takeSnapshot, findElements, setRefPrefix, getRefPrefix, resolveRef } from './snapshot';
-import { clickConsequence, keysConsequence, typeConsequence, sameConsequence } from './consequence';
+import { clickConsequence, keysConsequence, typeConsequence, optionConsequence, sameConsequence } from './consequence';
 import * as input from './input';
 import { pageText } from './text';
 import { waitCheck, uiAfter } from './wait';
@@ -147,11 +147,23 @@ function guardForm(a: any): any {
   if (!a.guard)
     return null;
   const el = resolveRef(a.ref);
-  if (!el || el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)
+  if (!el || el instanceof HTMLSelectElement)
     return null;
-  if (!['checkbox', 'switch', 'radio', 'menuitemcheckbox'].includes(el.getAttribute('role') || ''))
+  const value = Array.isArray(a.value) ? a.value.join(', ') : String(a.value ?? '');
+  // A custom combobox: form_input opens it and clicks the option matching the value.
+  const combo = (el.getAttribute('role') === 'combobox')
+    || (el instanceof HTMLInputElement && (el.getAttribute('aria-autocomplete') === 'list' || el.getAttribute('aria-haspopup') === 'listbox'))
+    || (el instanceof HTMLButtonElement && el.getAttribute('aria-haspopup') === 'listbox');
+  let c = null;
+  if (combo && typeof a.value !== 'boolean')
+    c = optionConsequence(value, hereOrigin()) || typeConsequence(value, el, hereOrigin());
+  // A rich-text editor gets Enter between lines, which sends in a chat or comment box.
+  else if ((el as HTMLElement).isContentEditable)
+    c = typeConsequence(value, el, hereOrigin());
+  else if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)
     return null;
-  const c = clickConsequence(el, hereOrigin());
+  else if (['checkbox', 'switch', 'radio', 'menuitemcheckbox'].includes(el.getAttribute('role') || ''))
+    c = clickConsequence(el, hereOrigin());
   return c && !sameConsequence(c, a.approved) ? { needsConfirm: c } : null;
 }
 
@@ -164,7 +176,8 @@ const handlers: Record<string, (args: any) => any> = {
   click: (a) => guardClick(a) || input.click(a),
   hover: (a) => input.hover(a),
   type: (a) => guardFocused(a, 'type') || input.typeText(a),
-  key: (a) => guardFocused(a, 'key') || input.pressKeys(a),
+  // On a read-only site, reading keys may not reach a form control that focus moves to part-way.
+  key: (a) => guardFocused(a, 'key') || input.pressKeys(a, a.readOnlyKeys ? () => isControl(input.deepActiveElement()) : undefined),
   scroll: (a) => input.scroll(a),
   scrollTo: (a) => input.scrollTo(a),
   drag: (a) => input.drag(a),

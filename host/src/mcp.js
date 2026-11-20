@@ -367,12 +367,16 @@ async function trustedComputerInner(a, st) {
   const approved = new Map(); // context -> origin
   const progress = {};
   let mark = 0;
-  const bind = async (ctx) => {
+  // expect: the origin the extension approved for this frame (_point/_focus), if it said.
+  const bind = async (ctx, expect) => {
     if (approved.has(ctx))
       return;
     const url = await bidi.currentUrl(ctx).catch(() => undefined);
     if (ctx === top && beforeUrl !== undefined && originOfUrl(url) !== originOfUrl(beforeUrl))
       throw moved(originOfUrl(url), originOfUrl(beforeUrl));
+    // A frame can navigate between the extension's check and here (another site loads into it).
+    if (expect && /^https?:/i.test(url || '') && originOfUrl(url) !== expect)
+      throw moved(originOfUrl(url), expect);
     approved.set(ctx, originOfUrl(url));
   };
   const VERB = { left_click: 'clicking', right_click: 'right-clicking', double_click: 'double-clicking', triple_click: 'triple-clicking', type: 'typing', key: 'pressing keys', scroll: 'scrolling', left_click_drag: 'dragging', hover: 'hovering' };
@@ -417,7 +421,7 @@ async function trustedComputerInner(a, st) {
       // The site check last, right before the click (one URL read per context).
       const armed = await arming;
       await bind(top);
-      await bind(p.context);
+      await bind(p.context, p.origin);
       await send(() => bidi.click(p.context, p.x, p.y, { button: a.action === 'right_click' ? 2 : 0, count, modifiers: a.modifiers }));
       const verb = { left_click: 'Clicked', right_click: 'Right-clicked', double_click: 'Double-clicked', triple_click: 'Triple-clicked' }[a.action];
       summary = `${verb} ${where(p)}.`;
@@ -448,14 +452,29 @@ async function trustedComputerInner(a, st) {
       const f = (await helper.call('_focus', { tabId: a.tabId, action: a.action, text: a.text, repeat: a.repeat, action_summary: a.action_summary, forType: a.action === 'type' }))?.data || { frameId: 0 };
       const ctx = f.frameId ? await bidi.contextFor(a.tabId, helper, f.frameId) : top;
       await bind(top);
-      await bind(ctx);
+      await bind(ctx, f.origin);
       if (a.action === 'type') {
         await send(() => bidi.type(ctx, a.text ?? '', guard, progress));
         summary = f.editable === false
           ? `Sent ${(a.text ?? '').length} key presses, but no text field was focused (focus is on ${f.target || 'the page'}), so nothing was typed into a field. Click the field first, then type.`
           : `Typed ${(a.text ?? '').length} characters into ${f.target || 'the focused element'}.${f.waited >= 0 ? ` (Waited ${f.waited} ms for focus to move into it first.)` : ''}`;
       } else {
-        await send(() => bidi.keys(ctx, String(a.text || '').trim().split(/\s+/).filter(Boolean), Math.max(1, Math.min(100, a.repeat || 1)), guard, progress));
+        const combos = String(a.text || '').trim().split(/\s+/).filter(Boolean);
+        const times = Math.max(1, Math.min(100, a.repeat || 1));
+        if (f.readOnlyKeys) {
+          // A read-only site: one key at a time, and the extension checks focus before each
+          // (on a form control it asks the user for full access, or refuses).
+          const all = Array.from({ length: times }, () => combos).flat();
+          progress.total = all.length;
+          for (let i = 0; i < all.length; i++) {
+            if (i > 0)
+              await helper.call('_focus', { tabId: a.tabId, action: 'key', text: all[i], action_summary: a.action_summary });
+            await send(() => bidi.keys(ctx, [all[i]], 1, guard, {}));
+            progress.sent = i + 1;
+          }
+        } else {
+          await send(() => bidi.keys(ctx, combos, times, guard, progress));
+        }
         summary = `Pressed ${a.text}${a.repeat > 1 ? ` x${a.repeat}` : ''} (focus was on ${f.target || 'the page'}).`;
       }
       break;
@@ -467,7 +486,7 @@ async function trustedComputerInner(a, st) {
       if (!p)
         return null;
       await bind(top);
-      await bind(p.context);
+      await bind(p.context, p.origin);
       const px = Math.max(1, Math.min(30, a.scroll_amount ?? 3)) * 100;
       const dir = a.scroll_direction || 'down';
       await send(() => bidi.scroll(p.context, p.x, p.y, dir === 'left' ? -px : dir === 'right' ? px : 0, dir === 'up' ? -px : dir === 'down' ? px : 0, guard));
