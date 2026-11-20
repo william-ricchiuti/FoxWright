@@ -630,7 +630,7 @@ export async function ensureContent(tabId, frameId = 0) {
       if (/json/.test(ct))
         throw Object.assign(new Error(`Tab ${tabId} shows a JSON response in Firefox's built-in JSON viewer, which extensions can't read or screenshot. ${doc.method === 'GET' ? 'get_page_text can re-fetch it.' : `It was the answer to a ${doc.method} request, so it can't be re-fetched.`} To read JSON pages directly, the user can set devtools.jsonview.enabled = false in about:config.`), { jsonViewer: doc.method === 'GET' });
       if (/pdf/.test(ct))
-        throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot.`);
+        throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot. Use get_page_text to read its text (it supports query and offset).`);
       throw new Error(`Tab ${tabId} is showing a Firefox error or internal page${t.title ? ` ("${t.title}")` : ''} for ${t.url}, which extensions can't read. The site may be down or unreachable; check the URL or try navigating again.`);
     }
     throw e;

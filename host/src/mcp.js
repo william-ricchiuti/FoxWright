@@ -647,8 +647,8 @@ export async function runMcp() {
   }, async () => call('tabs_create_mcp', {}));
 
   server.registerTool('tabs_close_mcp', {
-    description: 'Close a tab in the Foxwright tab group.',
-    inputSchema: { tabId },
+    description: 'Close a tab in the Foxwright tab group. tabId is required: close only tabs you opened, not ones the user shared with you.',
+    inputSchema: { tabId: numish(z.number()).describe('ID of the tab to close (from tabs_create_mcp or tabs_context_mcp).') },
   }, async (a) => call('tabs_close_mcp', a));
 
   // ---------- several Firefox profiles ----------
@@ -710,7 +710,7 @@ export async function runMcp() {
   });
 
   server.registerTool('navigate', {
-    description: 'Load a URL in a Foxwright tab, or go "back"/"forward" in its history. Waits for the page to load. If tabId is omitted, the first tab in the Foxwright group is used (created if needed).',
+    description: 'Load a URL in a Foxwright tab, or go "back"/"forward" in its history. Waits for the page to load. If tabId is omitted, the tab you used last is used (or the first tab in the Foxwright group, created if needed); "back" and "forward" need tabId.',
     inputSchema: {
       url: z.string().describe('URL to open (https:// is assumed if no scheme), or "back" / "forward".'),
       tabId: tabId.optional(),
@@ -742,7 +742,7 @@ export async function runMcp() {
       wait_for: z.string().optional().describe('Wait until this text is on the page, or an element like \'dialog\' or \'button "Save"\' (role and name as the outline prints them) exists, then read. Up to timeout; raise it for slow results.'),
       timeout: numish(z.number()).optional().describe('Seconds to wait for wait_for (default 5, max 30).'),
     },
-  }, async (a) => call('read_page', a, a.wait_for ? 60000 : undefined));
+  }, async (a) => call('read_page', a, a.wait_for ? 165000 : undefined));
 
   server.registerTool('find', {
     description: 'Find elements matching a short description (e.g. "search box", "add to cart button", "link to pricing"). Matches words against accessible names, roles, placeholders and link URLs. Returns up to 20 elements with refs and screenshot coordinates; also says when a match is inside a collapsed section that must be expanded first. With wait_for it first waits for something to appear (e.g. a dialog that opens after a click).',
@@ -757,7 +757,7 @@ export async function runMcp() {
     const query = a.query;
     if (!query)
       return errorResult('find needs a query, e.g. {"query": "search box"}.');
-    return call('find', { tabId: a.tabId, query, wait_for: a.wait_for, timeout: a.timeout }, a.wait_for ? 60000 : undefined);
+    return call('find', { tabId: a.tabId, query, wait_for: a.wait_for, timeout: a.timeout }, a.wait_for ? 165000 : undefined);
   });
 
   server.registerTool('form_input', {
@@ -823,7 +823,7 @@ Actions:
     } catch (e) {
       return errorResult(e);
     }
-    const r = await call('computer', a, a.action === 'wait' ? 50000 : 180000);
+    const r = await call('computer', a, a.action === 'wait' ? 165000 : 180000);
     if (!r.isError && ['screenshot', 'zoom'].includes(a.action))
       keepShot(r, a.tabId);
     if (!r.isError && !['screenshot', 'zoom'].includes(a.action))
@@ -836,8 +836,8 @@ Actions:
     inputSchema: {
       tabId,
       query: z.string().optional().describe('Only return paragraphs mentioning these words.'),
-      max_chars: z.number().optional().describe('Characters to return (default 20000, max 100000).'),
-      offset: z.number().optional().describe('Start position, for reading long pages in parts.'),
+      max_chars: numish(z.number()).optional().describe('Characters to return (default 20000, min 1000, max 100000).'),
+      offset: numish(z.number()).optional().describe('Start position, for reading long pages in parts.'),
     },
   }, async (a) => call('get_page_text', a));
 

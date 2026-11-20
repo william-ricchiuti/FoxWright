@@ -73,7 +73,10 @@ or add to `~/.codex/config.toml`:
 [mcp_servers.foxwright]
 command = "NODE"
 args = ["APP", "mcp"]
+tool_timeout_sec = 180
 ```
+
+**Set `tool_timeout_sec`.** Codex gives up on a tool call after 60 seconds by default, but Foxwright waits up to 2 minutes for you to answer its permission window. Without the longer timeout, an approval you give after a minute arrives after Codex has already reported a failure. `codex mcp add` doesn't set it: add the line under `[mcp_servers.foxwright]` in `~/.codex/config.toml` afterwards.
 
 In TOML on Windows, use single quotes so backslashes stay as they are: `command = 'C:\Program Files\nodejs\node.exe'`.
 
@@ -119,6 +122,21 @@ In Zed's `settings.json`, Foxwright goes under `"context_servers"`:
 }
 ```
 
+## OpenCode
+
+Add to `~/.config/opencode/opencode.json` (or an `opencode.json` in a project):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "foxwright": { "type": "local", "command": ["NODE", "APP", "mcp"], "enabled": true }
+  }
+}
+```
+
+OpenCode takes the command and its arguments as one list. This is the format the OpenCode evaluations used (OpenCode 1.19).
+
 ## Any other MCP app
 
 Foxwright is a local **stdio** MCP server: command `NODE`, arguments `APP mcp`, no environment variables needed. Most apps take the `"mcpServers"` entry shown for Claude Desktop.
@@ -126,8 +144,8 @@ Foxwright is a local **stdio** MCP server: command `NODE`, arguments `APP mcp`, 
 ## Checking and removing
 
 - `npx foxwright-firefox doctor` checks the helper, Firefox and the extension, and says what to fix.
-- `npx foxwright-firefox uninstall` removes the helper and the Claude Code and Claude Desktop entries. Remove the `foxwright` entry from the other apps above by hand.
+- `npx foxwright-firefox uninstall` removes the helper and the Claude Code and Claude Desktop entries. Remove the `foxwright` entry from the other apps above by hand: `codex mcp remove foxwright`, `gemini mcp remove --scope user foxwright`, or delete it from the app's settings file.
 
 ## Where these formats come from
 
-Checked against each app's own documentation on 2026-11-16: [Claude Desktop](https://modelcontextprotocol.io/docs/develop/connect-local-servers), [Cursor](https://cursor.com/docs/context/mcp), [Codex](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [Gemini CLI](https://geminicli.com/docs/tools/mcp-server/), [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration), [Zed](https://zed.dev/docs/ai/mcp). Windsurf's documentation now redirects to Devin's and doesn't show the file format on the page; the path above comes from [Devin's Windsurf plugin page](https://docs.devin.ai/windsurf/plugins/cascade/mcp) and wasn't tried in the app. None of these apps were run against Foxwright for this page except Claude Code and Codex (see the [evaluation reports](evaluations/0.8.0/README.md)).
+Checked against each app's own documentation on 2026-11-16: [Claude Desktop](https://modelcontextprotocol.io/docs/develop/connect-local-servers), [Cursor](https://cursor.com/docs/context/mcp), [Codex](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [Gemini CLI](https://geminicli.com/docs/tools/mcp-server/), [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration), [Zed](https://zed.dev/docs/ai/mcp). Windsurf's documentation now redirects to Devin's and doesn't show the file format on the page; the path above comes from [Devin's Windsurf plugin page](https://docs.devin.ai/windsurf/plugins/cascade/mcp) and wasn't tried in the app. None of these apps were run against Foxwright for this page except Claude Code, Codex and OpenCode (see the [evaluation reports](evaluations/0.8.0/README.md)).

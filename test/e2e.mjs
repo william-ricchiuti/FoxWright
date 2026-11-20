@@ -459,6 +459,11 @@ async function main() {
     expect(/Passages matching/.test(q.text) && /Favorite color/i.test(q.text), q.text);
     const p1 = await call('get_page_text', { max_chars: 1000 });
     expect(p1.text.length < 1400, 'page size not respected');
+    // A query of only short words ("EU", "UK", "AI") used to match nothing at all.
+    await nav('/page2.html?region=EU');
+    const short = await call('get_page_text', { query: 'EU' });
+    expect(/Passages matching/.test(short.text) && /region=EU/.test(short.text), short.text);
+    await nav('/basic.html');
   });
 
   await test('browser_batch runs several steps in one call', async () => {

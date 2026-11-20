@@ -177,6 +177,17 @@ await test('file_upload with an extension from before 0.8 (no _upload_ask) still
   expect(legacy?.files?.[0]?.base64 === b64 && /report\.txt/.test(legacy.paths?.[0]), JSON.stringify(legacy)?.slice(0, 200));
 });
 
+await test('tabs_close_mcp without tabId is refused before anything reaches Firefox (it would close a tab the agent may not own)', async () => {
+  let closed = false;
+  answer = async (tool) => {
+    if (tool === 'tabs_close_mcp')
+      closed = true;
+    return tool === '_status' ? STATUS : text(`ok ${tool}`);
+  };
+  const r = await call('tabs_close_mcp', {});
+  expect(r.isError && /tabId/.test(r.text) && !closed, r.text);
+});
+
 await client.close();
 await helper.stop();
 fs.rmSync(home, { recursive: true, force: true });

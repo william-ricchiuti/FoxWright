@@ -371,7 +371,7 @@ async function refetchTabDocument(tab, maxBytes) {
   // container or private tab would be read as a different identity; and a redirect could lead to
   // a site the user hasn't approved.
   if (tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default'))
-    throw new Error('This tab is in a Firefox container, and Foxwright can only download a document again with the default container\'s cookies, which could show a different account.');
+    throw new Error('This tab is in a Firefox container, and Foxwright can only download a document again with the default container\'s cookies, which could show a different account. Ask the user to open the document in a normal (non-container) tab in the Foxwright group, then call get_page_text there.');
   const doc = docTypes.get(tab.id);
   if (doc && doc.method && doc.method !== 'GET')
     throw new Error(`The document was the answer to a ${doc.method} request, so Foxwright can't download it again.`);
@@ -425,7 +425,7 @@ async function pdfText(tab) {
   } catch (e) {
     if (e instanceof PdfError)
       throw new Error(`Tab ${tab.id} shows a PDF that Foxwright can't turn into text: ${e.message}`);
-    throw new Error(`Tab ${tab.id} shows a PDF that Foxwright couldn't read (${e.message}). Take screenshots of the PDF viewer instead.`);
+    throw new Error(`Tab ${tab.id} shows a PDF that Foxwright couldn't read (${e.message}).`);
   }
 }
 
@@ -437,7 +437,11 @@ function pagedText(head, full, args, { preformatted = false, notes = [] } = {}) 
   const noteText = notes.length ? notes.join('\n') + '\n' : '';
   if (args.query) {
     // Return only the passages that mention the query words (cheap way to answer a question about a long page).
-    const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
+    const all = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    // Short words ("the", "of") are noise next to longer ones, but a query of only short words
+    // ("UK", "EU", "AI") must still match.
+    const long = all.filter(w => w.length > 2);
+    const words = long.length ? long : all;
     const paras = full.split(/\n+/).map(p => (preformatted ? p.trimEnd() : p.trim())).filter(p => p.trim());
     const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
     scored.sort((a, b) => b.s - a.s || a.i - b.i);
@@ -1058,6 +1062,13 @@ async function sendGuarded(tab, frameId, cmd, args, summary) {
   return r;
 }
 
+/** Why an upload didn't happen, and whether trying again makes sense. */
+function uploadRefusal(answer) {
+  return answer === 'timeout'
+    ? 'Waiting for the user to approve the upload timed out. Ask them to answer the Foxwright window, then call file_upload again.'
+    : 'The user declined this upload. Don\'t retry it unless the user asks you to.';
+}
+
 /** Same consequential target (role, name and reason), as the content script's sameConsequence. */
 function sameConseq(a, b) {
   return !!a && !!b && a.role === b.role && a.name === b.name && a.reason === b.reason;
@@ -1097,7 +1108,7 @@ export const tools = {
     let prefix = '';
     if (typeof tabId !== 'number') {
       if (args.url === 'back' || args.url === 'forward')
-        throw new Error('tabId is required for back/forward.');
+        throw new Error('navigate "back"/"forward" needs tabId: the tab whose history to use (tabs_context_mcp lists them).');
       const tabs = await ensureGroup(true);
       tabId = tabs[0].id;
       prefix = `(Using tab ${tabId} from the Foxwright group.)\n`;
@@ -1557,7 +1568,7 @@ export const tools = {
     const tab = await requireTab(args.tabId);
     const width = Math.round(args.width), height = Math.round(args.height);
     if (!(width > 100 && height > 100))
-      throw new Error('width and height must be positive pixel sizes.');
+      throw new Error('width and height must each be more than 100 pixels.');
     const w = await browser.windows.update(tab.windowId, { width, height, state: 'normal' });
     return text(`Resized window to ${w.width}x${w.height}.`);
   },
@@ -1579,7 +1590,7 @@ export const tools = {
     const names = args.files.map(f => `${f.name} (${Math.round((f.base64.length * 3) / 4 / 1024)} KB)`);
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths || names }) : 'once';
     if (ok !== 'once')
-      throw new Error('The user did not approve uploading these files.');
+      throw new Error(uploadRefusal(ok));
     const r = await sendContent(tab.id, frameId, 'upload', { ref: args.ref, x, y, files: args.files });
     return text(`Attached ${r.files.join(', ')} to ${r.target}.${(r.notes || []).map(n => '\n' + n).join('')}`);
   },
@@ -1848,7 +1859,7 @@ export const tools = {
     const origin = (await frameOriginOf(tab.id, frameId)) || originOf(tab.url) || tab.url;
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths }) : 'once';
     if (ok !== 'once')
-      throw new Error('The user did not approve uploading these files.');
+      throw new Error(uploadRefusal(ok));
     const token = crypto.randomUUID();
     approvedUploads.set(token, { tabId: tab.id, frameId, origin, ref: args.ref, x, y, count: args.paths.length, at: Date.now() });
     return { data: { token } };

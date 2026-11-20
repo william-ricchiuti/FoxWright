@@ -99,7 +99,7 @@ export function describeVersionMismatch(mine, helperV, extV) {
   if (olderMinor(helperV, mine))
     out.push(`The Foxwright helper Firefox is running (${helperV}) is older than this MCP server (${mine}). Tell the user to run \`${SETUP_LATEST}\` in a terminal; if this message comes back afterwards, restart Firefox.`);
   else if (olderMinor(mine, helperV) && !olderMinor(mine, extV))
-    out.push(`This MCP server (${mine}) is older than the installed Foxwright helper (${helperV}). Tell the user to restart this AI client (quit and reopen it) so it starts the updated MCP server; if its MCP settings name a fixed version, change that to foxwright-firefox@latest.`);
+    out.push(`This MCP server (${mine}) is older than the installed Foxwright helper (${helperV}). Tell the user to restart this AI client (quit and reopen it) so it starts the updated MCP server; if its MCP settings start "npx foxwright-firefox@<version>" with a fixed version, that version needs updating too.`);
   return out.length ? `Version note: ${out.join(' ')}` : null;
 }
 

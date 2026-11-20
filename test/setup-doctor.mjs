@@ -134,6 +134,9 @@ await test('setup writes a launcher that tries a stable Node path, then the exac
   for (const n of ['foxwright.json', 'zenko.json'])
     expect(JSON.parse(fs.readFileSync(path.join(main.nmDir, n), 'utf8')).path === main.launcher, n);
   expect(/Installed helper \d/.test(r.out), r.out);
+  // Codex stops waiting for a tool after 60 s, less than the 2-minute permission window.
+  expect(/tool_timeout_sec = 180/.test(r.out), 'setup should tell Codex users to raise tool_timeout_sec:\n' + r.out);
+  expect(/OpenCode:[^\n]*"type":"local"[^\n]*"command":\[/.test(r.out), 'setup should print the OpenCode entry:\n' + r.out);
 });
 
 await test('the launcher starts the helper; with the stable link gone it falls back to the exact path', () => {
