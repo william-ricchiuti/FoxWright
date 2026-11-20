@@ -308,6 +308,15 @@ async function main() {
     await pageHas('Sign up');
   });
 
+  // The load starts only after the page's beforeunload handler returns. Navigate used to give up
+  // after 500 ms and blame a "Leave page?" dialog (also seen with a brand-new tab on a slow CI Mac).
+  await test('navigate away from a page whose beforeunload handler is slow (no dialog)', async () => {
+    await nav('/busy.html?unload=1500');
+    const r = await h.call('navigate', { tabId, url: `${BASE}/page2.html?after-slow-unload` });
+    expect(!r.isError && /Navigated tab \d+ to .*page2\.html\?after-slow-unload/.test(r.text), r.text);
+    await nav('/basic.html');
+  });
+
   await test('target=_blank link opens a new tab inside the Foxwright group', async () => {
     const { ref } = await refFor('Open page two in new tab', 'link');
     await call('computer', { action: 'left_click', ref });

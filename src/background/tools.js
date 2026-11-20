@@ -1054,10 +1054,15 @@ export const tools = {
       await browser.tabs.update(tab.id, { url });
       requested = url;
     }
-    const done = await waitForLoad(tab.id, 30000, navSince);
+    let done = await waitForLoad(tab.id, 30000, navSince);
+    const notLeft = d => requested && d.url === tab.url && requested.split('#')[0] !== tab.url.split('#')[0] && ((navState.get(tab.id) || {}).start || 0) < navSince;
+    // The load can begin well after tabs.update(): a slow beforeunload handler (old analytics
+    // code), or a brand-new tab on a busy machine. Give it time before blaming a "Leave page?" dialog.
+    if (notLeft(done) && await waitNav(tab.id, s => (s.start || 0) >= navSince, 8000))
+      done = await waitForLoad(tab.id, 30000, navSince);
     // No page load began and the tab still shows the old page: Firefox is most likely asking
     // "Leave page?" (the page set a beforeunload handler), which only the user can answer.
-    if (requested && done.url === tab.url && requested.split('#')[0] !== tab.url.split('#')[0] && ((navState.get(tab.id) || {}).start || 0) < navSince)
+    if (notLeft(done))
       throw new Error(`${prefix}Tab ${tab.id} did not leave ${tab.url}. The page is probably showing a "Leave page?" confirmation, which only the user can answer. Ask them to choose, then check the tab again.`);
     const all = await groupTabs();
     const ctx = all.length > 1 ? `\nTabs in group: ${all.map(t => t.id).join(', ')}` : '';
