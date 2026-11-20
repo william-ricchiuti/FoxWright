@@ -6,7 +6,9 @@
 <script>
 window.bar = 0; window.tabs = 0;
 if (location.search.includes('small')) document.getElementById('bar').style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;width:160px;height:28px;z-index:10;background:#cde';
-document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { window.tabs++; e.preventDefault(); } }, true);
+// ?slow: each Tab takes 30 ms to handle, so 100 of them take seconds and a Stop can land part-way.
+const slowTabs = location.search.includes('slow');
+document.addEventListener('keydown', (e) => { if (e.key === 'Tab') { window.tabs++; e.preventDefault(); if (slowTabs) { const end = Date.now() + 30; while (Date.now() < end) { /* busy */ } } } }, true);
 let last = '';
 setInterval(() => { const s = `len=${document.getElementById('field').value.length}&tabs=${window.tabs}&bar=${window.bar}`; if (s !== last) { last = s; fetch('/log?' + s); } }, 50);
 </script>

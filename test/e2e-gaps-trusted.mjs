@@ -72,7 +72,7 @@ if (!x11.available()) {
     const { h, tabId } = await fresh();
     try {
       const since = Date.now();
-      await h.call('navigate', { tabId, url: `${A}/beacon-field.html?t2` });
+      await h.call('navigate', { tabId, url: `${A}/beacon-field.html?t2-slow` });
       await h.call('computer', { tabId, action: 'left_click', ref: refOf((await h.call('find', { tabId, query: 'Field' })).text) });
       const keys = h.call('computer', { tabId, action: 'key', text: 'Tab', repeat: 100 });
       const at = await waitBeacon('tabs', v => Number(v) > 0, 10000, since);
