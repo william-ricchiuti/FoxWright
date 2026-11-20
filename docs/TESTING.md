@@ -1,11 +1,44 @@
 # Test report: Foxwright
 
-_Latest run: 0.8.1 platform round (main at 0.8.0 plus test changes), 2026-11-16: Linux (Docker, arm64) with Firefox 152.0, 153.7.0esr, 160.0, 161.0b2 and Nightly 162.0a1 (2026-11-16 build), Node 20, 22 and 24; macOS 27 with Firefox 160.0. Older sections are marked with the version they were measured on._
+_Latest run: audit round after 0.8.1, 2026-11-20 (below). Before that: 0.8.1 platform round (main at 0.8.0 plus test changes), 2026-11-16: Linux (Docker, arm64) with Firefox 152.0, 153.7.0esr, 160.0, 161.0b2 and Nightly 162.0a1 (2026-11-16 build), Node 20, 22 and 24; macOS 27 with Firefox 160.0. Older sections are marked with the version they were measured on._
 
 Every test drives Foxwright the way an AI client does: an MCP client calls the tools, and nothing else touches the browser. Each suite ran in both input modes:
 
 - **synthetic**: the extension alone.
 - **trusted**: Firefox started with `--remote-debugging-port`, so input goes through WebDriver BiDi.
+
+## Audit round after 0.8.1 (2026-11-20)
+
+A security, reliability and agent-usability audit (Claude, Codex and two review agents), fixes with tests, then the suites again on the final code. Linux runs in Docker (arm64), macOS 27 with a copy of Firefox 160 and a separate HOME.
+
+| Suite (final code) | 152.0 | 153.7.0esr | 160.0 | 161.0b2 | Nightly |
+|---|---|---|---|---|---|
+| `e2e.mjs` synthetic / trusted (81 tests) | pass · pass | pass · pass | pass · pass | pass · pass | pass · pass |
+| `e2e.mjs` on the store build, synthetic / trusted | pass · pass | pass · pass | pass · pass | pass · pass | pass · pass |
+| safety, permissions, permission-modes (22), onboarding (13), store, storebuild both modes, resilience, multi, smoke both modes | pass | pass | pass | pass | pass |
+| gap suites (boundary, fuzz, hostile, persistence, secrets, stop, trusted, windows) | pass | pass | pass | pass | pass |
+| `e2e-compat` (0.6/0.7/0.8.0 artifacts, 17) / `e2e-idle` | n/a | n/a | pass · pass | n/a | n/a |
+
+- `e2e-gaps-fuzz` failed once on 160 and 161 beta while two containers ran suites side by side (the helper stopped answering after the 32 MB-line test, and a long `browser_batch` took over 55 s). It passed 6/6 on both when it ran alone. It's sensitive to load, not broken.
+- Node 20.20.2 and 24.22.3: e2e both modes, safety, permissions, permission-modes, storebuild, resilience, multi and smoke all pass, plus socket-auth, socket-hostile, mcp-offline, setup-doctor, compat-offline and bidi-connect.
+- macOS: `scripts/mac-test.sh quick` 12/12 (e2e both modes, safety, permissions, store, storebuild both modes, smoke both modes, resilience, multi, idle). `e2e-smoke` passed 10/10 synthetic and 10/10 trusted on the final code. permission-modes needs the `.test` hosts in /etc/hosts and wasn't run there. The intermittent focus loss after a real click didn't show up in any of these runs.
+- Soak (Firefox 160, Docker): 600 rounds of navigate, read_page, find, screenshot and get_page_text (3,000 calls) gave 0 errors. Helper memory stayed at 60 MB and the MCP server grew from 57 to 102 MB, levelling off. Firefox stayed around 2.1 GB, back there after 60 extra tabs were closed. `tabs_context_mcp` with 61 tabs took 35 ms.
+
+Bugs found and fixed (all with tests that fail on the old code where a browser could show it):
+- `navigate` reported "did not leave … Leave page?" when a page's beforeunload handler took over 500 ms, or a new tab started loading late. This was the macOS CI failure "Tab 3 did not leave about:blank".
+- Read only: reading keys such as Escape then ArrowDown changed a `<select>` that the page focused part-way, in both input modes.
+- Real input: a page could copy Foxwright's BiDi frame marker into another frame and get the keystrokes sent there.
+- Stop while the read-only upgrade window was open counted as the user declining the site.
+- A confirmed click went through after the user dragged the tab out of the group.
+- `form_input` on a combobox could click an unrelated menu item elsewhere on the page ("Del" picked "Delete row"), and skipped confirm-before-send for comboboxes and multi-line rich editors.
+- `tabs_close_mcp` without `tabId` closed "the last-used tab".
+- `wait_for` and `computer wait` gave up before the permission window could.
+- PDF errors suggested screenshots, which don't work in the PDF viewer.
+- `get_page_text` ignored queries made only of short words.
+- Codex users weren't told to raise `tool_timeout_sec`.
+- A regex that freezes the background page could pass the pattern check.
+- The JSON and PDF re-fetches had no time limit.
+- Test-only: `e2e-onboarding` broke when the popup footer changed. The trusted Tab x100 Stop test raced its own observer (main CI failure of 2026-11-17).
 
 ## 0.8.1 platform round (2026-11-16)
 
