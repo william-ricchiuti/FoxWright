@@ -233,24 +233,34 @@ export class Bidi {
     }
     const token = crypto.randomBytes(12).toString('hex');
     await helper.call('_mark', { tabId, frameId, token });
+    let matches;
     try {
-      for (const context of candidates) {
+      // The marker is an attribute in the page's DOM, which page scripts can read and copy into
+      // another window they control (e.g. one outside the Foxwright group). So check every
+      // candidate, and use a context only when exactly one carries the token.
+      const found = await Promise.all(candidates.map(async (context) => {
         try {
           const r = await this.cmd('script.evaluate', {
             expression: 'document.documentElement.getAttribute("data-foxwright-probe")',
-            target: { context, sandbox: 'foxwright' }, // isolated realm: page scripts can't see or tamper with the probe
+            target: { context, sandbox: 'foxwright' }, // isolated realm, but the DOM is shared with the page
             awaitPromise: false,
             resultOwnership: 'none',
           });
-          if (r?.type === 'success' && r.result?.value === token) {
-            this.contexts.set(key, context);
-            return context;
-          }
-        } catch { /* restricted or loading context */ }
-      }
+          return r?.type === 'success' && r.result?.value === token ? context : null;
+        } catch {
+          return null; // restricted or loading context
+        }
+      }));
+      matches = found.filter(Boolean);
     } finally {
       helper.call('_unmark', { tabId, frameId }).catch(() => {});
     }
+    if (matches.length === 1) {
+      this.contexts.set(key, matches[0]);
+      return matches[0];
+    }
+    if (matches.length > 1)
+      throw new Error(`Could not match the tab to a WebDriver BiDi browsing context: ${matches.length} pages carry Foxwright's marker (a page may be copying it), so real input was not sent. Reload the tab and try again.`);
     throw new Error('Could not match the tab to a WebDriver BiDi browsing context.');
   }
 

@@ -168,7 +168,7 @@ let popup = null;
 await test('popup when connected: helper version, input mode, no mismatch warning, every control named and reachable by Tab', async () => {
   popup = await openPage('popup/popup.html');
   await until(async () => /^v\d/.test(await text(popup, 'helper')), 8000, async () => 'helper row: ' + await text(popup, 'helper'));
-  const ext = (await text(popup, 'build')).replace(/^v| .*$/g, '');
+  const ext = /(\d+\.\d+\.\d+)/.exec(await text(popup, 'build'))?.[1]; // "Extension 0.8.1 (full build)"
   expect((await text(popup, 'helper')) === `v${ext}`, `helper ${await text(popup, 'helper')} vs extension ${ext}`);
   expect(await hidden(popup, 'version-warn'), 'no mismatch warning expected');
   expect(await hidden(popup, 'setup'), 'setup card should hide once connected');

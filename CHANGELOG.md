@@ -6,6 +6,24 @@
 - The popup, permission window, setup page and Activity page show the Foxwright logo instead of the old 狐 badge, which appeared as an empty box on computers without Japanese fonts. The pill on the page and the GIF watermark use the same logo and name.
 - Plain page background instead of the dotted texture, headings in normal case, and the popup footer says "Extension 0.8.1" so it can't be confused with the helper version.
 
+**Safety**
+- Read only: arrow keys and other reading keys no longer change a form control that the page moves focus onto part-way through the keys (for example Escape then ArrowDown changed a list). This works the same with real and simulated input.
+- Real input: a page could copy Foxwright's frame marker into another frame and get the typing sent there. Foxwright now sends real input only when exactly one frame matches, and only while that frame still shows the site you approved. After you confirm a send, buy or delete, it finds the target again and stops if the page changed.
+- Pressing Stop while the "allow clicking and typing here?" window is open no longer counts as declining that site for the rest of the session.
+- Dragging a tab out of the Foxwright group while a permission, confirmation or upload window is open now stops the action.
+- Screenshots and zoom are not taken if the tab moved to another site while a permission window was open.
+- Re-reading JSON and PDF documents checks the site again, stops after 30 s and limits the download size, so a server that never finishes can't hold up Stop and later actions.
+- "Ask before sending, buying or deleting" now also asks when `form_input` picks an option such as "Delete" in a custom list, or puts a line break into a comment or chat editor.
+- The console message filter refuses patterns that could freeze the extension (such as `a+a+a+$`).
+
+**For agents**
+- `navigate` no longer fails with "did not leave … Leave page?" when a page's beforeunload handler is slow, or a new tab starts loading late on a busy computer.
+- Waiting with `wait_for` or `computer {action: "wait"}` lasts as long as the permission window can (it used to give up after 50–60 s and say Firefox didn't answer).
+- `tabs_close_mcp` needs `tabId`. Without it, Foxwright used to close the last-used tab, which could be one the user shared.
+- PDF errors no longer suggest screenshots (Firefox's PDF viewer can't be captured); they point to `get_page_text` or the user. An upload that timed out says to ask again; a declined one says not to retry. After Stop, every error is the same "paused, don't continue" message.
+- `get_page_text` with a query of only short words (EU, UK, AI) finds them.
+- Setup and docs/CLIENTS.md: Codex needs `tool_timeout_sec = 180` (its default of 60 s is shorter than the permission window); OpenCode has its own entry.
+
 ## 0.8.1 (2026-11-17)
 
 A fix release, prepared with a five-part review before the 0.8 extension reaches the store: agents, upgrades, security, platforms and first-time setup. No new permissions and no new data collection.

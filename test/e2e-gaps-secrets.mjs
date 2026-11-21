@@ -68,7 +68,7 @@ if (process.platform !== 'linux' || h.home === (await import('node:os')).homedir
   await test('a normal file asks first, naming the absolute path and size', async () => {
     const { r, asked } = await upload([normal], ref);
     expect(asked && asked.includes(normal) && /bytes|KB/.test(asked), 'window showed: ' + asked);
-    expect(r.isError && /did not approve/.test(r.text), r.text);
+    expect(r.isError && /declined this upload/.test(r.text), r.text);
   }, { area: '5' });
 
   await test('credential paths are refused without asking (symlinks, .., relative paths included)', async () => {

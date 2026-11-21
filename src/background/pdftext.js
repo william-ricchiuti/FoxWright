@@ -71,7 +71,7 @@ class Budget {
 
   check() {
     if (Date.now() > this.deadline)
-      throw new PdfError('timeout', `This PDF takes too long to read: Foxwright's built-in PDF reader stops after ${Math.round(this.timeMs / 1000)} s. It may be very large, or built to be slow to read. Take screenshots of the PDF viewer instead.`);
+      throw new PdfError('timeout', `This PDF takes too long to read: Foxwright's built-in PDF reader stops after ${Math.round(this.timeMs / 1000)} s. It may be very large, or built to be slow to read. Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
   }
 
   /** Call from every loop that depends on the file; looks at the clock every few thousand units of work. */
@@ -86,7 +86,7 @@ class Budget {
   spend(bytes) {
     this.decoded += bytes;
     if (this.decoded > PDF_LIMITS.decodedBytes)
-      throw new PdfError('toolarge', `This PDF expands to more data than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.decodedBytes)} MB once decompressed). Take screenshots of the PDF viewer instead.`);
+      throw new PdfError('toolarge', `This PDF expands to more data than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.decodedBytes)} MB once decompressed). Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
   }
 
   /** Where waiting is possible: let the rest of the extension (messages, the Stop button) run now and then. */
@@ -802,7 +802,7 @@ class Doc {
     while ((m = re.exec(s))) {
       this.offsets.set(+m[1], m.index + m[0].length); // later definitions (incremental updates) win
       if (this.offsets.size > PDF_LIMITS.objects)
-        throw new PdfError('toolarge', `This PDF has more than ${PDF_LIMITS.objects.toLocaleString('en-US')} objects, more than Foxwright's built-in PDF reader handles. Take screenshots of the PDF viewer instead.`);
+        throw new PdfError('toolarge', `This PDF has more than ${PDF_LIMITS.objects.toLocaleString('en-US')} objects, more than Foxwright's built-in PDF reader handles. Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
       if (++n % 2000 === 0)
         await this.budget.breathe();
     }
@@ -1405,7 +1405,7 @@ export async function extractPdfText(bytes, opts = {}) {
     if (e instanceof PdfError && e.code !== 'skip' && e.code !== 'limit')
       throw e;
     // A bug or an unexpected shape in the file: one clear error instead of whatever was thrown.
-    throw new PdfError('invalid', `Foxwright's built-in PDF reader couldn't make sense of this PDF; it may be damaged (${String(e?.message || e).slice(0, 120)}). Take screenshots of the PDF viewer instead.`);
+    throw new PdfError('invalid', `Foxwright's built-in PDF reader couldn't make sense of this PDF; it may be damaged (${String(e?.message || e).slice(0, 120)}). Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
   }
 }
 
@@ -1416,7 +1416,7 @@ async function extract(bytes, { maxChars = 5000000, timeMs = PDF_LIMITS.timeMs }
   if (!/%PDF-/.test(head))
     throw new PdfError('invalid', 'This is not a PDF file (no %PDF header).');
   if (bytes.length > PDF_LIMITS.fileBytes)
-    throw new PdfError('toolarge', `This PDF is ${mb(bytes.length)} MB, more than Foxwright's built-in PDF reader handles (${mb(PDF_LIMITS.fileBytes)} MB). Take screenshots of the PDF viewer instead.`);
+    throw new PdfError('toolarge', `This PDF is ${mb(bytes.length)} MB, more than Foxwright's built-in PDF reader handles (${mb(PDF_LIMITS.fileBytes)} MB). Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
   const budget = new Budget(timeMs);
   const doc = new Doc(bytes, budget);
   await doc.scan();
@@ -1532,11 +1532,11 @@ async function extract(bytes, { maxChars = 5000000, timeMs = PDF_LIMITS.timeMs }
     if (stopError)
       throw stopError;
     if (glyphs && undecoded)
-      throw new PdfError('notext', `This PDF draws its text with fonts that have no Unicode mapping, so Foxwright can't turn it back into text (${pages.length} page${pages.length === 1 ? '' : 's'}). Take screenshots of the PDF viewer to read it.`);
+      throw new PdfError('notext', `This PDF draws its text with fonts that have no Unicode mapping, so Foxwright can't turn it back into text (${pages.length} page${pages.length === 1 ? '' : 's'}). Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
     if (images)
       throw new PdfError('images', `This PDF has no text layer: its ${pages.length} page${pages.length === 1 ? ' is an image' : 's are images'} (e.g. a scan). Reading it needs OCR; take screenshots of the PDF viewer instead.`);
     if (doc.skipped)
-      throw new PdfError('toolarge', `This PDF's pages are larger than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.streamBytes)} MB each once decompressed). Take screenshots of the PDF viewer instead.`);
+      throw new PdfError('toolarge', `This PDF's pages are larger than Foxwright's built-in PDF reader handles (over ${mb(PDF_LIMITS.streamBytes)} MB each once decompressed). Foxwright can't take screenshots of Firefox's PDF viewer either, so tell the user: they can read it themselves, or download it and open it in another program.`);
     throw new PdfError('notext', `This PDF has no extractable text (${pages.length} page${pages.length === 1 ? '' : 's'}).`);
   }
   return { pages: texts, pageCount: pages.length, undecoded, glyphs, images, truncated, stopped: stopError ? (stopError.code === 'timeout' ? 'time' : 'size') : undefined, skipped: doc.skipped };

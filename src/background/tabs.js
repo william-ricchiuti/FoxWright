@@ -385,7 +385,10 @@ async function upgradeOrigin(origin, tabTitle) {
     return;
   }
   if (answer === 'deny' || answer === 'dismissed') {
-    upgradeDenied.add(origin);
+    // Stop answers every open window with "deny": that's not the user declining this site, so
+    // don't stop asking after they resume.
+    if (!state.paused)
+      upgradeDenied.add(origin);
     throw readOnlyError(origin, true);
   }
   throw new Error(`${origin} is approved for reading only, and waiting for the user to allow clicking and typing there timed out. Ask the user to answer the Foxwright window, then try again.`);
@@ -627,7 +630,7 @@ export async function ensureContent(tabId, frameId = 0) {
       if (/json/.test(ct))
         throw Object.assign(new Error(`Tab ${tabId} shows a JSON response in Firefox's built-in JSON viewer, which extensions can't read or screenshot. ${doc.method === 'GET' ? 'get_page_text can re-fetch it.' : `It was the answer to a ${doc.method} request, so it can't be re-fetched.`} To read JSON pages directly, the user can set devtools.jsonview.enabled = false in about:config.`), { jsonViewer: doc.method === 'GET' });
       if (/pdf/.test(ct))
-        throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot.`);
+        throw new Error(`Tab ${tabId} shows a PDF in Firefox's built-in PDF viewer, which extensions can't read or screenshot. Use get_page_text to read its text (it supports query and offset).`);
       throw new Error(`Tab ${tabId} is showing a Firefox error or internal page${t.title ? ` ("${t.title}")` : ''} for ${t.url}, which extensions can't read. The site may be down or unreachable; check the URL or try navigating again.`);
     }
     throw e;
@@ -654,6 +657,8 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
     const f = await sendContent(tabId, frameId, 'focusInfo', {}, 5000, hops);
     if (f?.control)
       await ensureFrameLevel(tabId, frameIdFromPrefix(tabId, f.prefix), 'full');
+    else
+      args = { ...args, readOnlyKeys: true }; // the page may move focus onto a control part-way: check before each key
   }
   const msg = { foxwright: true, cmd, args, prefix, expectOrigin };
   let r;
@@ -679,6 +684,7 @@ export async function sendContent(tabId, frameId, cmd, args = {}, timeoutMs = 30
     await ensureFramePermission(await browser.tabs.get(tabId), f.frameId);
     await ensureContent(tabId, f.frameId);
     const next = { ...args, ...(f.args || {}) };
+    delete next.readOnlyKeys; // decided again for the frame's own site, which may have full access
     if (f.x !== undefined) {
       next.x = f.x;
       next.y = f.y;

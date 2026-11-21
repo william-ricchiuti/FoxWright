@@ -171,7 +171,15 @@ await test('read_console_messages with a catastrophic regex does not freeze Foxw
   await h.call('navigate', { tabId, url: `${O}/basic.html?redos` });
   await h.call('computer', { tabId, action: 'wait', duration: 0 });
   // Fill the console with strings that make /^(a+)+$/ backtrack exponentially.
-  await h.call('javascript_tool', { tabId, text: `for (let i = 0; i < 5; i++) console.log('a'.repeat(32) + '!'); 1` });
+  await h.call('javascript_tool', { tabId, text: `for (let i = 0; i < 5; i++) console.log('a'.repeat(32) + '!'); console.log('a'.repeat(400) + '!'); console.log('2026-11-19'); 1` });
+  // Adjacent repeats (a+a+...) backtrack polynomially: also refused, not run.
+  for (const pattern of ['a+a+a+a+a+a+$', '.*.*.*x']) {
+    const x = await guarded('read_console_messages', { tabId, pattern }, 15000);
+    expect(!x.hung && x.r.isError && /take very long/.test(x.r.text), `${pattern}: ${x.hung ? `no answer in ${x.ms} ms` : x.r.text.slice(0, 120)}`);
+  }
+  // A safe pattern with separators still works.
+  const ok = await guarded('read_console_messages', { tabId, pattern: '^[0-9]+-[0-9]+-[0-9]+$' }, 15000);
+  expect(!ok.hung && !ok.r.isError && /2026-11-19/.test(ok.r.text), 'a safe pattern was refused: ' + (ok.hung ? 'no answer' : ok.r.text.slice(0, 120)));
   const g = await guarded('read_console_messages', { tabId, pattern: '^(a+)+$' }, 30000);
   const other = await guarded('tabs_context_mcp', {}, 10000);
   let recovered = null;
