@@ -43,7 +43,7 @@ button {
   border: 1px solid var(--line); background: var(--paper); color: var(--ink);
 }
 button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); margin-left: auto; }
-button.ghost { width: 100%; margin-top: 8px; }
+button.ghost { width: 100%; margin: 0 0 10px; }
 button.x { padding: 1px 7px; font-weight: 500; color: var(--muted); }
 button:hover { filter: brightness(.95); }
 .row { display: flex; justify-content: space-between; padding: 3px 0; }
@@ -69,6 +69,6 @@ button.link { background: none; border: 0; padding: 0; font-weight: 500; color: 
 .btns button.link { margin-left: auto; }
 .fine button.link { font-size: inherit; }
 .tag.warn { color: var(--warn-ink); }
-button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--red-ink); outline-offset: 2px; }
 .card.paused button:focus-visible { outline-color: #fff7ee; }
 .btns button.primary { margin-left: 0; }

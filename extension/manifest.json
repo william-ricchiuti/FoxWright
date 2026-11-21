@@ -16,7 +16,10 @@
   "action": {
     "default_title": "Foxwright",
     "default_popup": "popup/popup.html",
-    "default_icon": "icons/foxwright.svg"
+    "default_icon": {
+      "16": "icons/foxwright-16.svg",
+      "32": "icons/foxwright.svg"
+    }
   },
   "permissions": [
     "nativeMessaging",

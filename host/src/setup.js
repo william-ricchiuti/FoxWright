@@ -17,12 +17,16 @@ const STORE_URL = 'https://addons.mozilla.org/firefox/addon/foxwright/';
 const CLIENTS_URL = 'https://github.com/william-ricchiuti/FoxWright/blob/main/docs/CLIENTS.md';
 const SETUP_CMD = 'npx foxwright-firefox setup';
 const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
+// Colour only on a terminal, and never with NO_COLOR (https://no-color.org): AI agents, logs and
+// pasted output get plain text instead of escape codes.
+const color = !!process.stdout.isTTY && !process.env.NO_COLOR;
+const sgr = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
 const c = {
-  ok: (s) => `\x1b[32m✓\x1b[0m ${s}`,
-  bad: (s) => `\x1b[31m✗\x1b[0m ${s}`,
-  warn: (s) => `\x1b[33m!\x1b[0m ${s}`,
-  b: (s) => `\x1b[1m${s}\x1b[0m`,
-  dim: (s) => `\x1b[2m${s}\x1b[0m`,
+  ok: (s) => `${sgr(32, '✓')} ${s}`,
+  bad: (s) => `${sgr(31, '✗')} ${s}`,
+  warn: (s) => `${sgr(33, '!')} ${s}`,
+  b: (s) => sgr(1, s),
+  dim: (s) => sgr(2, s),
 };
 
 function appDir() {
@@ -347,12 +351,22 @@ function removeOldInstall(old, label, { quiet = false } = {}) {
   const oldDir = path.join(home, '.' + old);
   const oldApp = path.join(oldDir, 'app', old + '.mjs');
   const ours = (text) => typeof text === 'string' && EXTENSION_IDS.some(id => text.includes(id));
+  // setup's own registration under the old name (for 0.6 extensions) starts the current helper:
+  // it's rewritten below, so removing it here would only print "Removed…" on every re-run.
+  const current = (text) => {
+    try {
+      return JSON.parse(text).path === wrapperPath();
+    } catch {
+      return false;
+    }
+  };
   // Firefox native-messaging registrations named after the old name that list our extension ids.
   const dirs = [nativeManifestDir(), ...extraManifestDirs().map(([, d]) => d)];
   for (const d of dirs) {
     const f = path.join(d, old + '.json');
     try {
-      if (ours(fs.readFileSync(f, 'utf8'))) {
+      const text = fs.readFileSync(f, 'utf8');
+      if (ours(text) && !current(text)) {
         fs.rmSync(f, { force: true });
         say(`Removed the old ${label} registration ${f}`);
       }
@@ -362,7 +376,8 @@ function removeOldInstall(old, label, { quiet = false } = {}) {
     try {
       const out = execFileSync('reg', ['query', 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\' + old, '/ve'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       const m = /REG_SZ\s+(.+)/.exec(out);
-      if (m && ours(fs.readFileSync(m[1].trim(), 'utf8'))) {
+      const text = m ? fs.readFileSync(m[1].trim(), 'utf8') : '';
+      if (ours(text) && !current(text)) {
         execFileSync('reg', ['delete', 'HKCU\\Software\\Mozilla\\NativeMessagingHosts\\' + old, '/f'], { stdio: 'ignore' });
         say(`Removed the old ${label} registry entry.`);
       }
@@ -603,6 +618,7 @@ export async function setup(flags) {
   // 4. Hook up AI clients. A failure here never undoes the steps above: say what to run instead.
   const { command, args } = mcpCommand();
   const claudeCodeCmd = displayCmd(['claude', 'mcp', 'add', '--scope', 'user', 'foxwright', '--', command, ...args]);
+  const hooked = []; // AI clients setup connected just now
   if (flags.includes('--claude-code') || flags.includes('--all')) {
     const claude = which('claude');
     if (claude) {
@@ -612,6 +628,7 @@ export async function setup(flags) {
       try {
         runClaude(claude, ['mcp', 'add', '--scope', 'user', 'foxwright', '--', command, ...args], { stdio: 'inherit' });
         console.log(c.ok('Added Foxwright to Claude Code (user scope).'));
+        hooked.push('Claude Code');
       } catch (e) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Code (${e.message.split('\n')[0]}). Run this yourself:\n    ${claudeCodeCmd}`));
       }
@@ -637,6 +654,7 @@ export async function setup(flags) {
           fs.copyFileSync(cfgPath, cfgPath + '.bak');
         fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
         console.log(c.ok(`Added Foxwright to Claude Desktop (${cfgPath}). Quit Claude Desktop completely (not just its window) and open it again to load it.`));
+        hooked.push('Claude Desktop');
       } catch (e) {
         console.log(c.warn(`Couldn't add Foxwright to Claude Desktop (${e.message}). Add it to ${cfgPath} yourself (see below).`));
       }
@@ -666,12 +684,12 @@ sometimes days after a helper release (Mozilla reviews each one). An older exten
   const vscode = isWin
     ? `add to .vscode\\mcp.json (or the file "MCP: Open User Configuration" opens) under "servers":  "foxwright": ${JSON.stringify({ type: 'stdio', command, args })}`
     : `code --add-mcp ${shellQuote(JSON.stringify({ name: 'foxwright', type: 'stdio', command, args }))}`;
-  console.log(`
-${c.b('Next steps')}
-  1. Install the Foxwright extension in Firefox (152+): ${STORE_URL}
-     If it's already installed, it finds this helper by itself within a few seconds
-     (or press "Try again" in its toolbar popup). The toolbar fox loses its "!" badge.
-  2. Connect your AI app, then restart it:
+  // Every client's settings, unless setup just connected the one the person asked for.
+  const clientSteps = hooked.length
+    ? `  2. Restart ${hooked.join(' and ')} so it loads Foxwright.
+     Other AI apps (Codex, Cursor, VS Code, Gemini CLI, Windsurf, Zed): run ${c.b(SETUP_CMD)}
+     without a flag to print their settings, or see ${CLIENTS_URL}`
+    : `  2. Connect your AI app, then restart it:
      ${c.b('Claude Code:')}  ${claudeCodeCmd}
      ${c.b('Codex:')}        ${displayCmd(['codex', 'mcp', 'add', 'foxwright', '--', command, ...args])}
                    then add  tool_timeout_sec = 180  under [mcp_servers.foxwright] in ~/.codex/config.toml
@@ -683,7 +701,13 @@ ${c.b('Next steps')}
        add inside "mcpServers":  "foxwright": ${entry}
      ${c.b('Zed:')} the same entry inside "context_servers" in its settings.json.
      Where each app keeps its settings: ${CLIENTS_URL}
-     ${c.dim('(setup --claude-code / --claude-desktop / --all connects Claude for you)')}
+     ${c.dim('(setup --claude-code / --claude-desktop / --all connects Claude for you)')}`;
+  console.log(`
+${c.b('Next steps')}
+  1. Install the Foxwright extension in Firefox (152+): ${STORE_URL}
+     If it's already installed, it finds this helper by itself within a few seconds
+     (or press "Try again" in its toolbar popup). The toolbar fox loses its "!" badge.
+${clientSteps}
   3. Ask your AI app: "Use Foxwright to open https://example.com and tell me the main heading."
      Firefox asks you to approve the site first.
 
@@ -691,7 +715,7 @@ ${c.b('Next steps')}
        ${ffCmd} --remote-debugging-port=9222
      Foxwright detects it automatically. See the README for the trade-offs.
 
-  Check everything with: ${c.b(displayCmd([command, appScript(), 'doctor']))}
+  Check everything with: ${c.b('npx foxwright-firefox doctor')}
 `);
 }
 

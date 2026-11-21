@@ -2,10 +2,12 @@
 :root {
   --paper: #f7f0e4; --paper-2: #fffaf2; --ink: #1b1714; --ink-2: #4a3f36; --muted: #7a6b5d;
   --red: #c8321b; --red-2: #d64024; --line: rgba(27, 23, 20, .12); --ok: #3f7d4e; --orange: #c86a1b;
+  /* text red that keeps 4.5:1 on the cards in both schemes (same as the popup) */
+  --red-ink: #b02a14;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #1c1815; --paper-2: #26211d; --ink: #f3ebde; --ink-2: #d4c8b8; --muted: #a39584; --line: rgba(243, 235, 222, .12); --ok: #6fb07f; --red: #e0533a; --red-2: #e86a50; --orange: #e08a3a; }
+  :root { --paper: #1c1815; --paper-2: #26211d; --ink: #f3ebde; --ink-2: #d4c8b8; --muted: #a39584; --line: rgba(243, 235, 222, .12); --ok: #6fb07f; --red: #e0533a; --red-2: #e86a50; --orange: #e08a3a; --red-ink: #f08a73; }
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -19,6 +21,7 @@ header { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
 h1 { margin: 0; font-size: 22px; letter-spacing: .01em; }
 .sub { margin: 2px 0 0; color: var(--ink-2); }
 h2 { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
+.step h2 { font-size: 15px; color: var(--ink); }
 .card { background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
 .card p { margin: 0 0 8px; }
 .card p:last-child { margin-bottom: 0; }
@@ -33,10 +36,10 @@ button {
   border: 1px solid var(--line); background: var(--paper); color: var(--ink);
 }
 button.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-button.danger { color: var(--red); border-color: var(--red); }
+button.danger { color: var(--red-ink); border-color: var(--red-ink); }
 button:hover { filter: brightness(.95); }
-button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
-a { color: var(--red); }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--red-ink); outline-offset: 2px; }
+a { color: var(--red-ink); }
 .status { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; margin: 0 0 6px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,125,78,.18); }
