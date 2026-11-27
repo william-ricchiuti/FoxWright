@@ -5,6 +5,8 @@ import { versionNotes } from './compat.js';
 export const FULL = typeof __FOXWRIGHT_FULL__ !== 'undefined' ? __FOXWRIGHT_FULL__ : false;
 export const VERSION = typeof __FOXWRIGHT_VERSION__ !== 'undefined' ? __FOXWRIGHT_VERSION__ : '0.0.0';
 
+export const PAUSED_MSG = 'Foxwright is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Foxwright toolbar popup if they want you to carry on.';
+
 export const state = {
   // native connection
   connected: false,

@@ -682,7 +682,7 @@ sometimes days after a helper release (Mozilla reviews each one). An older exten
   const entry = JSON.stringify({ command, args });
   // VS Code's own installer command. On Windows, cmd and PowerShell quote JSON differently: show the file entry.
   const vscode = isWin
-    ? `add to mcp.json under "servers":  "foxwright": ${JSON.stringify({ type: 'stdio', command, args })}`
+    ? `add to .vscode\\mcp.json (or the file "MCP: Open User Configuration" opens) under "servers":  "foxwright": ${JSON.stringify({ type: 'stdio', command, args })}`
     : `code --add-mcp ${shellQuote(JSON.stringify({ name: 'foxwright', type: 'stdio', command, args }))}`;
   // Every client's settings, unless setup just connected the one the person asked for.
   const clientSteps = hooked.length
@@ -692,6 +692,9 @@ sometimes days after a helper release (Mozilla reviews each one). An older exten
     : `  2. Connect your AI app, then restart it:
      ${c.b('Claude Code:')}  ${claudeCodeCmd}
      ${c.b('Codex:')}        ${displayCmd(['codex', 'mcp', 'add', 'foxwright', '--', command, ...args])}
+                   then add  tool_timeout_sec = 180  under [mcp_servers.foxwright] in ~/.codex/config.toml
+                   (Codex stops waiting after 60 s; Foxwright's permission window waits 2 minutes)
+     ${c.b('OpenCode:')}     in ~/.config/opencode/opencode.json, inside "mcp":  "foxwright": ${JSON.stringify({ type: 'local', command: [command, ...args], enabled: true })}
      ${c.b('Gemini CLI:')}   ${displayCmd(['gemini', 'mcp', 'add', '--scope', 'user', 'foxwright', command, ...args])}
      ${c.b('VS Code:')}      ${vscode}
      ${c.b('Claude Desktop, Cursor, Windsurf')} and other apps with an "mcpServers" settings file,

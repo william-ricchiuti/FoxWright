@@ -1,8 +1,8 @@
 // Tool implementations. Tool names and arguments mirror Claude in Chrome's so
 // agents (and skills written for Chrome) work unchanged.
 /* global browser */
-import { state, publicStatus, cleanSummary } from './state.js';
-import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks, ensureFrameLevel, isReadingKeys, hostAccessRevoked, hostAccessError } from './tabs.js';
+import { state, publicStatus, cleanSummary, PAUSED_MSG } from './state.js';
+import { groupTabs, ensureGroup, createAgentTab, requireTab, ensurePermission, ensureOriginPermission, ensureFramePermission, isFrameAllowed, frameOriginOf, isAllowed, originOf, ensureContent, sendContent, frameForRef, frameIdFromPrefix, frameOrigin, showActivity, checkAccessible, addToGroup, injectPageHooks, ensureFrameLevel, isReadingKeys, hostAccessRevoked, hostAccessError, levelOf } from './tabs.js';
 import { askUser, cancelPairPrompts } from './prompt.js';
 import { netLog, docTypes } from './netlog.js';
 import { extractPdfText, PdfError } from './pdftext.js';
@@ -107,7 +107,7 @@ async function waitFor(tab, cond, timeoutMs) {
   let lastErr = '';
   for (;;) {
     if (state.paused)
-      throw new Error('Foxwright is paused: the user pressed Stop.');
+      throw new Error(PAUSED_MSG);
     const left = deadline - Date.now();
     try {
       await ensureContent(tab.id, 0);
@@ -324,6 +324,42 @@ function outlineDiff(oldYaml, newYaml) {
  * included (default cookie jar: a tab in a Firefox container gets the default container's cookies).
  * Another lane tightens the JSON viewer re-fetch in get_page_text; keep the two in step.
  */
+/**
+ * Read a response body, giving up past maxBytes or once `signal` aborts, so a server that sends
+ * forever or never finishes can't hold the tab's command queue (and Stop) hostage.
+ */
+async function readCapped(r, maxBytes) {
+  const len = Number(r.headers.get('content-length') || 0);
+  if (len > maxBytes)
+    throw new Error(`It is ${Math.round(len / 1048576)} MB, more than Foxwright reads (${Math.round(maxBytes / 1048576)} MB).`);
+  if (!r.body)
+    return new Uint8Array(await r.arrayBuffer());
+  const reader = r.body.getReader();
+  const parts = [];
+  let n = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done)
+      break;
+    n += value.length;
+    if (n > maxBytes) {
+      reader.cancel().catch(() => {});
+      throw new Error(`It is more than ${Math.round(maxBytes / 1048576)} MB, more than Foxwright reads.`);
+    }
+    parts.push(value);
+  }
+  const buf = new Uint8Array(n);
+  let at = 0;
+  for (const p of parts) {
+    buf.set(p, at);
+    at += p.length;
+  }
+  return buf;
+}
+
+const REFETCH_MS = 30000;
+const timedOut = e => e?.name === 'TimeoutError' || e?.name === 'AbortError';
+
 async function refetchTabDocument(tab, maxBytes) {
   const u = new URL(tab.url);
   if (u.protocol !== 'https:' && u.protocol !== 'http:')
@@ -335,7 +371,7 @@ async function refetchTabDocument(tab, maxBytes) {
   // container or private tab would be read as a different identity; and a redirect could lead to
   // a site the user hasn't approved.
   if (tab.incognito || (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default'))
-    throw new Error('This tab is in a Firefox container, and Foxwright can only download a document again with the default container\'s cookies, which could show a different account.');
+    throw new Error('This tab is in a Firefox container, and Foxwright can only download a document again with the default container\'s cookies, which could show a different account. Ask the user to open the document in a normal (non-container) tab in the Foxwright group, then call get_page_text there.');
   const doc = docTypes.get(tab.id);
   if (doc && doc.method && doc.method !== 'GET')
     throw new Error(`The document was the answer to a ${doc.method} request, so Foxwright can't download it again.`);
@@ -343,18 +379,22 @@ async function refetchTabDocument(tab, maxBytes) {
   let r;
   try {
     // redirect: 'error' stops at a redirect without requesting its target.
-    r = await fetch(tab.url, { credentials: 'include', cache: 'force-cache', redirect: 'error' });
+    r = await fetch(tab.url, { credentials: 'include', cache: 'force-cache', redirect: 'error', signal: AbortSignal.timeout(REFETCH_MS) });
   } catch (e) {
+    if (timedOut(e))
+      throw new Error(`Downloading it again took longer than ${REFETCH_MS / 1000} s, so Foxwright gave up. Try again later, or take a screenshot to see what's on screen.`);
     throw new Error(`Downloading it again failed (${e?.message || e}); if the address now redirects elsewhere, Foxwright does not follow it.`);
   }
   if (!r.ok)
     throw new Error(`Downloading it again returned HTTP ${r.status}.`);
-  const len = Number(r.headers.get('content-length') || 0);
-  if (len > maxBytes)
-    throw new Error(`It is ${Math.round(len / 1048576)} MB, more than Foxwright reads (${Math.round(maxBytes / 1048576)} MB).`);
-  const buf = new Uint8Array(await r.arrayBuffer());
-  if (buf.length > maxBytes)
-    throw new Error(`It is ${Math.round(buf.length / 1048576)} MB, more than Foxwright reads (${Math.round(maxBytes / 1048576)} MB).`);
+  let buf;
+  try {
+    buf = await readCapped(r, maxBytes);
+  } catch (e) {
+    if (timedOut(e))
+      throw new Error(`Downloading it again took longer than ${REFETCH_MS / 1000} s, so Foxwright gave up. Try again later.`);
+    throw e;
+  }
   return { bytes: buf, contentType: (r.headers.get('content-type') || '').toLowerCase(), container: tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default' && !tab.incognito };
 }
 
@@ -385,7 +425,7 @@ async function pdfText(tab) {
   } catch (e) {
     if (e instanceof PdfError)
       throw new Error(`Tab ${tab.id} shows a PDF that Foxwright can't turn into text: ${e.message}`);
-    throw new Error(`Tab ${tab.id} shows a PDF that Foxwright couldn't read (${e.message}). Take screenshots of the PDF viewer instead.`);
+    throw new Error(`Tab ${tab.id} shows a PDF that Foxwright couldn't read (${e.message}).`);
   }
 }
 
@@ -397,7 +437,11 @@ function pagedText(head, full, args, { preformatted = false, notes = [] } = {}) 
   const noteText = notes.length ? notes.join('\n') + '\n' : '';
   if (args.query) {
     // Return only the passages that mention the query words (cheap way to answer a question about a long page).
-    const words = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w.length > 2);
+    const all = String(args.query).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    // Short words ("the", "of") are noise next to longer ones, but a query of only short words
+    // ("UK", "EU", "AI") must still match.
+    const long = all.filter(w => w.length > 2);
+    const words = long.length ? long : all;
     const paras = full.split(/\n+/).map(p => (preformatted ? p.trimEnd() : p.trim())).filter(p => p.trim());
     const scored = paras.map((p, i) => ({ i, p, s: words.reduce((n, w) => n + (p.toLowerCase().includes(w) ? 1 : 0), 0) })).filter(x => x.s > 0);
     scored.sort((a, b) => b.s - a.s || a.i - b.i);
@@ -479,7 +523,26 @@ async function toCss(tab, coord) {
   return { x: coord[0] / s, y: coord[1] / s, scale: s, vp };
 }
 
+/**
+ * Throw unless the tab is still in the group and on the site it showed when the tool started.
+ * A permission window can stay open for minutes, and the page can move to another site meanwhile.
+ */
+async function stillOn(tab, what) {
+  const now = await requireTab(tab.id);
+  const was = originOf(tab.url), o = originOf(now.url);
+  if (o !== was || (o && !isAllowed(o)))
+    throw new Error(`Tab ${tab.id} moved from ${was || tab.url} to ${o || 'another page'} before the ${what}, so Foxwright didn't ${what === 'screenshot' ? 'take it' : 'do it'}. Call the tool again (it asks the user if the new site isn't approved).`);
+  return now;
+}
+
 async function capture(tab, opts) {
+  await stillOn(tab, 'screenshot');
+  const img = await captureOnce(tab, opts);
+  await stillOn(tab, 'screenshot'); // it may have navigated during the capture: discard the image
+  return img;
+}
+
+async function captureOnce(tab, opts) {
   try {
     return await browser.tabs.captureTab(tab.id, opts);
   } catch (e) {
@@ -632,7 +695,22 @@ async function zoom(tab, region, scaleArg) {
 /** True for patterns like (a+)+ or (a|aa)*: a repeated group containing a repeat or alternatives,
  *  which can freeze the extension for minutes on the wrong input. */
 function slowRegex(src) {
-  let s = src.replace(/\\./g, 'x').replace(/\[[^\]]*\]/g, 'x');
+  // Each distinct escape or [class] becomes its own placeholder letter, so \w+\s+ stay different atoms.
+  const atoms = new Map();
+  const atom = (t) => {
+    if (!atoms.has(t))
+      atoms.set(t, String.fromCharCode(0xe000 + atoms.size));
+    return atoms.get(t);
+  };
+  let s = src.replace(/\[(?:\\.|[^\]])*\]|\\./g, atom);
+  // Two unbounded repeats of the same thing side by side (a+a+, x*x+), or three of "." (.*.*.*,
+  // .*a.*b.*c), backtrack in polynomial-or-worse time on a long message that doesn't match,
+  // freezing the background page (and Stop) as well. Runs with a fixed separator (\d+-\d+-\d+) are fine.
+  for (const branch of s.replace(/[()]/g, '').split('|')) {
+    const q = branch.replace(/\{\d*,\}/g, '*');
+    if (/(.)[+*]\??\1[+*]/.test(q) || (q.match(/\.[+*]/g) || []).length > 2)
+      return true;
+  }
   for (let i = 0; i < 100; i++) {
     const m = /\(([^()]*)\)([+*]|\{\d*,?\d*\})?/.exec(s);
     if (!m)
@@ -763,7 +841,11 @@ async function afterAction(tab, before, r) {
     // The URL comes from the page's link: same checks as navigate (http(s) only, approved site).
     try {
       const url = normalizeUrl(r.openUrl);
+      if (state.paused)
+        throw new Error('Foxwright was paused');
       await ensureOriginPermission(url);
+      if (state.paused)
+        throw new Error('Foxwright was paused');
       const nt = await createAgentTab(url, false);
       extra.push(`The link opens in a new tab: created tab ${nt.id} (${url}) in the Foxwright group.`);
     } catch (e) {
@@ -968,8 +1050,11 @@ function conseqText(c) {
  */
 async function confirmAction(tab, c, summary) {
   const a = await askUser({ type: 'action', origin: c.origin, tabTitle: tab.title, element: { role: c.role, name: c.name, reason: c.reason }, summary: cleanSummary(summary) });
-  if (a === 'once')
+  if (a === 'once') {
+    // The window can stay open for minutes: the user may have dragged the tab out of the group.
+    await requireTab(tab.id);
     return;
+  }
   if (a === 'timeout')
     throw new Error(`Waiting for the user to confirm this action on ${c.origin} (${conseqText(c)}) timed out. Ask the user to answer the Foxwright window, then try again.`);
   throw new Error(`The user did not allow this action on ${c.origin}: ${conseqText(c)}. Foxwright asks before consequential actions because the user turned that on. Do not retry it unless the user asks you to.`);
@@ -988,6 +1073,29 @@ async function sendGuarded(tab, frameId, cmd, args, summary) {
       throw new Error(`The page changed after the user confirmed the action (now: ${conseqText(r.needsConfirm)}), so Foxwright didn't do it. Check the page and try again.`);
   }
   return r;
+}
+
+/** Why an upload didn't happen, and whether trying again makes sense. */
+function uploadRefusal(answer) {
+  return answer === 'timeout'
+    ? 'Waiting for the user to approve the upload timed out. Ask them to answer the Foxwright window, then call file_upload again.'
+    : 'The user declined this upload. Don\'t retry it unless the user asks you to.';
+}
+
+/**
+ * The origin a trusted action was checked for. The frame may have navigated during the checks
+ * (a permission window can stay open for minutes): then refuse rather than approve the new site.
+ */
+async function pinnedOrigin(tabId, frameId, checked) {
+  const now = await frameOriginOf(tabId, frameId).catch(() => null);
+  if (!checked || now !== checked)
+    throw new Error(`The frame changed from ${checked || 'an unknown site'} to ${now || 'another page'} while Foxwright was checking this action, so nothing was sent. Check the page (read_page or a screenshot) and try again.`);
+  return checked;
+}
+
+/** Same consequential target (role, name and reason), as the content script's sameConsequence. */
+function sameConseq(a, b) {
+  return !!a && !!b && a.role === b.role && a.name === b.name && a.reason === b.reason;
 }
 
 // ---------- tools ----------
@@ -1024,7 +1132,7 @@ export const tools = {
     let prefix = '';
     if (typeof tabId !== 'number') {
       if (args.url === 'back' || args.url === 'forward')
-        throw new Error('tabId is required for back/forward.');
+        throw new Error('navigate "back"/"forward" needs tabId: the tab whose history to use (tabs_context_mcp lists them).');
       const tabs = await ensureGroup(true);
       tabId = tabs[0].id;
       prefix = `(Using tab ${tabId} from the Foxwright group.)\n`;
@@ -1051,13 +1159,21 @@ export const tools = {
     } else {
       const url = normalizeUrl(args.url);
       await ensureOriginPermission(url); // ask before sending the user's cookies anywhere new (no tab title: it's the page being left, not the site asked about)
+      await requireTab(tab.id); // the user may have dragged the tab out of the group while answering
+      if (state.paused)
+        throw new Error(PAUSED_MSG);
       await browser.tabs.update(tab.id, { url });
       requested = url;
     }
-    const done = await waitForLoad(tab.id, 30000, navSince);
+    let done = await waitForLoad(tab.id, 30000, navSince);
+    const notLeft = d => requested && d.url === tab.url && requested.split('#')[0] !== tab.url.split('#')[0] && ((navState.get(tab.id) || {}).start || 0) < navSince;
+    // The load can begin well after tabs.update(): a slow beforeunload handler (old analytics
+    // code), or a brand-new tab on a busy machine. Give it time before blaming a "Leave page?" dialog.
+    if (notLeft(done) && await waitNav(tab.id, s => (s.start || 0) >= navSince, 8000))
+      done = await waitForLoad(tab.id, 30000, navSince);
     // No page load began and the tab still shows the old page: Firefox is most likely asking
     // "Leave page?" (the page set a beforeunload handler), which only the user can answer.
-    if (requested && done.url === tab.url && requested.split('#')[0] !== tab.url.split('#')[0] && ((navState.get(tab.id) || {}).start || 0) < navSince)
+    if (notLeft(done))
       throw new Error(`${prefix}Tab ${tab.id} did not leave ${tab.url}. The page is probably showing a "Leave page?" confirmation, which only the user can answer. Ask them to choose, then check the tab again.`);
     const all = await groupTabs();
     const ctx = all.length > 1 ? `\nTabs in group: ${all.map(t => t.id).join(', ')}` : '';
@@ -1211,15 +1327,19 @@ export const tools = {
       // Firefox's PDF viewer: the site was approved above (the error comes after the permission
       // check), so download the PDF and extract its text.
       if (/built-in PDF viewer/.test(String(e?.message)) && typeof args.tabId === 'number') {
-        const t = await browser.tabs.get(args.tabId);
+        const t = await requireTab(args.tabId);
         const p = await pdfText(t);
         return pagedText(`Title: ${t.title || '(untitled)'}\nURL: ${t.url}\nSource: ${p.source}`, p.text, args, { notes: p.notes });
       }
       if (!e.jsonViewer)
         throw e;
       // Firefox's JSON viewer hides the document from extensions; fetch the JSON again (GET).
-      const t = await browser.tabs.get(args.tabId);
+      // Re-read the tab: it may have moved on while a permission window was open.
+      const t = await requireTab(args.tabId);
       const viewerNote = e.message.replace(/ get_page_text can re-fetch it\./, '');
+      const jo = originOf(t.url);
+      if (!/^https?:/i.test(t.url) || !jo || !isAllowed(jo))
+        throw new Error(`Tab ${t.id} now shows ${jo || 'another page'}, which the user hasn't approved, so Foxwright didn't fetch it. Call get_page_text again (it asks the user).`);
       // The background page's fetch uses the default cookie jar: for a tab in a container (or a
       // private window) it would read the JSON as a different identity. Don't.
       if (t.cookieStoreId && t.cookieStoreId !== 'firefox-default')
@@ -1227,14 +1347,21 @@ export const tools = {
       // Never follow a redirect: it could lead to a site the user hasn't approved, with their cookies.
       let r;
       try {
-        r = await fetch(t.url, { credentials: 'include', redirect: 'error' });
+        r = await fetch(t.url, { credentials: 'include', redirect: 'error', signal: AbortSignal.timeout(REFETCH_MS) });
       } catch (fe) {
+        if (timedOut(fe))
+          throw new Error(`${viewerNote}\nRe-fetching it took longer than ${REFETCH_MS / 1000} s, so Foxwright gave up. Try again later, or take a screenshot.`);
         // redirect: 'error' stops at a redirect without requesting its target (a network error).
         throw new Error(`${viewerNote}\nFoxwright couldn't re-fetch it (${fe.message}); the address may now redirect, and Foxwright doesn't follow redirects when re-fetching. Navigate the tab to the final address and try again.`);
       }
       if (r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400))
         throw new Error(`${viewerNote}\nThe address now redirects, and Foxwright doesn't follow redirects when re-fetching (they could lead to a site the user hasn't approved). Navigate the tab to the final address and try again.`);
-      let body = await r.text();
+      let body;
+      try {
+        body = new TextDecoder().decode(await readCapped(r, 20 * 1048576));
+      } catch (be) {
+        throw new Error(`${viewerNote}\n${timedOut(be) ? `Re-fetching it took longer than ${REFETCH_MS / 1000} s, so Foxwright gave up.` : be.message}`);
+      }
       try {
         body = JSON.stringify(JSON.parse(body), null, 2);
       } catch { /* not JSON after all */ }
@@ -1399,6 +1526,9 @@ export const tools = {
 
   async read_console_messages(args) {
     const tab = await tabForPageTool(args);
+    // Check the pattern before anything else: with clear: true a refused call must not lose the messages.
+    if (args.pattern && (String(args.pattern).length > 300 || slowRegex(String(args.pattern))))
+      throw new Error('That pattern could take very long to evaluate (a repeated group that contains a repeat or alternatives, or more than two * or + in a row of alternatives). Use a simpler pattern, e.g. plain words or "word1|word2".');
     const hooked = await ensureConsoleHook(tab.id);
     const entries = await sendContent(tab.id, 0, 'console', { clear: !!args.clear });
     let list = entries;
@@ -1406,8 +1536,6 @@ export const tools = {
       list = list.filter(e => e.level === 'error' || e.level === 'exception');
     if (args.pattern) {
       let re;
-      if (String(args.pattern).length > 300 || slowRegex(String(args.pattern)))
-        throw new Error('That pattern could take very long to evaluate (a repeated group that itself contains a repeat or alternatives). Use a simpler pattern, e.g. plain words.');
       try {
         re = new RegExp(args.pattern, 'i');
       } catch {
@@ -1465,7 +1593,7 @@ export const tools = {
     const tab = await requireTab(args.tabId);
     const width = Math.round(args.width), height = Math.round(args.height);
     if (!(width > 100 && height > 100))
-      throw new Error('width and height must be positive pixel sizes.');
+      throw new Error('width and height must each be more than 100 pixels.');
     const w = await browser.windows.update(tab.windowId, { width, height, state: 'normal' });
     return text(`Resized window to ${w.width}x${w.height}.`);
   },
@@ -1487,7 +1615,8 @@ export const tools = {
     const names = args.files.map(f => `${f.name} (${Math.round((f.base64.length * 3) / 4 / 1024)} KB)`);
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths || names }) : 'once';
     if (ok !== 'once')
-      throw new Error('The user did not approve uploading these files.');
+      throw new Error(uploadRefusal(ok));
+    await requireTab(tab.id); // still in the group after the user answered
     const r = await sendContent(tab.id, frameId, 'upload', { ref: args.ref, x, y, files: args.files });
     return text(`Attached ${r.files.join(', ')} to ${r.target}.${(r.notes || []).map(n => '\n' + n).join('')}`);
   },
@@ -1516,12 +1645,23 @@ export const tools = {
     }
     if (!p)
       return { data: null };
-    const frameId = frameIdFromPrefix(tab.id, p.prefix);
+    let frameId = frameIdFromPrefix(tab.id, p.prefix);
+    const checked = await frameOriginOf(tab.id, frameId).catch(() => null); // the site the checks below are about
     if (act)
       await ensureFrameLevel(tab.id, frameId, 'full');
     // Same check as a synthetic click, made on the element the trusted click will land on.
-    if (p.conseq)
+    if (p.conseq) {
       await confirmAction(tab, p.conseq, args.action_summary);
+      // The confirmation can stay open for minutes: the page may have moved or replaced the target.
+      // Locate it again, and click only if it is still what the user confirmed.
+      const again = args.ref
+        ? await sendContent(tab.id, frameForRef(tab.id, args.ref), 'refPoint', { ref: args.ref, guard })
+        : await sendContent(tab.id, 0, 'locate', { x: (await toCss(tab, args.coordinate)).x, y: (await toCss(tab, args.coordinate)).y, guard });
+      if (!again || !sameConseq(again.conseq, p.conseq) || frameIdFromPrefix(tab.id, again.prefix) !== frameId)
+        throw new Error(`The page changed while the user was confirming "${p.conseq.name || p.conseq.role}", so Foxwright didn't click. Check the page (read_page or a screenshot) and try again.`);
+      p = again;
+      frameId = frameIdFromPrefix(tab.id, p.prefix);
+    }
     // Also in screenshot pixels (top-level viewport), e.g. to mark a ref click in a GIF frame.
     let shot;
     try {
@@ -1534,7 +1674,9 @@ export const tools = {
       if (o)
         shot = [Math.round((p.x + o.x) * s), Math.round((p.y + o.y) * s)];
     } catch { /* not needed for input */ }
-    return { data: { x: p.x, y: p.y, target: p.target, partOf: p.partOf, draggable: !!p.draggable, frameId, shot } };
+    // The site this action was approved for, so trusted input can check the frame still shows it.
+    const origin = await pinnedOrigin(tab.id, frameId, checked);
+    return { data: { x: p.x, y: p.y, target: p.target, partOf: p.partOf, draggable: !!p.draggable, frameId, shot, origin } };
   },
 
   async _tab(args) {
@@ -1551,13 +1693,24 @@ export const tools = {
     if (checkAccessible(tab) === 'blank')
       return { data: { frameId: 0 } };
     const guard = state.confirmActions && !reading && (args.action === 'type' || args.action === 'key') ? { action: args.action, text: String(args.text ?? ''), repeat: args.repeat } : undefined;
-    const f = await sendContent(tab.id, 0, 'focusInfo', { guard, waitEditable: !!args.forType });
+    let f = await sendContent(tab.id, 0, 'focusInfo', { guard, waitEditable: !!args.forType });
     const frameId = frameIdFromPrefix(tab.id, f.prefix);
+    const checked = await frameOriginOf(tab.id, frameId).catch(() => null);
     if (!reading || f.control)
       await ensureFrameLevel(tab.id, frameId, 'full');
-    if (f.conseq)
+    if (f.conseq) {
       await confirmAction(tab, f.conseq, args.action_summary);
-    return { data: { frameId, target: f.target, editable: f.editable, waited: f.waited } };
+      // Focus may have moved while the user was answering: type only into what they confirmed.
+      const again = await sendContent(tab.id, 0, 'focusInfo', { guard });
+      if (!sameConseq(again.conseq, f.conseq) || frameIdFromPrefix(tab.id, again.prefix) !== frameId)
+        throw new Error(`Focus moved while the user was confirming "${f.conseq.name || f.conseq.role}", so Foxwright didn't ${args.action === 'type' ? 'type' : 'press the keys'}. Check the page and try again.`);
+      f = { ...f, target: again.target, editable: again.editable };
+    }
+    const origin = await pinnedOrigin(tab.id, frameId, checked);
+    // Reading keys on a read-only site: the helper sends them one at a time and asks again before
+    // each, because the page may move focus onto a form control part-way.
+    const readOnlyKeys = reading && !f.control && levelOf(origin) !== 'full';
+    return { data: { frameId, target: f.target, editable: f.editable, waited: f.waited, origin, readOnlyKeys } };
   },
 
   async _mark(args) {
@@ -1734,7 +1887,8 @@ export const tools = {
     const origin = (await frameOriginOf(tab.id, frameId)) || originOf(tab.url) || tab.url;
     const ok = state.confirmUploads ? await askUser({ type: 'upload', origin, tabTitle: tab.title, files: args.paths }) : 'once';
     if (ok !== 'once')
-      throw new Error('The user did not approve uploading these files.');
+      throw new Error(uploadRefusal(ok));
+    await requireTab(tab.id); // still in the group after the user answered
     const token = crypto.randomUUID();
     approvedUploads.set(token, { tabId: tab.id, frameId, origin, ref: args.ref, x, y, count: args.paths.length, at: Date.now() });
     return { data: { token } };

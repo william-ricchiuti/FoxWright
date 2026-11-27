@@ -1,6 +1,6 @@
 // Foxwright background (event page).
 /* global browser */
-import { VERSION, FULL, state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
+import { VERSION, FULL, PAUSED_MSG, state, loadSettings, saveSettings, publicStatus, updateBadge, cleanSummary, noteAction, cleanName } from './state.js';
 import { connect, reconnectNow, onRequest, send, getDoctorReport } from './native.js';
 import { tools, adoptOpenedTab } from './tools.js';
 import { groupTabs, isAllowed, originOf, injectPageHooks, noteAgentActivity, forgetSite, noteGroupChange } from './tabs.js';
@@ -47,6 +47,10 @@ onRequest(async (tool, args) => {
   } catch (e) {
     if (logged)
       logAction(logTool, args, where, state.paused ? 'paused' : resultOfError(e));
+    // Stopped part-way (wait, typing, a permission window closed by Stop): one message, which
+    // tells the agent not to carry on.
+    if (state.paused && !tool.startsWith('_'))
+      throw new Error(PAUSED_MSG);
     throw friendlyTabError(e, args?.tabId);
   } finally {
     if (!tool.startsWith('_'))
@@ -135,7 +139,6 @@ function friendlyTabError(e, tabId) {
   return e;
 }
 
-const PAUSED_MSG = 'Foxwright is paused: the user pressed Stop. Do not continue browser actions. Ask the user to click Resume in the Foxwright toolbar popup if they want you to carry on.';
 
 // ---------- messages from the popup and in-page UI ----------
 const OWN_PAGES = ['popup/', 'welcome/', 'log/'];

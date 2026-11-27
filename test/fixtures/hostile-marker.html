@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Foxwright test: copies the marker</title></head><body>
+<h1>Two frames</h1>
+<!-- The parent copies any attribute Foxwright sets on one frame's document onto the other, so a
+     WebDriver BiDi lookup that takes the first document carrying the marker picks the wrong frame. -->
+<iframe id="fb" style="width:420px;height:90px" srcdoc="<label>Field B <input id=b></label>"></iframe>
+<iframe id="fa" style="width:420px;height:90px" srcdoc="<label>Field A <input id=a></label>"></iframe>
+<script>
+const frames = [document.getElementById('fb'), document.getElementById('fa')];
+const copy = (from, to) => new MutationObserver(() => {
+  const v = from.contentDocument?.documentElement.getAttribute('data-foxwright-probe');
+  const t = to.contentDocument?.documentElement;
+  if (t && v !== t.getAttribute('data-foxwright-probe'))
+    v == null ? t.removeAttribute('data-foxwright-probe') : t.setAttribute('data-foxwright-probe', v);
+}).observe(from.contentDocument.documentElement, { attributes: true });
+let ready = 0;
+for (const f of frames)
+  f.addEventListener('load', () => { if (++ready === 2) { copy(frames[0], frames[1]); copy(frames[1], frames[0]); } });
+window.values = () => frames.map(f => f.contentDocument.querySelector('input').value).join('|');
+</script>
+</body></html>

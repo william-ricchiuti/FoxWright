@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Busy page</title></head><body>
+<h1>Busy page</h1>
+<p>Like a heavy web app or old analytics code: <code>?ms=</code> busy-waits that long shortly after loading; <code>?unload=</code> busy-waits that long in a beforeunload handler that does not ask the person anything.</p>
+<script>
+const q = new URLSearchParams(location.search);
+const spin = (ms) => { const end = Date.now() + ms; while (Date.now() < end) { /* busy */ } };
+if (q.get('ms'))
+  setTimeout(() => spin(Number(q.get('ms'))), 200);
+if (q.get('unload'))
+  addEventListener('beforeunload', () => spin(Number(q.get('unload'))));
+</script>
+</body></html>
